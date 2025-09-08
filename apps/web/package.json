@@ -9,11 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tailwindcss/typography": "^0.5.16",
     "firebase": "^10.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-easy-crop": "^5.5.0",
-    "react-router-dom": "^6.8.0"
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^6.8.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@rollup/rollup-darwin-arm64": "^4.48.1",
