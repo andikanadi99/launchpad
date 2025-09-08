@@ -1,0 +1,43 @@
+/* Light baseline (optional) */
+:root {
+  --bg: #ffffff;
+  --card: #f8fafc;
+  --text: #0b0b0d;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --brand: #4f46e5;        /* indigo-600 */
+  --brand-hover: #6366f1;  /* indigo-500 */
+}
+
+/* Dark (default for your app) */
+[data-theme="dark"] {
+  --bg: #0b0b0d;
+  --card: #111113;
+  --text: #f5f5f5;
+  --muted: #9ca3af;
+  --border: #262626;
+  --brand: #4f46e5;
+  --brand-hover: #6366f1;
+}
+
+/* Ocean example */
+[data-theme="ocean"] {
+  --bg: #08121f;
+  --card: #0b1626;
+  --text: #e6f1ff;
+  --muted: #9fb3c8;
+  --border: #15314d;
+  --brand: #1677c2;
+  --brand-hover: #2c8fdc;
+}
+
+/* Midnight example */
+[data-theme="midnight"] {
+  --bg: #0f0b1a;
+  --card: #151026;
+  --text: #f2e9fe;
+  --muted: #b8a8d8;
+  --border: #2a174a;
+  --brand: #7c4dff;
+  --brand-hover: #8f6bff;
+}

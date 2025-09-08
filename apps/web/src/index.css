@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Optional: minimal base tokens for a dark-first theme */
+@layer base {
+  /* Dark background + readable text */
+  :root {
+    /* tweak these to taste */
+    --bg: 222 47% 6%;     /* deep navy/ink */
+    --fg: 210 20% 96%;    /* near-white */
+  }
+
+  body {
+    @apply bg-[hsl(var(--bg))] text-[hsl(var(--fg))] antialiased;
+  }
+}
+
+@layer components {
+  /* A simple page container for consistent padding */
+  .app-container {
+    @apply w-full px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Vertical rhythm for main content sections */
+  .app-section {
+    @apply py-6 lg:py-8;
+  }
+}
+
