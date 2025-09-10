@@ -21,6 +21,7 @@ import StripePage from "./pages/onboarding/account/Stripe";
 import NewProduct from "./pages/products/NewProduct";
 import ProductPage from './pages/products/Product';
 import Success from "./pages/products/Success";
+import EditProduct from './pages/products/EditProduct';
 
 export default function App() {
   return (
@@ -33,8 +34,9 @@ export default function App() {
         <Route index element={<Home />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="products">
-          <Route path="new" element={<NewProduct />} />
-        </Route>
+        <Route path="new" element={<NewProduct />} />
+        <Route path="edit/:productId" element={<EditProduct />} />
+      </Route>
         <Route path="settings" element={<Settings />} />
 
         {/* Onboarding inside the layout → header visible */}
