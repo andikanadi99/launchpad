@@ -10,7 +10,6 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
-
 /* Ensure a Firestore user profile exists.
    - If missing: create users/{uid} with basic info.
    - If it exists: just update lastLoginAt.
@@ -42,18 +41,34 @@ export default function SignUp() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Validation states
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [pwTouched, setPwTouched] = useState(false);
+
   // Where to go after creating the account
-  const next = params.get('next') || '/onboarding/account_page';
+  const next = params.get('next') || '/';
 
   // Prefill email from URL (?email=alice@site.com) to reduce typing
   useEffect(() => {
     const prefill = params.get('email');
-    if (prefill) setEmail(prefill);
+    if (prefill) {
+      setEmail(prefill);
+      setEmailTouched(true); // Mark as touched to show validation
+    }
   }, [params]);
+
+  // Validation helpers
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const emailValid = isValidEmail(email);
+  const pwValid = pw.length >= 6;
 
   /* After successful auth:
      1) Make sure users/{uid} exists (or update lastLoginAt)
-     2) Redirect to the next page (onboarding by default) 
+     2) Redirect to the next page (home by default) 
   */
   async function afterAuth() {
     const uid = auth.currentUser?.uid;
@@ -127,35 +142,99 @@ export default function SignUp() {
 
         {/* Primary: Email + Password */}
         <form onSubmit={onEmailCreate} className="mt-5 space-y-3">
-          <label className="block text-sm text-neutral-300" htmlFor="email">Email</label>
-          <input
-            id="email"
-            name="email"
-            value={email}
-            onChange={(e)=>setEmail(e.target.value)}
-            placeholder="you@business.com"
-            type="email"
-            autoComplete="email"
-            required
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
-          />
-          <label className="block text-sm text-neutral-300" htmlFor="password">Password</label>
-          <input
-            id="password"
-            name="password"
-            value={pw}
-            onChange={(e)=>setPw(e.target.value)}
-            placeholder="••••••••"
-            type="password"
-            autoComplete="new-password"
-            minLength={6}
-            required
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
-          />
+          <div>
+            <label className="block text-sm text-neutral-300" htmlFor="email">Email</label>
+            <div className="relative">
+              <input
+                id="email"
+                name="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (!emailTouched) setEmailTouched(true);
+                }}
+                onBlur={() => setEmailTouched(true)}
+                placeholder="you@business.com"
+                type="email"
+                autoComplete="email"
+                required
+                className={`w-full rounded-lg border ${
+                  emailTouched 
+                    ? emailValid 
+                      ? 'border-green-600 focus:ring-green-500/60' 
+                      : 'border-red-600 focus:ring-red-500/60'
+                    : 'border-neutral-700 focus:ring-indigo-500/60'
+                } bg-neutral-950 px-3 py-2 pr-8 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2`}
+              />
+              {emailTouched && (
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                  {emailValid ? (
+                    <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </div>
+              )}
+            </div>
+            {emailTouched && !emailValid && (
+              <p className="mt-1 text-xs text-red-400">Enter a valid email address (e.g., name@example.com)</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm text-neutral-300" htmlFor="password">Password</label>
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                value={pw}
+                onChange={(e) => {
+                  setPw(e.target.value);
+                  if (!pwTouched) setPwTouched(true);
+                }}
+                onBlur={() => setPwTouched(true)}
+                placeholder="••••••••"
+                type="password"
+                autoComplete="new-password"
+                minLength={6}
+                required
+                className={`w-full rounded-lg border ${
+                  pwTouched 
+                    ? pwValid 
+                      ? 'border-green-600 focus:ring-green-500/60' 
+                      : 'border-red-600 focus:ring-red-500/60'
+                    : 'border-neutral-700 focus:ring-indigo-500/60'
+                } bg-neutral-950 px-3 py-2 pr-8 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2`}
+              />
+              {pwTouched && (
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                  {pwValid ? (
+                    <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="mt-1 text-xs text-neutral-400">
+              <p className={pwTouched ? (pwValid ? 'text-green-400' : 'text-red-400') : ''}>
+                {pwTouched && !pwValid ? '✗' : pwTouched && pwValid ? '✓' : '•'} At least 6 characters
+              </p>
+            </div>
+          </div>
+
           <button
             type="submit"
-            disabled={loading || !email || pw.length < 6}
-            className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+            disabled={loading || !emailValid || !pwValid}
+            className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading ? 'Creating…' : 'Create account'}
           </button>

@@ -47,7 +47,7 @@ export default function SignIn() {
   const [showGuardModal, setShowGuardModal] = useState(false);
 
   // Where to go after sign-in (defaults to onboarding)
-  const next = params.get('next') || '/onboarding/account_page';
+  const next = params.get('next') || '/';
 
   useEffect(() => {
     if (params.get('reason') === 'protected') {
@@ -80,22 +80,10 @@ export default function SignIn() {
     } catch (e: any) {
       const code = e?.code as string | undefined;
 
-      // No account → go create one
-      if (code === 'auth/user-not-found') {
-        nav(`/auth/signup?email=${encodeURIComponent(email)}&next=${encodeURIComponent(next)}`, { replace: true });
-        return;
-      }
-
-      // Wrong password OR generic invalid credentials
-      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-        try {
-          // Check if this email exists at all; if not, send to Sign Up
-          const methods = await fetchSignInMethodsForEmail(auth, email);
-          if (!methods || methods.length === 0) {
-            nav(`/auth/signup?email=${encodeURIComponent(email)}&next=${encodeURIComponent(next)}`, { replace: true });
-            return;
-          }
-        } catch {/* ignore lookup errors */}
+      // Wrong password, user not found, or invalid credentials
+      if (code === 'auth/wrong-password' || 
+          code === 'auth/invalid-credential' || 
+          code === 'auth/user-not-found') {
         setMsg("We couldn't sign you in. Check your email and password, or create an account if you're new.");
         return;
       }
@@ -164,10 +152,10 @@ export default function SignIn() {
             placeholder="••••••••"
             type="password"
             autoComplete="current-password"
-            minLength={6}
             required
             className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
           />
+
 
           <button
             type="submit"
