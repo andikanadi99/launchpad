@@ -236,12 +236,12 @@ export default function Home() {
            ))}
          </div>
          <div className="mt-4 flex flex-wrap items-center gap-3">
-           <a href="/docs/onboarding" className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-900">
+           {/* <a href="/docs/onboarding" className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-900">
              Read Onboarding Doc
-           </a>
-           <a href="/docs/faq" className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-900">
+           </a> */}
+           {/* <a href="/docs/faq" className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-900">
              Full FAQ
-           </a>
+           </a> */}
            <a href="/support" className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400/60">
              Get Help
            </a>

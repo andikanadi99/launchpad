@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "@tailwindcss/typography": "^0.5.16",
     "firebase": "^10.0.0",
     "react": "^18.2.0",

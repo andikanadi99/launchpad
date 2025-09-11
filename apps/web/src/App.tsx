@@ -22,6 +22,7 @@ import NewProduct from "./pages/products/NewProduct";
 import ProductPage from './pages/products/Product';
 import Success from "./pages/products/Success";
 import EditProduct from './pages/products/EditProduct';
+import Support from "./pages/Support";
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<Home />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="support" element={<Support />} />
         <Route path="products">
         <Route path="new" element={<NewProduct />} />
         <Route path="edit/:productId" element={<EditProduct />} />
