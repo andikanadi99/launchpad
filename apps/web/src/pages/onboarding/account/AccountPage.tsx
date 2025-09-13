@@ -356,7 +356,7 @@ useEffect(() => {
         <header className="rounded-2xl border border-neutral-800 bg-gradient-to-br from-neutral-900 to-black p-6 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)]">
           <h1 className="text-2xl font-semibold">Set up your profile</h1>
           <p className="mt-1 text-neutral-300">
-            Make it yours. Your name, profile photo, theme, and contact email appear on your product pages and emails.
+            Make it yours. Your name, profile photo, and contact email appear on your product pages and emails.
           </p>
         </header>
 
@@ -418,7 +418,9 @@ useEffect(() => {
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 {/* Display name */}
                 <div className="sm:col-span-2">
-                  <label className="block text-sm text-neutral-300">Your name</label>
+                  <label className="block text-sm text-neutral-300">
+                    Your Name<span className="text-red-500"> *</span>
+                  </label>
                   <input
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
@@ -444,7 +446,7 @@ useEffect(() => {
                 {/* <div> ... your theme radios ... </div> */}
 
                 {/* Notify on purchase */}
-                <div className="sm:col-span-2">
+                {/* <div className="sm:col-span-2">
                   <label className="inline-flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -454,7 +456,7 @@ useEffect(() => {
                     />
                     <span className="text-sm text-neutral-300">Email me when someone buys</span>
                   </label>
-                </div>
+                </div> */}
 
                 {/* Bio */}
                 <div className="sm:col-span-2">
@@ -487,12 +489,18 @@ useEffect(() => {
                 >
                   Next: Connect Stripe →
                 </Link> */}
-                <Link
+                {/* <Link
                   to="/products/new"
                   className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
                 >
                   Add first product
-                </Link>
+                </Link> */}
+                <Link
+                  to="/"
+                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
+                >
+                  Go Back Home
+                </Link> 
               </div>
 
               {msg && (
@@ -504,13 +512,6 @@ useEffect(() => {
           )}
         </section>
 
-        {/* Info box */}
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/70 p-6">
-          <h2 className="text-lg font-semibold">About your links</h2>
-          <p className="mt-1 text-sm text-neutral-400">
-            Each product has its own shareable page and link. You can publish a product and share its link directly—no store URL needed.
-          </p>
-        </section>
       </div>
 
       {/* CROPPER MODAL */}
