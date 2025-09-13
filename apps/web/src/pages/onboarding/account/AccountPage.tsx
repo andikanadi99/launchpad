@@ -431,7 +431,7 @@ useEffect(() => {
 
                 {/* Support email */}
                 <div>
-                  <label className="block text-sm text-neutral-300">Support email</label>
+                  <label className="block text-sm text-neutral-300">Support Email</label>
                   <input
                     type="email"
                     value={supportEmail}
@@ -460,7 +460,7 @@ useEffect(() => {
 
                 {/* Bio */}
                 <div className="sm:col-span-2">
-                  <label className="block text-sm text-neutral-300">Short bio (optional)</label>
+                  <label className="block text-sm text-neutral-300">Short Bio (optional)</label>
                   <textarea
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
