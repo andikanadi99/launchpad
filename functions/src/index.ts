@@ -23,115 +23,115 @@ function getStripe(secretKey: string) {
 /* 
     Purpose: Generates the OAuth URL to send entrepreneurs to Stripe
 */
-// export const generateStripeConnectUrl = onRequest(
-//   { 
-//     secrets: [stripeSecretKey], 
-//     cors: true,
-//     region: "us-central1"  // Add this
-//   },
-//   async (req, res) => {
-//     if (req.method !== 'POST') {
-//       res.status(405).json({ error: 'Method not allowed' });
-//       return;
-//     }
+export const generateStripeConnectUrl = onRequest(
+  { 
+    secrets: [stripeSecretKey], 
+    cors: true,
+    region: "us-central1"
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
-//     console.log("Function called, request body:", JSON.stringify(req.body));
+    console.log("Function called, request body:", JSON.stringify(req.body));
     
-//     try {
-//       const { returnUrl } = req.body;
+    try {
+      const { returnUrl } = req.body;
       
-//       if (!returnUrl) {
-//         res.status(400).json({ error: 'returnUrl is required' });
-//         return;
-//       }
+      if (!returnUrl) {
+        res.status(400).json({ error: 'returnUrl is required' });
+        return;
+      }
       
-//       const clientId = "ca_SvDDS7jutdzM4lqEpISm7eS5RsR876ZV";
+      const clientId = "ca_T3lgFY6uTvMT2WFN9oEUIbD7mrhXIGP1";
       
-//       const connectUrl = 
-//         `https://connect.stripe.com/oauth/authorize?` +
-//         `response_type=code&` +
-//         `client_id=${clientId}&` +
-//         `scope=read_write&` +
-//         `redirect_uri=${encodeURIComponent(returnUrl)}&` +
-//         `state=test_user`;
+      const connectUrl = 
+        `https://connect.stripe.com/oauth/authorize?` +
+        `response_type=code&` +
+        `client_id=${clientId}&` +
+        `scope=read_write&` +
+        `redirect_uri=${encodeURIComponent(returnUrl)}&` +
+        `state=test_user`;
       
-//       res.json({ url: connectUrl });
+      res.json({ url: connectUrl });
       
-//     } catch (error) {
-//       console.error("Error generating connect URL: ", error);
-//       res.status(500).json({ error: 'Failed to generate connection URL' });
-//     }
-//   }
-// );
+    } catch (error) {
+      console.error("Error generating connect URL: ", error);
+      res.status(500).json({ error: 'Failed to generate connection URL' });
+    }
+  }
+);
 
 /* 
     Purpose: Processes the OAuth callback when entrepreneurs return from Stripe.
 */
-// export const handleStripeConnect = onRequest(
-//   { 
-//     secrets: [stripeSecretKey], 
-//     cors: true,
-//     region: "us-central1"  // Add this
-//   },
-//   async (req, res) => {
-//     if (req.method !== 'POST') {
-//       res.status(405).json({ error: 'Method not allowed' });
-//       return;
-//     }
+export const handleStripeConnect = onRequest(
+  { 
+    secrets: [stripeSecretKey], 
+    cors: true,
+    region: "us-central1"
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
-//     try {
-//       const { code, userId } = req.body;
+    try {
+      const { code, userId } = req.body;
       
-//       if (!code || !userId) {
-//         res.status(400).json({ error: 'Missing code or userId' });
-//         return;
-//       }
+      if (!code || !userId) {
+        res.status(400).json({ error: 'Missing code or userId' });
+        return;
+      }
 
-//       // Exchange auth code for access token
-//       const stripe = getStripe(stripeSecretKey.value());
-//       const response = await stripe.oauth.token({
-//         grant_type: "authorization_code",
-//         code
-//       });
+      // Exchange auth code for access token
+      const stripe = getStripe(stripeSecretKey.value());
+      const response = await stripe.oauth.token({
+        grant_type: "authorization_code",
+        code
+      });
 
-//       // Get user's Stripe ID and Access Token
-//       const connectedAccountId = response.stripe_user_id as string;
-//       const accessToken = response.access_token;
+      // Get user's Stripe ID and Access Token
+      const connectedAccountId = response.stripe_user_id as string;
+      const accessToken = response.access_token;
       
-//       // Get Account details
-//       const account = await stripe.accounts.retrieve(connectedAccountId);
+      // Get Account details
+      const account = await stripe.accounts.retrieve(connectedAccountId);
 
-//       // Save data to Firestore
-//       const userRef = db.collection("users").doc(userId);
-//       await userRef.set({
-//         stripeConnected: true,
-//         stripeAccountId: connectedAccountId,
-//         stripeAccessToken: accessToken,
-//         stripeAccountDetails: {
-//           email: account.email,
-//           country: account.country,
-//           defaultCurrency: account.default_currency,
-//           chargesEnabled: account.charges_enabled,
-//           payoutsEnabled: account.payouts_enabled,
-//         },
-//         stripeConnectedAt: admin.firestore.FieldValue.serverTimestamp(),
-//       }, { merge: true });
+      // Save data to Firestore
+      const userRef = db.collection("users").doc(userId);
+      await userRef.set({
+        stripeConnected: true,
+        stripeAccountId: connectedAccountId,
+        stripeAccessToken: accessToken,
+        stripeAccountDetails: {
+          email: account.email,
+          country: account.country,
+          defaultCurrency: account.default_currency,
+          chargesEnabled: account.charges_enabled,
+          payoutsEnabled: account.payouts_enabled,
+        },
+        stripeConnectedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
 
-//       // Return success object
-//       res.json({
-//         success: true,
-//         accountId: connectedAccountId,
-//         chargesEnabled: account.charges_enabled,
-//         payoutsEnabled: account.payouts_enabled,
-//       });
-//     } catch (error) {
-//       console.error("Error connecting Stripe: ", error);
-//       res.status(500).json({ 
-//         error: (error as any).message || "Failed to connect Stripe account" 
-//       });
-//     }
-//   }
-// );
+      // Return success object
+      res.json({
+        success: true,
+        accountId: connectedAccountId,
+        chargesEnabled: account.charges_enabled,
+        payoutsEnabled: account.payouts_enabled,
+      });
+    } catch (error) {
+      console.error("Error connecting Stripe: ", error);
+      res.status(500).json({ 
+        error: (error as any).message || "Failed to connect Stripe account" 
+      });
+    }
+  }
+);
 
 /* 
     Purpose: Creates a Stripe Checkout session for product purchases
@@ -140,7 +140,7 @@ export const createCheckoutSession = onRequest(
   { 
     secrets: [stripeSecretKey], 
     cors: true,
-    region: "us-central1"  // Add this
+    region: "us-central1"
   },
   async (req, res) => {
 
@@ -217,4 +217,4 @@ export const createCheckoutSession = onRequest(
         error: (error as any).message || "Failed to create checkout session" 
       });
     }
-});
+  });

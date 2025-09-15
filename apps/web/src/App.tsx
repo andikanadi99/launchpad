@@ -44,7 +44,7 @@ export default function App() {
         {/* Onboarding inside the layout → header visible */}
         <Route path="onboarding">
           <Route path="account" element={<AccountPage />} /> 
-          {/* <Route path="stripe" element={<StripePage />} />  */}
+          <Route path="stripe" element={<StripePage />} /> 
         </Route>
       </Route>
 

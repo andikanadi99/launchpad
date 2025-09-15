@@ -13,17 +13,17 @@ type Step = {
 };
 
 const STEPS: Step[] = [
-  { id: 'account', title: 'Set up your account', href: '/onboarding/account', help: 'Tell us your business name. We\'ll create your public link automatically.' },
+  { id: 'account', title: 'Set up your account', href: '/onboarding/account', help: 'Add your name and profile to build trust with customers.' },
+  { id: 'stripe', title: 'Connect Stripe for payments', href: '/onboarding/stripe', help: 'Accept payments securely. Takes 2-3 minutes.' },
   { id: 'product', title: 'Add your first product/service', href: '/products/new', help: 'Write your content directly in LaunchPad.' },
-  { id: 'publish', title: 'Publish your product page', href: '/publish', help: 'Get a sharable link like yourbrand.launchpad.app' },
-  { id: 'share', title: 'Share your link & make your first sale', href: '/share', help: 'Post, DM, email—your call. First sale = momentum.' },
+  { id: 'publish', title: 'Publish & share your link', href: '/publish', help: 'Get your product link and start selling.' },
 ];
 
 const FAQ = [
- { q: 'How is my link created?', a: 'When you enter your Account Name, we generate a clean, unique link (e.g., adams-cleaning.launchpad.app). If the name is taken, we add a small suffix automatically.' },
- { q: 'Can I change my link later?', a: 'For MVP, the link is fixed after creation to avoid broken links. You can edit the Account Name (display) anytime.' },
+ { q: 'Why connect Stripe first?', a: 'Connecting Stripe upfront means your products are ready to sell immediately. No delays when you want to publish.' },
  { q: 'How do payments work?', a: 'Customers pay via Stripe Checkout. You receive payouts weekly after a 7-day holding period.' },
  { q: 'What happens after a customer pays?', a: 'They instantly get access to your content. No manual delivery needed.' },
+ { q: 'Can I change my link later?', a: 'For MVP, the link is fixed after creation to avoid broken links. You can edit the Account Name (display) anytime.' },
 ];
 
 export default function Home() {
@@ -48,9 +48,9 @@ export default function Home() {
          // Check actual completion status
          let completed: Record<string, boolean> = {
             account: !!data.profileComplete,
+            stripe: !!data.stripeConnected,
             product: false,
             publish: false,
-            share: false,
           };
 
          // Check for products
@@ -137,6 +137,10 @@ export default function Home() {
              <ul className="mt-5 space-y-3">
                {STEPS.map((s) => {
                  const isDone = !!done[s.id];
+                 // Determine if step should be disabled (previous steps not complete)
+                 const stepIndex = STEPS.findIndex(step => step.id === s.id);
+                 const isDisabled = stepIndex > 0 && !done[STEPS[stepIndex - 1].id];
+                 
                  return (
                    <li key={s.id} className="flex items-start gap-3 rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
                      <div className={`mt-0.5 grid h-6 w-6 place-items-center rounded-lg border transition-all
@@ -152,16 +156,24 @@ export default function Home() {
                      </div>
                      <div className="flex-1">
                        <div className="flex items-center justify-between gap-3">
-                         <a href={s.href ?? '#'} className="font-medium text-neutral-100 hover:underline decoration-indigo-400/40 underline-offset-2">
+                         <span className={`font-medium ${isDisabled ? 'text-neutral-500' : 'text-neutral-100'}`}>
                            {s.title}
-                         </a>
-                         {s.href && !isDone && (
+                         </span>
+                         {s.href && !isDone && !isDisabled && (
                            <a href={s.href} className="text-sm text-neutral-400 hover:text-neutral-200 hover:underline">
-                             {s.id === 'account' ? 'Continue →' : 'Start →'}
+                             Start →
                            </a>
                          )}
                          {isDone && (
-                           <span className="text-sm text-emerald-400">✓ Done</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-emerald-400">✓ Done</span>
+                            <a href={s.href} className="text-xs text-neutral-400 hover:text-neutral-200 hover:underline">
+                              Manage →
+                            </a>
+                          </div>
+                        )}
+                         {isDisabled && (
+                           <span className="text-xs text-neutral-600">Complete previous step</span>
                          )}
                        </div>
                        {s.help && <p className="mt-1 text-sm text-neutral-400">{s.help}</p>}
@@ -236,12 +248,6 @@ export default function Home() {
            ))}
          </div>
          <div className="mt-4 flex flex-wrap items-center gap-3">
-           {/* <a href="/docs/onboarding" className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-900">
-             Read Onboarding Doc
-           </a> */}
-           {/* <a href="/docs/faq" className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-900">
-             Full FAQ
-           </a> */}
            <a href="/support" className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400/60">
              Get Help
            </a>
