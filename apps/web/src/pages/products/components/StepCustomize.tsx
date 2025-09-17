@@ -215,81 +215,89 @@ export default function StepCustomize({
             </div>
 
             {/* Element Order */}
-            <div className="border-b border-neutral-800 pb-4">
-              <label className="text-sm font-semibold text-neutral-300 mb-3 block">Page Layout Order</label>
-              
-              {(() => {
-                const activeElements = formData.elementOrder.filter(element => {
-                  if (element === 'hero') return true;
-                  if (element === 'video') return !!formData.videoUrl;
-                  if (element === 'urgency') return !!formData.urgency;
-                  if (element === 'features') return formData.features.some(f => f.trim());
-                  if (element === 'testimonial') return !!formData.testimonial;
-                  if (element === 'content') return !!formData.content && !formData.content.startsWith('[REDIRECT:');
-                  if (element === 'purchase') return true;
-                  return false;
-                });
+           <div className="border-b border-neutral-800 pb-4">
+            <label className="text-sm font-semibold text-neutral-300 mb-3 block">Page Layout Order</label>
+                
+                {(() => {
+                    const activeElements = formData.elementOrder.filter(element => {
+                    if (element === 'hero') return true;
+                    if (element === 'video') return !!formData.videoUrl;
+                    if (element === 'urgency') return !!formData.urgency;
+                    if (element === 'features') return formData.features.some(f => f.trim());
+                    if (element === 'testimonial') return !!formData.testimonial;
+                    if (element === 'content') return !!formData.content && !formData.content.startsWith('[REDIRECT:');
+                    if (element === 'purchase') return true;
+                    return false;
+                    });
 
-                if (activeElements.length <= 2) {
-                  return (
-                    <p className="text-xs text-neutral-500 italic">
-                      Add more content to customize the order
-                    </p>
-                  );
-                }
+                    if (activeElements.length <= 2) {
+                    return (
+                        <p className="text-xs text-neutral-500 italic">
+                        Add more content to customize the order
+                        </p>
+                    );
+                    }
 
-                return (
-                  <div className="space-y-2">
-                    {activeElements.map((element, index) => (
-                      <div key={element} className="flex items-center gap-3 p-2 bg-neutral-900 rounded">
-                        <span className="text-xs bg-neutral-800 w-6 h-6 rounded-full flex items-center justify-center">
-                          {index + 1}
-                        </span>
-                        <span className="flex-1 text-sm text-neutral-300">
-                          {elementLabels[element]}
-                        </span>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => {
-                              const currentIndex = formData.elementOrder.indexOf(element);
-                              const prevElement = activeElements[index - 1];
-                              if (prevElement) {
-                                const prevIndex = formData.elementOrder.indexOf(prevElement);
-                                setFormData({
-                                  ...formData,
-                                  elementOrder: moveElement(formData.elementOrder, currentIndex, prevIndex)
-                                });
-                              }
-                            }}
-                            className="px-2 py-1 text-xs bg-neutral-800 rounded hover:bg-neutral-700"
-                            disabled={index === 0}
-                          >
-                            ↑
-                          </button>
-                          <button
-                            onClick={() => {
-                              const currentIndex = formData.elementOrder.indexOf(element);
-                              const nextElement = activeElements[index + 1];
-                              if (nextElement) {
-                                const nextIndex = formData.elementOrder.indexOf(nextElement);
-                                setFormData({
-                                  ...formData,
-                                  elementOrder: moveElement(formData.elementOrder, currentIndex, nextIndex)
-                                });
-                              }
-                            }}
-                            className="px-2 py-1 text-xs bg-neutral-800 rounded hover:bg-neutral-700"
-                            disabled={index === activeElements.length - 1}
-                          >
-                            ↓
-                          </button>
+                    return (
+                    <div className="space-y-2">
+                        {activeElements.map((element, index) => (
+                        <div key={element} className="flex items-center gap-3 p-2 bg-neutral-900 rounded">
+                            <span className="text-xs bg-neutral-800 w-6 h-6 rounded-full flex items-center justify-center">
+                            {index + 1}
+                            </span>
+                            <span className="flex-1 text-sm text-neutral-300">
+                            {elementLabels[element]}
+                            </span>
+                            <div className="flex gap-1">
+                            <button
+                                onClick={() => {
+                                const currentIndex = formData.elementOrder.indexOf(element);
+                                const prevElement = activeElements[index - 1];
+                                if (prevElement) {
+                                    const prevIndex = formData.elementOrder.indexOf(prevElement);
+                                    setFormData({
+                                    ...formData,
+                                    elementOrder: moveElement(formData.elementOrder, currentIndex, prevIndex)
+                                    });
+                                }
+                                }}
+                                className={`px-2 py-1 text-xs rounded transition-colors ${
+                                index === 0 
+                                    ? 'bg-neutral-900 text-neutral-600 cursor-not-allowed opacity-40' 
+                                    : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300'
+                                }`}
+                                disabled={index === 0}
+                            >
+                                ↑
+                            </button>
+                            <button
+                                onClick={() => {
+                                const currentIndex = formData.elementOrder.indexOf(element);
+                                const nextElement = activeElements[index + 1];
+                                if (nextElement) {
+                                    const nextIndex = formData.elementOrder.indexOf(nextElement);
+                                    setFormData({
+                                    ...formData,
+                                    elementOrder: moveElement(formData.elementOrder, currentIndex, nextIndex)
+                                    });
+                                }
+                                }}
+                                className={`px-2 py-1 text-xs rounded transition-colors ${
+                                index === activeElements.length - 1 
+                                    ? 'bg-neutral-900 text-neutral-600 cursor-not-allowed opacity-40' 
+                                    : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300'
+                                }`}
+                                disabled={index === activeElements.length - 1}
+                            >
+                                ↓
+                            </button>
+                            </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
+                        ))}
+                    </div>
+                    );
+                })()}
+                </div>
             
             {/* Filled sections */}
             {filledSections.map(element => editSections[element]).filter(Boolean)}

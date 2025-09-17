@@ -29,9 +29,13 @@ export default function HeroSection({ formData, setFormData, scrollToSection }: 
         <label className="text-xs text-neutral-400 mb-1 block">Price (USD)</label>
         <input
           type="number"
+          min="0"
+          step="0.01"
           value={formData.price}
           onChange={(e) => {
-            setFormData({...formData, price: e.target.value});
+            // Ensure price is never negative
+            const newPrice = Math.max(0, parseFloat(e.target.value) || 0).toString();
+            setFormData({...formData, price: newPrice});
             scrollToSection();
           }}
           className="w-full rounded bg-neutral-900 border border-neutral-700 px-3 py-2 text-sm text-white"
