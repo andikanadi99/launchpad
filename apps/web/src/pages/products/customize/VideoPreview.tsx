@@ -3,7 +3,7 @@
 import { forwardRef } from 'react';
 import { ProductFormData, ThemeColors } from '../utils/products.types';
 import { getEmbedUrl } from '../utils/ProductHelpers';
-import VideoPreview from '../components/VideoPreview';
+import VideoPreview from '../product page components/VideoPreview';
 
 interface VideoPreviewSectionProps {
   formData: ProductFormData;

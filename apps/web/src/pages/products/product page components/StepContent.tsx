@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { StepComponentProps, ContentType, ContentMethod } from '../utils/products.types';
 import { validateContentStep, processUploadedFile, getEmbedUrl } from '../utils/ProductHelpers';
-import TextEditor from '../components/TextEditor';
+import TextEditor from './TextEditor';
 
 export default function StepContent({ 
   formData, 

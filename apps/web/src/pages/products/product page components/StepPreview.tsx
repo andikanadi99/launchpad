@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { StepComponentProps, PreviewMode } from '../utils/products.types';
 import { themePresets } from '../utils/ThemePresets';
 import { getEmbedUrl, getPreviewContent } from '../utils/ProductHelpers';
-import VideoPreview from '../components/VideoPreview';
+import VideoPreview from './VideoPreview';
 
 export default function StepPreview({ 
   formData, 

@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // Import step components
-import StepBasics from './components/StepBasics';
-import StepContent from './components/StepContent';
-import StepPreview from './components/StepPreview';
-import StepCustomize from './components/StepCustomize';
-import StepSuccess from './components/StepSuccess';
+import StepBasics from './product page components/StepBasics';
+import StepContent from './product page components/StepContent';
+import StepPreview from './product page components/StepPreview';
+import StepCustomize from './product page components/StepCustomize';
+import StepSuccess from './product page components/StepSuccess';
 
 // Import types and utilities
 import { ProductFormData, Step, ContentType } from './utils/products.types';
