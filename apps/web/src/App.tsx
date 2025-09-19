@@ -24,6 +24,9 @@ import Success from "./pages/products/Success";
 import EditProduct from './pages/products/EditProduct';
 import Support from "./pages/Support";
 
+//Sales Page
+import SalesPage from "./pages/products/SalesPage";
+
 export default function App() {
   return (
     <Routes>
@@ -36,9 +39,13 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="support" element={<Support />} />
         <Route path="products">
-        <Route path="new" element={<NewProduct />} />
-        <Route path="edit/:productId" element={<EditProduct />} />
-      </Route>
+          <Route path="new" element={<NewProduct />} />
+          <Route path="sales" element={<SalesPage />} />
+          <Route path=":productId/landing/edit" element={<SalesPage />} />  {/* ← ADD THIS */}
+          <Route path=":productId/content" element={<NewProduct />} />  {/* ← ADD THIS */}
+          <Route path=":productId/success" element={<Success />} />  {/* ← ADD THIS */}
+          <Route path="edit/:productId" element={<EditProduct />} />
+        </Route>
         <Route path="settings" element={<Settings />} />
 
         {/* Onboarding inside the layout → header visible */}

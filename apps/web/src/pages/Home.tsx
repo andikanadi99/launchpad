@@ -28,7 +28,7 @@ const STEPS: Step[] = [
   { 
     id: 'salespage', 
     title: 'Create your sales page', 
-    href: '/products/new/landing', 
+    href: '/products/sales', 
     help: 'Design a compelling page that converts visitors into buyers.'
   },
   { 
@@ -118,7 +118,7 @@ export default function Home() {
               const productData = firstProduct.data();
               
               // Check for sales page completion
-              if (productData.salesPage?.title && productData.salesPage?.description) {
+              if (productData.salesPage?.coreInfo?.name && productData.salesPage?.valueProp?.description) {
                 completed.salespage = true;
               }
               
@@ -173,9 +173,7 @@ export default function Home() {
     if (productStatus.productId) {
       switch (step.id) {
         case 'salespage':
-          return productStatus.hasSalesPage 
-            ? `/products/${productStatus.productId}/landing/edit`
-            : `/products/${productStatus.productId}/landing`;
+          return `/products/${productStatus.productId}/landing/edit`;
         case 'content':
           return `/products/${productStatus.productId}/content`;
         case 'publish':
