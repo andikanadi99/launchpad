@@ -60,8 +60,21 @@ const SalesPagePreview: React.FC<SalesPagePreviewProps> = ({ data, isMobile = fa
         <span className="text-xs text-neutral-500">Live Preview</span>
       </div>
       
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto bg-gradient-to-b from-neutral-950 via-neutral-900 to-neutral-950">
+      {/* Scrollable Content with hidden scrollbar */}
+      <div 
+        className="flex-1 overflow-y-auto bg-gradient-to-b from-neutral-950 via-neutral-900 to-neutral-950"
+        style={{
+          scrollbarWidth: 'none', // Firefox
+          msOverflowStyle: 'none', // IE and Edge
+        }}
+      >
+        {/* Custom style for webkit browsers */}
+        <style jsx>{`
+          div::-webkit-scrollbar {
+            display: none;
+          }
+        `}</style>
+        
         {/* Decorative background pattern */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-40 -right-40 w-80 h-80 bg-indigo-500/5 rounded-full blur-3xl" />
@@ -84,7 +97,7 @@ const SalesPagePreview: React.FC<SalesPagePreviewProps> = ({ data, isMobile = fa
           )}
           
           <div className="max-w-3xl mx-auto py-6">
-            {/* Hero Section */}
+            {/* Hero Section - Simplified without price box */}
             <div className="text-center mb-12">
               {/* Badge */}
               {discountPercentage > 0 && (
@@ -107,59 +120,11 @@ const SalesPagePreview: React.FC<SalesPagePreviewProps> = ({ data, isMobile = fa
                   <span className="text-neutral-600 italic">Add a compelling tagline to hook your audience</span>
                 }
               </p>
-              
-              {/* Price Box */}
-              <div className="relative inline-block">
-                {/* Glow effect */}
-                <div className="absolute inset-0 bg-indigo-600/10 blur-xl rounded-xl" />
-                
-                <div className="relative bg-gradient-to-b from-neutral-800/80 to-neutral-900/80 backdrop-blur-sm border border-neutral-700/50 rounded-xl p-6 shadow-2xl">
-                  <div className="mb-4">
-                    {compareAtPrice && compareAtPrice > price && (
-                      <div className="text-neutral-500 line-through text-sm mb-1">
-                        {currencySymbol}{formatPrice(compareAtPrice)}
-                      </div>
-                    )}
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-3xl font-bold bg-gradient-to-r from-neutral-100 to-neutral-300 bg-clip-text text-transparent">
-                        {priceType === 'free' ? 'FREE' : `${currencySymbol}${formatPrice(price)}`}
-                      </span>
-                      {priceType === 'subscription' && (
-                        <span className="text-neutral-400 text-sm">/{billingFrequency}</span>
-                      )}
-                    </div>
-                    {priceType === 'payment-plan' && (
-                      <div className="text-neutral-400 mt-1 text-xs">
-                        or {coreInfo?.numberOfPayments || 3} payments of {currencySymbol}
-                        {formatPrice(price / (coreInfo?.numberOfPayments || 3))}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* CTA Button */}
-                  <button className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-600 text-white font-semibold py-3 px-6 rounded-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2 text-sm shadow-lg">
-                    <ShoppingCart className="w-4 h-4" />
-                    {priceType === 'free' ? 'Get Instant Access' : 'Buy Now'}
-                  </button>
-                  
-                  {/* Trust Badges */}
-                  <div className="flex items-center justify-center gap-3 mt-3">
-                    <div className="flex items-center gap-1 text-[10px] text-neutral-500">
-                      <Shield className="w-3 h-3" />
-                      Secure Checkout
-                    </div>
-                    <div className="flex items-center gap-1 text-[10px] text-neutral-500">
-                      <Check className="w-3 h-3" />
-                      Instant Access
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
             
             {/* Benefits Section - Only show if user has entered benefits */}
             {benefits.length > 0 && (
-              <div className="mb-12">
+              <div className="mb-12" id="preview-benefits-section">
                 <h2 className="text-xl font-bold text-neutral-100 mb-4 text-center">
                   What You'll Get
                 </h2>
@@ -178,45 +143,86 @@ const SalesPagePreview: React.FC<SalesPagePreviewProps> = ({ data, isMobile = fa
               </div>
             )}
             
-            {/* Description Section - Only show if user has entered description */}
-            {description && (
+            {/* Description Section - Show placeholder when Step 1 only */}
+            {(description || (name && !benefits.length)) && (
               <div className="mb-12">
                 <h2 className="text-xl font-bold text-neutral-100 mb-4 text-center">
                   About This Product
                 </h2>
-                <div className="prose prose-invert max-w-none">
-                  <p className="text-sm text-neutral-300 leading-relaxed">{description}</p>
-                </div>
+                {description ? (
+                  <div className="prose prose-invert max-w-none">
+                    <p className="text-sm text-neutral-300 leading-relaxed">{description}</p>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 border-2 border-dashed border-neutral-800/50 rounded-lg">
+                    <p className="text-sm text-neutral-600 italic">
+                      Your product description will appear here after completing Step 2
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             
-            {/* Coming Soon Section - Show when no content yet */}
-            {!description && benefits.length === 0 && (
-              <div className="mb-12">
-                <div className="text-center py-8 px-6 border-2 border-dashed border-neutral-700/50 rounded-lg">
-                  <div className="text-neutral-600 mb-2">
-                    <svg className="w-10 h-10 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-base font-medium text-neutral-500 mb-1">Content Coming Soon</h3>
-                  <p className="text-xs text-neutral-600 max-w-sm mx-auto">
-                    Your product description and benefits will appear here after completing Step 2: Value Proposition
+            {/* Target Audience Section - Only show if filled */}
+            {valueProp?.targetAudience && (
+              <div className="mb-12 text-center">
+                <div className="inline-block bg-gradient-to-r from-neutral-800/50 to-neutral-900/50 rounded-lg px-6 py-3 border border-neutral-700/50">
+                  <p className="text-sm text-neutral-300">
+                    <span className="text-neutral-400">Perfect for:</span> {valueProp.targetAudience}
                   </p>
                 </div>
               </div>
             )}
             
-            {/* Final CTA - Only show if there's content above it */}
-            {(description || benefits.length > 0) && (
+            {/* Remove the old "Coming Soon" section - we now show placeholders instead */}
+            
+            {/* Final CTA Section - Always at bottom with price */}
+            {name && (
               <div className="text-center py-8 border-t border-neutral-800/50">
-                <p className="text-neutral-400 mb-4 text-sm">
+                <p className="text-neutral-400 mb-6 text-sm">
                   Ready to get started?
                 </p>
-                <button className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-600 text-white font-semibold py-3 px-6 rounded-lg transition-all transform hover:scale-105 inline-flex items-center gap-2 text-sm shadow-lg">
+                
+                {/* Price display */}
+                <div className="mb-6">
+                  {compareAtPrice && compareAtPrice > price && (
+                    <div className="text-neutral-500 line-through text-sm mb-1">
+                      {currencySymbol}{formatPrice(compareAtPrice)}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-3xl font-bold bg-gradient-to-r from-neutral-100 to-neutral-300 bg-clip-text text-transparent">
+                      {priceType === 'free' ? 'FREE' : `${currencySymbol}${formatPrice(price)}`}
+                    </span>
+                    {priceType === 'subscription' && (
+                      <span className="text-neutral-400 text-sm">/{billingFrequency}</span>
+                    )}
+                  </div>
+                  {priceType === 'payment-plan' && (
+                    <div className="text-neutral-400 mt-1 text-xs">
+                      or {coreInfo?.numberOfPayments || 3} payments of {currencySymbol}
+                      {formatPrice(price / (coreInfo?.numberOfPayments || 3))}
+                    </div>
+                  )}
+                </div>
+                
+                {/* CTA Button */}
+                <button className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-600 text-white font-semibold py-3 px-8 rounded-lg transition-all transform hover:scale-105 inline-flex items-center gap-2 text-sm shadow-lg">
                   <ShoppingCart className="w-4 h-4" />
-                  {priceType === 'free' ? 'Get Instant Access' : `Buy Now - ${currencySymbol}${formatPrice(price)}`}
+                  {priceType === 'free' ? 'Get Instant Access' : 'Buy Now'}
                 </button>
+                
+                {/* Trust Badges */}
+                <div className="flex items-center justify-center gap-4 mt-4">
+                  <div className="flex items-center gap-1 text-xs text-neutral-500">
+                    <Shield className="w-3 h-3" />
+                    Secure Checkout
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-neutral-500">
+                    <Check className="w-3 h-3" />
+                    Instant Access
+                  </div>
+                </div>
               </div>
             )}
           </div>

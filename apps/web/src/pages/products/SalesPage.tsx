@@ -5,35 +5,18 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
-import { ArrowLeft, ArrowRight, Save, Eye, Smartphone, Monitor, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Eye, Smartphone, Monitor, Check, AlertCircle } from 'lucide-react';
 
-//Steps individual components
+// Steps individual components
 import SalesStepCoreInfo from './sales page components/SalesStepsCoreInfo';
+import SalesStepValueProp from './sales page components/SalesStepValueProp';
 import SalesPagePreview from './sales page components/SalesPagePreview';
 // Import other steps as you create them:
-// import SalesStepValueProp from './sales-page-components/steps/SalesStepValueProp';
 // import SalesStepVisuals from './sales-page-components/steps/SalesStepVisuals';
 // import SalesStepCustomize from './sales-page-components/steps/SalesStepCustomize';
 // import SalesStepPublish from './sales-page-components/steps/SalesStepPublish';
+
 // Temporary step components - will be replaced with actual imports
-
-
-const StepValueProp = ({ data, updateData }: any) => (
-  <div className="space-y-6">
-    <h2 className="text-2xl font-semibold">Step 2: Value Proposition</h2>
-    <p className="text-neutral-400">Explain what you're selling and why it matters</p>
-    <div className="p-6 bg-neutral-800/50 rounded-lg">
-      <p className="text-neutral-300">StepValueProp component will go here</p>
-      <ul className="mt-4 space-y-2 text-sm text-neutral-400">
-        <li>• Main description</li>
-        <li>• Key benefits</li>
-        <li>• Target audience</li>
-        <li>• What's included</li>
-      </ul>
-    </div>
-  </div>
-);
-
 const StepVisuals = ({ data, updateData }: any) => (
   <div className="space-y-6">
     <h2 className="text-2xl font-semibold">Step 3: Visuals & Media</h2>
@@ -81,25 +64,26 @@ const StepPublish = ({ data, updateData }: any) => (
   </div>
 );
 
-
 // Types
 interface SalesPageData {
   coreInfo: {
     name: string;
     tagline: string;
     price: number;
-    priceType: 'one-time' | 'payment-plan' | 'subscription' | 'free';  // Added 'free' option
+    priceType: 'one-time' | 'payment-plan' | 'subscription' | 'free';  
     currency?: string;
     compareAtPrice?: number;
     billingFrequency?: 'monthly' | 'yearly' | 'weekly';
     numberOfPayments?: number;
     paymentFrequency?: 'weekly' | 'biweekly' | 'monthly';
-    };
+  };
   valueProp: {
+    productType?: 'course' | 'ebook' | 'coaching' | 'templates' | 'community' | 'custom';
     description: string;
     benefits: string[];
     targetAudience: string;
     deliverables: string[];
+    isUsingTemplate: boolean;
   };
   visuals: {
     headerImage?: string;
@@ -122,8 +106,8 @@ interface SalesPageData {
 }
 
 const STEPS = [
-  { id: 1, name: 'Core Info', component: SalesStepCoreInfo }, 
-  { id: 2, name: 'Value Proposition', component: StepValueProp }, 
+  { id: 1, name: 'Core Info', component: SalesStepCoreInfo },
+  { id: 2, name: 'Value Proposition', component: SalesStepValueProp },
   { id: 3, name: 'Visuals', component: StepVisuals },
   { id: 4, name: 'Customize', component: StepCustomize },
   { id: 5, name: 'Publish', component: StepPublish },
@@ -138,24 +122,27 @@ export default function SalesPage() {
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [productId, setProductId] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
-  
+  const [showTemplateWarning, setShowTemplateWarning] = useState(false);
+
   const [salesPageData, setSalesPageData] = useState<SalesPageData>({
     coreInfo: {
-        name: '',
-        tagline: '',
-        price: 0,
-        priceType: 'one-time',
-        currency: 'USD',
-        compareAtPrice: undefined,
-        billingFrequency: 'monthly',
-        numberOfPayments: 3,
-        paymentFrequency: 'monthly',
+      name: '',
+      tagline: '',
+      price: 0,
+      priceType: 'one-time',
+      currency: 'USD',
+      compareAtPrice: undefined,
+      billingFrequency: 'monthly',
+      numberOfPayments: 3,
+      paymentFrequency: 'monthly',
     },
     valueProp: {
+      productType: undefined,
       description: '',
       benefits: [],
       targetAudience: '',
       deliverables: [],
+      isUsingTemplate: false,
     },
     visuals: {
       headerImage: undefined,
@@ -179,59 +166,55 @@ export default function SalesPage() {
 
   // Initialize product and load data
   useEffect(() => {
-  const init = async () => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setIsLoading(false);  // Set loading to false before redirect
-        navigate('/auth/signin');
-        return;
-      }
-      
-      setUserId(user.uid);
-      
-      try {
-        // Check if we have a product ID in params or need to create new
-        let prodId = params?.productId as string;
+    const init = async () => {
+      const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+          setIsLoading(false);
+          navigate('/auth/signin');
+          return;
+        }
 
-        if (!prodId) {
-          // Create new product
-          prodId = `product_${Date.now()}`;
-          const productRef = doc(db, 'users', user.uid, 'products', prodId);
-          await setDoc(productRef, {
-            createdAt: new Date(),
-            status: 'draft',
-            type: 'sales-page',
-            salesPage: salesPageData,  // Initial empty data
-          });
-          
-          // Redirect to the new product URL
-          navigate(`/products/${prodId}/landing/edit`, { replace: true });
-        } else {
-          // Load existing product
-          const productRef = doc(db, 'users', user.uid, 'products', prodId);
-          const productSnap = await getDoc(productRef);
-          
-          if (productSnap.exists()) {
-            const data = productSnap.data();
-            if (data.salesPage) {
-              setSalesPageData(data.salesPage);
+        setUserId(user.uid);
+
+        try {
+          let prodId = params?.productId as string;
+
+          if (!prodId) {
+            prodId = `product_${Date.now()}`;
+            const productRef = doc(db, 'users', user.uid, 'products', prodId);
+            await setDoc(productRef, {
+              createdAt: new Date(),
+              status: 'draft',
+              type: 'sales-page',
+              salesPage: salesPageData,
+            });
+
+            navigate(`/products/${prodId}/landing/edit`, { replace: true });
+          } else {
+            const productRef = doc(db, 'users', user.uid, 'products', prodId);
+            const productSnap = await getDoc(productRef);
+
+            if (productSnap.exists()) {
+              const data = productSnap.data();
+              if (data.salesPage) {
+                setSalesPageData(data.salesPage);
+              }
             }
           }
+
+          setProductId(prodId);
+        } catch (error) {
+          console.error('Error initializing product:', error);
+        } finally {
+          setIsLoading(false);
         }
-        
-        setProductId(prodId);
-      } catch (error) {
-        console.error('Error initializing product:', error);
-      } finally {
-        setIsLoading(false);  // Always set loading to false
-      }
-    });
+      });
 
-    return () => unsubscribe();
-  };
+      return () => unsubscribe();
+    };
 
-  init();
-}, [params?.productId, navigate]);  // Add proper dependencies
+    init();
+  }, [params?.productId, navigate]);
 
   // Auto-save functionality
   useEffect(() => {
@@ -251,7 +234,7 @@ export default function SalesPage() {
       } finally {
         setIsSaving(false);
       }
-    }, 2000); // Auto-save after 2 seconds of inactivity
+    }, 2000);
 
     return () => clearTimeout(saveTimer);
   }, [salesPageData, productId, userId]);
@@ -264,23 +247,30 @@ export default function SalesPage() {
   };
 
   const handleNext = () => {
+    // Check for template warning on step 2
+    if (currentStep === 2 && salesPageData.valueProp.isUsingTemplate) {
+      setShowTemplateWarning(true);
+      setTimeout(() => setShowTemplateWarning(false), 5000);
+    }
+    
     if (currentStep < STEPS.length) {
-        setCurrentStep(currentStep + 1);
+      setCurrentStep(currentStep + 1);
     }
-    };
+  };
 
-    // Add validation function for current step
-    const canProceedToNext = () => {
+  const canProceedToNext = () => {
     if (currentStep === 1) {
-        // Step 1: Core Info - name and price (if not free) are required
-        const hasName = salesPageData.coreInfo.name && salesPageData.coreInfo.name.trim().length > 0;
-        const isFree = salesPageData.coreInfo.priceType === 'free';
-        const hasValidPrice = isFree || (salesPageData.coreInfo.price && salesPageData.coreInfo.price > 0);
-        return hasName && hasValidPrice;
+      const hasName = salesPageData.coreInfo.name && salesPageData.coreInfo.name.trim().length > 0;
+      const isFree = salesPageData.coreInfo.priceType === 'free';
+      const hasValidPrice = isFree || (salesPageData.coreInfo.price && salesPageData.coreInfo.price > 0);
+      return hasName && hasValidPrice;
     }
-    // Other steps don't have required fields for now
+    if (currentStep === 2) {
+      // Step 2: Value Prop - description is required
+      return salesPageData.valueProp.description && salesPageData.valueProp.description.trim().length > 0;
+    }
     return true;
-    };
+  };
 
   const handlePrevious = () => {
     if (currentStep > 1) {
@@ -289,6 +279,14 @@ export default function SalesPage() {
   };
 
   const handlePublish = async () => {
+    // Check if using template content
+    if (salesPageData.valueProp.isUsingTemplate) {
+      const confirmPublish = window.confirm(
+        'You are still using template content with placeholder text. Are you sure you want to publish without customizing it?'
+      );
+      if (!confirmPublish) return;
+    }
+
     setIsSaving(true);
     try {
       const productRef = doc(db, 'users', userId, 'products', productId);
@@ -297,8 +295,7 @@ export default function SalesPage() {
         'salesPage.publish.publishedAt': new Date(),
         published: true,
       });
-      
-      // Redirect to success page or dashboard
+
       navigate(`/products/${productId}/success`);
     } catch (error) {
       console.error('Error publishing:', error);
@@ -307,7 +304,9 @@ export default function SalesPage() {
     }
   };
 
-  const canPublish = salesPageData.coreInfo.name && salesPageData.coreInfo.price >= 0;
+  const canPublish = salesPageData.coreInfo.name && 
+                     salesPageData.coreInfo.price >= 0 && 
+                     salesPageData.valueProp.description;
 
   if (isLoading) {
     return (
@@ -318,6 +317,24 @@ export default function SalesPage() {
   }
 
   const CurrentStepComponent = STEPS[currentStep - 1].component;
+
+  // Prepare props for SalesStepValueProp
+  const getStepProps = () => {
+    if (currentStep === 1) {
+      return {
+        data: salesPageData,
+        updateData,
+      };
+    }
+    if (currentStep === 2) {
+      return {
+        data: salesPageData.valueProp,
+        onChange: (data: any) => updateData('valueProp', data),
+        productName: salesPageData.coreInfo.name,
+      };
+    }
+    return { data: salesPageData, updateData };
+  };
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -339,7 +356,7 @@ export default function SalesPage() {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-4">
               {/* Save indicator */}
               <div className="flex items-center gap-2">
@@ -355,7 +372,7 @@ export default function SalesPage() {
                   </>
                 )}
               </div>
-              
+
               {/* Preview toggle */}
               <div className="flex items-center gap-1 bg-neutral-800 rounded-lg p-1">
                 <button
@@ -371,7 +388,7 @@ export default function SalesPage() {
                   <Smartphone className="w-4 h-4" />
                 </button>
               </div>
-              
+
               {/* Publish button */}
               {currentStep === 5 && (
                 <button
@@ -385,7 +402,7 @@ export default function SalesPage() {
             </div>
           </div>
         </div>
-        
+
         {/* Progress bar */}
         <div className="px-6 pb-4">
           <div className="flex items-center gap-2">
@@ -407,16 +424,25 @@ export default function SalesPage() {
         </div>
       </header>
 
+      {/* Template Warning Banner */}
+      {showTemplateWarning && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 px-6 py-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+            <p className="text-sm text-amber-500">
+              You're moving forward with template content. Remember to customize it before publishing!
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <div className="flex h-[calc(100vh-120px)]">
         {/* Left: Form */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-2xl mx-auto p-8">
-            <CurrentStepComponent
-              data={salesPageData}
-              updateData={updateData}
-            />
-            
+            <CurrentStepComponent {...getStepProps()} />
+
             {/* Navigation buttons */}
             <div className="mt-8 flex items-center justify-between">
               <button
@@ -427,23 +453,23 @@ export default function SalesPage() {
                 <ArrowLeft className="w-4 h-4" />
                 Previous
               </button>
-              
+
               <div className="flex items-center gap-2">
                 <span className="text-sm text-neutral-400">
                   Step {currentStep} of {STEPS.length}
                 </span>
               </div>
-              
+
               {currentStep < STEPS.length ? (
                 <button
-                    onClick={handleNext}
-                    disabled={!canProceedToNext()}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded-lg flex items-center gap-2 transition-colors"
+                  onClick={handleNext}
+                  disabled={!canProceedToNext()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded-lg flex items-center gap-2 transition-colors"
                 >
-                    Next
-                    <ArrowRight className="w-4 h-4" />
+                  Next
+                  <ArrowRight className="w-4 h-4" />
                 </button>
-                ) : (
+              ) : (
                 <button
                   onClick={handlePublish}
                   disabled={!canPublish || isSaving}
@@ -453,7 +479,7 @@ export default function SalesPage() {
                 </button>
               )}
             </div>
-            
+
             {/* Skip option for optional steps */}
             {currentStep >= 3 && currentStep < 5 && (
               <div className="mt-4 text-center">
@@ -465,7 +491,7 @@ export default function SalesPage() {
                 </button>
               </div>
             )}
-            
+
             {/* Publish early option */}
             {currentStep === 2 && canPublish && (
               <div className="mt-6 p-4 bg-indigo-900/20 border border-indigo-600/30 rounded-lg">
@@ -484,7 +510,7 @@ export default function SalesPage() {
         </div>
 
         {/* Right: Preview */}
-        <div className="w-1/2 bg-neutral-900 border-l border-neutral-800 p-8">
+        <div className="w-1/2 bg-neutral-900 border-l border-neutral-800 p-8 overflow-hidden">
           <div className={`h-full ${previewMode === 'mobile' ? 'max-w-sm mx-auto' : ''}`}>
             <SalesPagePreview data={salesPageData} isMobile={previewMode === 'mobile'} />
           </div>
