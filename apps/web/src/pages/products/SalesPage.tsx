@@ -11,42 +11,10 @@ import { ArrowLeft, ArrowRight, Save, Eye, Smartphone, Monitor, Check, AlertCirc
 import SalesStepCoreInfo from './sales page components/SalesStepsCoreInfo';
 import SalesStepValueProp from './sales page components/SalesStepValueProp';
 import SalesPagePreview from './sales page components/SalesPagePreview';
+import SalesStepVisuals from './sales page components/SalesStepVisuals';
+import SalesStepCustomize from './sales page components/SalesStepCustomize';
 // Import other steps as you create them:
-// import SalesStepVisuals from './sales-page-components/steps/SalesStepVisuals';
-// import SalesStepCustomize from './sales-page-components/steps/SalesStepCustomize';
 // import SalesStepPublish from './sales-page-components/steps/SalesStepPublish';
-
-// Temporary step components - will be replaced with actual imports
-const StepVisuals = ({ data, updateData }: any) => (
-  <div className="space-y-6">
-    <h2 className="text-2xl font-semibold">Step 3: Visuals & Media</h2>
-    <p className="text-neutral-400">Make your page visually compelling</p>
-    <div className="p-6 bg-neutral-800/50 rounded-lg">
-      <p className="text-neutral-300">StepVisuals component will go here</p>
-      <ul className="mt-4 space-y-2 text-sm text-neutral-400">
-        <li>• Header image</li>
-        <li>• Product thumbnail</li>
-        <li>• Sales video</li>
-        <li>• Gallery images</li>
-      </ul>
-    </div>
-  </div>
-);
-
-const StepCustomize = ({ data, updateData }: any) => (
-  <div className="space-y-6">
-    <h2 className="text-2xl font-semibold">Step 4: Customize Design</h2>
-    <p className="text-neutral-400">Make it match your brand</p>
-    <div className="p-6 bg-neutral-800/50 rounded-lg">
-      <p className="text-neutral-300">StepCustomize component will go here</p>
-      <ul className="mt-4 space-y-2 text-sm text-neutral-400">
-        <li>• Choose theme</li>
-        <li>• Colors & fonts</li>
-        <li>• Section order</li>
-      </ul>
-    </div>
-  </div>
-);
 
 const StepPublish = ({ data, updateData }: any) => (
   <div className="space-y-6">
@@ -87,6 +55,7 @@ interface SalesPageData {
   };
   visuals: {
     headerImage?: string;
+    headerImageAttribution?: { name: string; url: string };
     thumbnail?: string;
     videoUrl?: string;
     gallery?: string[];
@@ -108,8 +77,8 @@ interface SalesPageData {
 const STEPS = [
   { id: 1, name: 'Core Info', component: SalesStepCoreInfo },
   { id: 2, name: 'Value Proposition', component: SalesStepValueProp },
-  { id: 3, name: 'Visuals', component: StepVisuals },
-  { id: 4, name: 'Customize', component: StepCustomize },
+  { id: 3, name: 'Visuals', component: SalesStepVisuals },
+  { id: 4, name: 'Customize', component: SalesStepCustomize },
   { id: 5, name: 'Publish', component: StepPublish },
 ];
 
@@ -146,6 +115,7 @@ export default function SalesPage() {
     },
     visuals: {
       headerImage: undefined,
+      headerImageAttribution: undefined,
       thumbnail: undefined,
       videoUrl: undefined,
       gallery: [],
@@ -153,8 +123,17 @@ export default function SalesPage() {
     design: {
       theme: 'modern',
       primaryColor: '#6366F1',
+      secondaryColor: '#8B5CF6',
+      backgroundColor: '#0A0A0A',
+      textColor: '#E5E5E5',
       fontPair: 'inter-system',
-      sectionOrder: ['hero', 'benefits', 'testimonials', 'faq', 'cta'],
+      buttonStyle: 'rounded',
+      cardStyle: 'shadow',
+      spacing: 'comfortable',
+      sectionOrder: ['hero', 'video', 'benefits', 'description', 'audience', 'gallery', 'pricing'],
+      hiddenSections: [],
+      ctaButtonText: 'Buy Now',
+      animations: true
     },
     publish: {
       slug: '',
@@ -269,6 +248,10 @@ export default function SalesPage() {
       // Step 2: Value Prop - description is required
       return salesPageData.valueProp.description && salesPageData.valueProp.description.trim().length > 0;
     }
+    if (currentStep === 3) {
+      // Step 3: Visuals - header image is required
+      return salesPageData.visuals.headerImage ? true : false;
+    }
     return true;
   };
 
@@ -306,7 +289,8 @@ export default function SalesPage() {
 
   const canPublish = salesPageData.coreInfo.name && 
                      salesPageData.coreInfo.price >= 0 && 
-                     salesPageData.valueProp.description;
+                     salesPageData.valueProp.description &&
+                     salesPageData.visuals.headerImage;
 
   if (isLoading) {
     return (
@@ -318,7 +302,7 @@ export default function SalesPage() {
 
   const CurrentStepComponent = STEPS[currentStep - 1].component;
 
-  // Prepare props for SalesStepValueProp
+  // Prepare props for SalesStepValueProp and SalesStepVisuals
   const getStepProps = () => {
     if (currentStep === 1) {
       return {
@@ -331,6 +315,12 @@ export default function SalesPage() {
         data: salesPageData.valueProp,
         onChange: (data: any) => updateData('valueProp', data),
         productName: salesPageData.coreInfo.name,
+      };
+    }
+    if (currentStep === 3) {
+      return {
+        data: salesPageData,
+        updateData,
       };
     }
     return { data: salesPageData, updateData };
@@ -481,28 +471,13 @@ export default function SalesPage() {
             </div>
 
             {/* Skip option for optional steps */}
-            {currentStep >= 3 && currentStep < 5 && (
+            {currentStep >= 4 && currentStep < 5 && (
               <div className="mt-4 text-center">
                 <button
                   onClick={handleNext}
                   className="text-sm text-neutral-400 hover:text-neutral-300 underline"
                 >
                   Skip this step for now
-                </button>
-              </div>
-            )}
-
-            {/* Publish early option */}
-            {currentStep === 2 && canPublish && (
-              <div className="mt-6 p-4 bg-indigo-900/20 border border-indigo-600/30 rounded-lg">
-                <p className="text-sm text-indigo-300">
-                  💡 Your sales page has enough info to go live! You can publish now and add visuals later.
-                </p>
-                <button
-                  onClick={() => setCurrentStep(5)}
-                  className="mt-2 text-sm text-indigo-400 hover:text-indigo-300 underline"
-                >
-                  Jump to publish →
                 </button>
               </div>
             )}

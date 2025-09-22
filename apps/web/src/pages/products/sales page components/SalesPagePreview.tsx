@@ -6,6 +6,15 @@ interface SalesPagePreviewProps {
   isMobile?: boolean;
 }
 
+// Font mappings for the preview
+const FONT_PAIRS = {
+  'inter-system': { heading: 'Inter, sans-serif', body: 'system-ui, sans-serif' },
+  'playfair-lato': { heading: '"Playfair Display", serif', body: 'Lato, sans-serif' },
+  'montserrat-opensans': { heading: 'Montserrat, sans-serif', body: '"Open Sans", sans-serif' },
+  'raleway-merriweather': { heading: 'Raleway, sans-serif', body: 'Merriweather, serif' },
+  'poppins-roboto': { heading: 'Poppins, sans-serif', body: 'Roboto, sans-serif' }
+};
+
 const SalesPagePreview: React.FC<SalesPagePreviewProps> = ({ data, isMobile = false }) => {
   // Extract data with fallbacks
   const { coreInfo, valueProp, visuals, design, publish } = data;
@@ -17,6 +26,49 @@ const SalesPagePreview: React.FC<SalesPagePreviewProps> = ({ data, isMobile = fa
   const compareAtPrice = coreInfo?.compareAtPrice;
   const currency = coreInfo?.currency || 'USD';
   const billingFrequency = coreInfo?.billingFrequency || 'monthly';
+  
+  // Design settings with defaults
+  const primaryColor = design?.primaryColor || '#6366F1';
+  const secondaryColor = design?.secondaryColor || '#8B5CF6';
+  const backgroundColor = design?.backgroundColor || '#0A0A0A';
+  const textColor = design?.textColor || '#E5E5E5';
+  const fontPair = FONT_PAIRS[design?.fontPair as keyof typeof FONT_PAIRS] || FONT_PAIRS['inter-system'];
+  const buttonStyle = design?.buttonStyle || 'rounded';
+  const cardStyle = design?.cardStyle || 'shadow';
+  const spacing = design?.spacing || 'comfortable';
+  const sectionOrder = design?.sectionOrder || ['hero', 'video', 'benefits', 'description', 'audience', 'gallery', 'pricing'];
+  const hiddenSections = design?.hiddenSections || [];
+  const ctaButtonText = design?.ctaButtonText || (priceType === 'free' ? 'Get Instant Access' : 'Buy Now');
+  const animations = design?.animations !== false;
+  
+  // Get button border radius based on style
+  const getButtonRadius = () => {
+    switch(buttonStyle) {
+      case 'square': return '0px';
+      case 'pill': return '9999px';
+      default: return '8px';
+    }
+  };
+  
+  // Get card styles
+  const getCardStyle = () => {
+    switch(cardStyle) {
+      case 'flat': return { boxShadow: 'none', border: '1px solid rgba(255,255,255,0.1)' };
+      case 'border': return { boxShadow: 'none', border: '2px solid rgba(255,255,255,0.2)' };
+      default: return { boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' };
+    }
+  };
+  
+  // Get spacing values
+  const getSpacing = () => {
+    switch(spacing) {
+      case 'compact': return { section: 'mb-8', element: 'mb-4', padding: 'p-4' };
+      case 'spacious': return { section: 'mb-16', element: 'mb-8', padding: 'p-8' };
+      default: return { section: 'mb-12', element: 'mb-6', padding: 'p-6' };
+    }
+  };
+  
+  const spacingValues = getSpacing();
   
   // Currency symbols
   const currencySymbols: Record<string, string> = {
@@ -39,12 +91,266 @@ const SalesPagePreview: React.FC<SalesPagePreviewProps> = ({ data, isMobile = fa
     ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100)
     : 0;
 
-  // Value prop data - only show if user has entered it
+  // Value prop data
   const description = valueProp?.description || '';
   const benefits = valueProp?.benefits?.length > 0 ? valueProp.benefits : [];
+  const targetAudience = valueProp?.targetAudience || '';
+
+  // Parse video URL
+  const parseVideoUrl = (url: string) => {
+    if (!url) return '';
+    
+    const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\s]+)/);
+    if (youtubeMatch) {
+      return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
+    }
+    
+    const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+    if (vimeoMatch) {
+      return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+    }
+    
+    const loomMatch = url.match(/loom\.com\/share\/([a-zA-Z0-9]+)/);
+    if (loomMatch) {
+      return `https://www.loom.com/embed/${loomMatch[1]}`;
+    }
+    
+    return url;
+  };
+
+  // Render sections based on order and visibility
+  const renderSection = (sectionId: string) => {
+    if (hiddenSections.includes(sectionId)) return null;
+    
+    switch(sectionId) {
+      case 'hero':
+        return (
+          <div key="hero" className={`text-center ${spacingValues.section}`}>
+            {discountPercentage > 0 && (
+              <div 
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs mb-4 backdrop-blur-sm"
+                style={{ 
+                  backgroundColor: `${secondaryColor}20`,
+                  borderColor: `${secondaryColor}50`,
+                  color: secondaryColor,
+                  border: '1px solid'
+                }}
+              >
+                <Clock className="w-3 h-3" />
+                <span className="font-medium">Limited Time: {discountPercentage}% Off</span>
+              </div>
+            )}
+            
+            <h1 
+              className={`${isMobile ? 'text-2xl' : 'text-3xl'} font-bold mb-3 leading-tight`}
+              style={{ fontFamily: fontPair.heading, color: textColor }}
+            >
+              {name || <span style={{ opacity: 0.4 }}>Your Product Name</span>}
+            </h1>
+            
+            <p 
+              className={`${isMobile ? 'text-sm' : 'text-base'} ${spacingValues.element} max-w-xl mx-auto leading-relaxed`}
+              style={{ fontFamily: fontPair.body, color: textColor, opacity: 0.8 }}
+            >
+              {tagline || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Add a compelling tagline to hook your audience</span>}
+            </p>
+          </div>
+        );
+        
+      case 'video':
+        if (!visuals?.videoUrl) return null;
+        const videoEmbed = parseVideoUrl(visuals.videoUrl);
+        if (!videoEmbed) return null;
+        return (
+          <div key="video" className={`max-w-3xl mx-auto ${spacingValues.section}`}>
+            <div className="aspect-video rounded-lg overflow-hidden" style={{ backgroundColor: backgroundColor }}>
+              <iframe
+                src={videoEmbed}
+                className="w-full h-full"
+                allowFullScreen
+                title="Sales video"
+              />
+            </div>
+          </div>
+        );
+        
+      case 'benefits':
+        if (benefits.length === 0) return null;
+        return (
+          <div key="benefits" className={spacingValues.section} id="preview-benefits-section">
+            <h2 
+              className="text-xl font-bold mb-4 text-center"
+              style={{ fontFamily: fontPair.heading, color: textColor }}
+            >
+              What You'll Get
+            </h2>
+            <div 
+              className={`rounded-lg ${spacingValues.padding}`}
+              style={{ 
+                backgroundColor: `${textColor}05`,
+                ...getCardStyle()
+              }}
+            >
+              <div className="space-y-3">
+                {benefits.map((benefit: string, index: number) => (
+                  <div key={index} className="flex items-start gap-2">
+                    <div 
+                      className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                      style={{ backgroundColor: `${primaryColor}30` }}
+                    >
+                      <Check className="w-3 h-3" style={{ color: primaryColor }} />
+                    </div>
+                    <p className="text-sm" style={{ fontFamily: fontPair.body, color: textColor, opacity: 0.9 }}>
+                      {benefit}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+        
+      case 'description':
+        if (!description && !name) return null;
+        return (
+          <div key="description" className={spacingValues.section}>
+            <h2 
+              className="text-xl font-bold mb-4 text-center"
+              style={{ fontFamily: fontPair.heading, color: textColor }}
+            >
+              About This Product
+            </h2>
+            {description ? (
+              <p 
+                className="text-sm leading-relaxed"
+                style={{ fontFamily: fontPair.body, color: textColor, opacity: 0.9 }}
+              >
+                {description}
+              </p>
+            ) : (
+              <div 
+                className="text-center py-6 border-2 border-dashed rounded-lg"
+                style={{ borderColor: `${textColor}20` }}
+              >
+                <p className="text-sm italic" style={{ color: textColor, opacity: 0.3 }}>
+                  Your product description will appear here after completing Step 2
+                </p>
+              </div>
+            )}
+          </div>
+        );
+        
+      case 'audience':
+        if (!targetAudience) return null;
+        return (
+          <div key="audience" className={`${spacingValues.section} text-center`}>
+            <div 
+              className="inline-block rounded-lg px-6 py-3"
+              style={{ 
+                backgroundColor: `${textColor}05`,
+                border: `1px solid ${textColor}20`
+              }}
+            >
+              <p className="text-sm" style={{ fontFamily: fontPair.body, color: textColor }}>
+                <span style={{ opacity: 0.6 }}>Perfect for:</span> {targetAudience}
+              </p>
+            </div>
+          </div>
+        );
+        
+      case 'gallery':
+        if (!visuals?.gallery || visuals.gallery.length === 0) return null;
+        return (
+          <div key="gallery" className={spacingValues.section}>
+            <h2 
+              className="text-xl font-bold mb-4 text-center"
+              style={{ fontFamily: fontPair.heading, color: textColor }}
+            >
+              See It In Action
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {visuals.gallery.slice(0, 6).map((img: string, index: number) => (
+                <div 
+                  key={index} 
+                  className="aspect-video rounded-lg overflow-hidden"
+                  style={{ backgroundColor: `${textColor}10` }}
+                >
+                  <img 
+                    src={img} 
+                    alt={`Gallery image ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+        
+      case 'pricing':
+      case 'cta':
+        if (!name) return null;
+        return (
+          <div key="cta" className="text-center py-8 border-t" style={{ borderColor: `${textColor}10` }}>
+            <p className={`text-sm ${spacingValues.element}`} style={{ color: textColor, opacity: 0.6 }}>
+              Ready to get started?
+            </p>
+            
+            <div className={spacingValues.element}>
+              {compareAtPrice && compareAtPrice > price && (
+                <div className="text-sm mb-1" style={{ color: textColor, opacity: 0.4, textDecoration: 'line-through' }}>
+                  {currencySymbol}{formatPrice(compareAtPrice)}
+                </div>
+              )}
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-3xl font-bold" style={{ fontFamily: fontPair.heading, color: textColor }}>
+                  {priceType === 'free' ? 'FREE' : `${currencySymbol}${formatPrice(price)}`}
+                </span>
+                {priceType === 'subscription' && (
+                  <span className="text-sm" style={{ color: textColor, opacity: 0.6 }}>/{billingFrequency}</span>
+                )}
+              </div>
+              {priceType === 'payment-plan' && (
+                <div className="mt-1 text-xs" style={{ color: textColor, opacity: 0.6 }}>
+                  or {coreInfo?.numberOfPayments || 3} payments of {currencySymbol}
+                  {formatPrice(price / (coreInfo?.numberOfPayments || 3))}
+                </div>
+              )}
+            </div>
+            
+            <button 
+              className={`font-semibold py-3 px-8 inline-flex items-center gap-2 text-sm shadow-lg ${
+                animations ? 'transition-all transform hover:scale-105' : ''
+              }`}
+              style={{ 
+                backgroundColor: primaryColor,
+                color: '#ffffff',
+                borderRadius: getButtonRadius()
+              }}
+            >
+              <ShoppingCart className="w-4 h-4" />
+              {ctaButtonText}
+            </button>
+            
+            <div className="flex items-center justify-center gap-4 mt-4">
+              <div className="flex items-center gap-1 text-xs" style={{ color: textColor, opacity: 0.4 }}>
+                <Shield className="w-3 h-3" />
+                Secure Checkout
+              </div>
+              <div className="flex items-center gap-1 text-xs" style={{ color: textColor, opacity: 0.4 }}>
+                <Check className="w-3 h-3" />
+                Instant Access
+              </div>
+            </div>
+          </div>
+        );
+        
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div className="h-full bg-neutral-900 rounded-lg border border-neutral-800 overflow-hidden flex flex-col">
+    <div className="h-full rounded-lg border border-neutral-800 overflow-hidden flex flex-col" style={{ backgroundColor: backgroundColor }}>
       {/* Browser Chrome */}
       <div className="p-3 bg-neutral-800 border-b border-neutral-700 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -60,171 +366,49 @@ const SalesPagePreview: React.FC<SalesPagePreviewProps> = ({ data, isMobile = fa
         <span className="text-xs text-neutral-500">Live Preview</span>
       </div>
       
-      {/* Scrollable Content with hidden scrollbar */}
+      {/* Scrollable Content */}
       <div 
-        className="flex-1 overflow-y-auto bg-gradient-to-b from-neutral-950 via-neutral-900 to-neutral-950"
+        className="flex-1 overflow-y-auto"
         style={{
-          scrollbarWidth: 'none', // Firefox
-          msOverflowStyle: 'none', // IE and Edge
+          backgroundColor: backgroundColor,
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
         }}
       >
-        {/* Custom style for webkit browsers */}
         <style jsx>{`
           div::-webkit-scrollbar {
             display: none;
           }
         `}</style>
         
-        {/* Decorative background pattern */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-indigo-500/5 rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/5 rounded-full blur-3xl" />
-        </div>
+        {/* Apply custom CSS if provided */}
+        {design?.customCSS && (
+          <style dangerouslySetInnerHTML={{ __html: design.customCSS }} />
+        )}
         
         <div className={`${isMobile ? 'px-4' : 'px-8'} pt-8 relative`}>
-          {/* Header Image Placeholder - only show if no header image exists */}
-          {!visuals?.headerImage && (
-            <div className="w-full h-40 bg-gradient-to-br from-neutral-800/30 to-neutral-900/30 border-2 border-dashed border-neutral-700/50 rounded-lg mb-6 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-neutral-600 mb-1">
-                  <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <p className="text-[10px] text-neutral-600">Header image can be added in Step 3</p>
+          {/* Header Image */}
+          {visuals?.headerImage && (
+            visuals.headerImage.startsWith('gradient:') ? (
+              <div className={`w-full h-48 ${visuals.headerImage.replace('gradient:', '')} rounded-lg ${spacingValues.element} flex items-center justify-center`}>
+                <h2 className="text-3xl font-bold text-white text-center px-4 drop-shadow-lg" style={{ fontFamily: fontPair.heading }}>
+                  {name || 'Your Product'}
+                </h2>
               </div>
-            </div>
+            ) : (
+              <div className={`w-full h-48 rounded-lg ${spacingValues.element} overflow-hidden`}>
+                <img 
+                  src={visuals.headerImage} 
+                  alt="Header" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )
           )}
           
           <div className="max-w-3xl mx-auto py-6">
-            {/* Hero Section - Simplified without price box */}
-            <div className="text-center mb-12">
-              {/* Badge */}
-              {discountPercentage > 0 && (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-full text-green-400 text-xs mb-4 backdrop-blur-sm">
-                  <Clock className="w-3 h-3" />
-                  <span className="font-medium">Limited Time: {discountPercentage}% Off</span>
-                </div>
-              )}
-              
-              {/* Title */}
-              <h1 className={`${isMobile ? 'text-2xl' : 'text-3xl'} font-bold text-neutral-100 mb-3 leading-tight`}>
-                {name || 
-                  <span className="text-neutral-600">Your Product Name</span>
-                }
-              </h1>
-              
-              {/* Tagline */}
-              <p className={`${isMobile ? 'text-sm' : 'text-base'} text-neutral-300 mb-8 max-w-xl mx-auto leading-relaxed`}>
-                {tagline || 
-                  <span className="text-neutral-600 italic">Add a compelling tagline to hook your audience</span>
-                }
-              </p>
-            </div>
-            
-            {/* Benefits Section - Only show if user has entered benefits */}
-            {benefits.length > 0 && (
-              <div className="mb-12" id="preview-benefits-section">
-                <h2 className="text-xl font-bold text-neutral-100 mb-4 text-center">
-                  What You'll Get
-                </h2>
-                <div className="bg-gradient-to-b from-neutral-800/30 to-neutral-900/30 backdrop-blur-sm rounded-lg p-6 border border-neutral-700/50">
-                  <div className="space-y-3">
-                    {benefits.map((benefit, index) => (
-                      <div key={index} className="flex items-start gap-2">
-                        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <Check className="w-3 h-3 text-green-400" />
-                        </div>
-                        <p className="text-sm text-neutral-300">{benefit}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Description Section - Show placeholder when Step 1 only */}
-            {(description || (name && !benefits.length)) && (
-              <div className="mb-12">
-                <h2 className="text-xl font-bold text-neutral-100 mb-4 text-center">
-                  About This Product
-                </h2>
-                {description ? (
-                  <div className="prose prose-invert max-w-none">
-                    <p className="text-sm text-neutral-300 leading-relaxed">{description}</p>
-                  </div>
-                ) : (
-                  <div className="text-center py-6 border-2 border-dashed border-neutral-800/50 rounded-lg">
-                    <p className="text-sm text-neutral-600 italic">
-                      Your product description will appear here after completing Step 2
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {/* Target Audience Section - Only show if filled */}
-            {valueProp?.targetAudience && (
-              <div className="mb-12 text-center">
-                <div className="inline-block bg-gradient-to-r from-neutral-800/50 to-neutral-900/50 rounded-lg px-6 py-3 border border-neutral-700/50">
-                  <p className="text-sm text-neutral-300">
-                    <span className="text-neutral-400">Perfect for:</span> {valueProp.targetAudience}
-                  </p>
-                </div>
-              </div>
-            )}
-            
-            {/* Remove the old "Coming Soon" section - we now show placeholders instead */}
-            
-            {/* Final CTA Section - Always at bottom with price */}
-            {name && (
-              <div className="text-center py-8 border-t border-neutral-800/50">
-                <p className="text-neutral-400 mb-6 text-sm">
-                  Ready to get started?
-                </p>
-                
-                {/* Price display */}
-                <div className="mb-6">
-                  {compareAtPrice && compareAtPrice > price && (
-                    <div className="text-neutral-500 line-through text-sm mb-1">
-                      {currencySymbol}{formatPrice(compareAtPrice)}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="text-3xl font-bold bg-gradient-to-r from-neutral-100 to-neutral-300 bg-clip-text text-transparent">
-                      {priceType === 'free' ? 'FREE' : `${currencySymbol}${formatPrice(price)}`}
-                    </span>
-                    {priceType === 'subscription' && (
-                      <span className="text-neutral-400 text-sm">/{billingFrequency}</span>
-                    )}
-                  </div>
-                  {priceType === 'payment-plan' && (
-                    <div className="text-neutral-400 mt-1 text-xs">
-                      or {coreInfo?.numberOfPayments || 3} payments of {currencySymbol}
-                      {formatPrice(price / (coreInfo?.numberOfPayments || 3))}
-                    </div>
-                  )}
-                </div>
-                
-                {/* CTA Button */}
-                <button className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-600 text-white font-semibold py-3 px-8 rounded-lg transition-all transform hover:scale-105 inline-flex items-center gap-2 text-sm shadow-lg">
-                  <ShoppingCart className="w-4 h-4" />
-                  {priceType === 'free' ? 'Get Instant Access' : 'Buy Now'}
-                </button>
-                
-                {/* Trust Badges */}
-                <div className="flex items-center justify-center gap-4 mt-4">
-                  <div className="flex items-center gap-1 text-xs text-neutral-500">
-                    <Shield className="w-3 h-3" />
-                    Secure Checkout
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-neutral-500">
-                    <Check className="w-3 h-3" />
-                    Instant Access
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Render sections in custom order */}
+            {sectionOrder.map(sectionId => renderSection(sectionId))}
           </div>
         </div>
       </div>

@@ -116,9 +116,13 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
         }
       }, 300); // Small delay to let React render the benefits
     } else {
+      // Fixed: Clear all fields when selecting "Start Blank"
       setLocalData({
-        ...localData,
         productType: 'custom',
+        description: '',
+        benefits: [],
+        targetAudience: '',
+        deliverables: [],
         isUsingTemplate: false
       });
     }
@@ -198,8 +202,6 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
           Help customers understand what they're getting and why it matters
         </p>
       </div>
-
-      {/* Template Warning - Removed per user request */}
 
       {/* Product Type Selector */}
       <div>
@@ -293,19 +295,23 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
             {localData.benefits.map((benefit, index) => (
               <div
                 key={index}
-                draggable
-                onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={() => setDraggedIndex(null)}
                 className="flex items-center gap-2 group"
-              >
-                <GripVertical className="w-4 h-4 text-neutral-600 cursor-move" />
+                >
+                <div
+                    draggable
+                    onDragStart={() => handleDragStart(index)}
+                    className="cursor-move p-1 hover:bg-neutral-800 rounded transition-colors"
+                >
+                    <GripVertical className="w-4 h-4 text-neutral-600" />
+                </div>
                 <input
-                  type="text"
-                  value={benefit}
-                  onChange={(e) => updateBenefit(index, e.target.value)}
-                  placeholder="Enter a key benefit or outcome..."
-                  className="flex-1 px-3 py-2 bg-neutral-900 rounded-lg border border-neutral-800 focus:border-blue-500 focus:outline-none text-sm"
+                    type="text"
+                    value={benefit}
+                    onChange={(e) => updateBenefit(index, e.target.value)}
+                    placeholder="Enter a key benefit or outcome..."
+                    className="flex-1 px-3 py-2 bg-neutral-900 rounded-lg border border-neutral-800 focus:border-blue-500 focus:outline-none text-sm"
                 />
                 <button
                   onClick={() => removeBenefit(index)}
