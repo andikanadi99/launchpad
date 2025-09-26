@@ -94,6 +94,7 @@ const SalesPagePreview: React.FC<SalesPagePreviewProps> = ({ data, isMobile = fa
   // Value prop data
   const description = valueProp?.description || '';
   const benefits = valueProp?.benefits?.length > 0 ? valueProp.benefits : [];
+  const targetAudiencePrefix = valueProp?.targetAudiencePrefix || 'Perfect for';
   const targetAudience = valueProp?.targetAudience || '';
 
   // Parse video URL
@@ -252,7 +253,7 @@ const SalesPagePreview: React.FC<SalesPagePreviewProps> = ({ data, isMobile = fa
               }}
             >
               <p className="text-sm" style={{ fontFamily: fontPair.body, color: textColor }}>
-                <span style={{ opacity: 0.6 }}>Perfect for:</span> {targetAudience}
+                <span style={{ opacity: 0.6 }}>{targetAudiencePrefix}:</span> {targetAudience}
               </p>
             </div>
           </div>

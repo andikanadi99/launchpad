@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Plus, X, Sparkles, RotateCcw, GripVertical } from 'lucide-react';
+import { AlertCircle, Plus, X, Sparkles, RotateCcw, GripVertical, Edit2 } from 'lucide-react';
 
 // Template data for different product types
 const TEMPLATES = {
@@ -11,6 +11,7 @@ const TEMPLATES = {
       "[TANGIBLE OUTCOME] you'll achieve",
       "Lifetime access to all materials"
     ],
+    targetAudiencePrefix: "Perfect for",
     targetAudience: "[WHO THIS IS FOR - beginners? professionals? entrepreneurs?]",
     deliverables: [
       "[NUMBER] video lessons",
@@ -26,7 +27,8 @@ const TEMPLATES = {
       "[KEY LEARNING POINT #2]",
       "Instant digital download"
     ],
-    targetAudience: "Perfect for [TARGET AUDIENCE]",
+    targetAudiencePrefix: "Perfect for",
+    targetAudience: "[TARGET AUDIENCE]",
     deliverables: [
       "[NUMBER]-page PDF ebook",
       "[BONUS ITEM IF ANY]"
@@ -40,7 +42,8 @@ const TEMPLATES = {
       "[SPECIFIC RESULT YOU'LL HELP THEM ACHIEVE]",
       "Direct access for questions"
     ],
-    targetAudience: "Ideal for [WHO NEEDS THIS LEVEL OF SUPPORT]",
+    targetAudiencePrefix: "Ideal for",
+    targetAudience: "[WHO NEEDS THIS LEVEL OF SUPPORT]",
     deliverables: [
       "[NUMBER] x [LENGTH] coaching calls",
       "Email support between calls",
@@ -55,7 +58,8 @@ const TEMPLATES = {
       "[TIME/MONEY SAVED]",
       "Commercial license included"
     ],
-    targetAudience: "Built for [WHO NEEDS THESE TEMPLATES]",
+    targetAudiencePrefix: "Built for",
+    targetAudience: "[WHO NEEDS THESE TEMPLATES]",
     deliverables: [
       "[NUMBER] template files",
       "[FILE FORMATS INCLUDED]",
@@ -70,7 +74,8 @@ const TEMPLATES = {
       "[UNIQUE VALUE OF YOUR COMMUNITY]",
       "Network with peers"
     ],
-    targetAudience: "For [TYPE OF PERSON] who wants [DESIRED OUTCOME]",
+    targetAudiencePrefix: "For",
+    targetAudience: "[TYPE OF PERSON] who wants [DESIRED OUTCOME]",
     deliverables: [
       "Private community access",
       "[FREQUENCY] group calls",
@@ -79,17 +84,32 @@ const TEMPLATES = {
   }
 };
 
+// Common prefixes for quick selection
+const AUDIENCE_PREFIXES = [
+  "Perfect for",
+  "Ideal for",
+  "Built for",
+  "Designed for",
+  "Created for",
+  "For",
+  "Great for",
+  "Made for"
+];
+
 export default function SalesStepValueProp({ data, onChange, productName }) {
   const [localData, setLocalData] = useState({
     productType: data?.productType || undefined,
     description: data?.description || '',
     benefits: data?.benefits || [],
+    targetAudiencePrefix: data?.targetAudiencePrefix || 'Perfect for',
     targetAudience: data?.targetAudience || '',
     deliverables: data?.deliverables || [],
     isUsingTemplate: data?.isUsingTemplate || false
   });
 
   const [draggedIndex, setDraggedIndex] = useState(null);
+  const [editingPrefix, setEditingPrefix] = useState(false);
+  const [customPrefix, setCustomPrefix] = useState(null);
 
   // Sync with parent
   useEffect(() => {
@@ -103,6 +123,7 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
         productType: type,
         description: template.description,
         benefits: [...template.benefits],
+        targetAudiencePrefix: template.targetAudiencePrefix,
         targetAudience: template.targetAudience,
         deliverables: [...template.deliverables],
         isUsingTemplate: true
@@ -114,13 +135,14 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
         if (previewBenefits) {
           previewBenefits.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-      }, 300); // Small delay to let React render the benefits
+      }, 300);
     } else {
-      // Fixed: Clear all fields when selecting "Start Blank"
+      // Clear all fields when selecting "Start Blank"
       setLocalData({
         productType: 'custom',
         description: '',
         benefits: [],
+        targetAudiencePrefix: 'Perfect for',
         targetAudience: '',
         deliverables: [],
         isUsingTemplate: false
@@ -133,6 +155,7 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
       ...localData,
       description: '',
       benefits: [],
+      targetAudiencePrefix: 'Perfect for',
       targetAudience: '',
       deliverables: [],
       isUsingTemplate: false
@@ -341,15 +364,118 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
           Target Audience
           <span className="text-neutral-500 ml-2 text-xs font-normal">(Optional)</span>
         </label>
-        <input
-          type="text"
-          value={localData.targetAudience}
-          onChange={(e) => updateField('targetAudience', e.target.value)}
-          placeholder="Perfect for beginners who want to..."
-          className="w-full px-4 py-3 bg-neutral-900 rounded-lg border border-neutral-800 focus:border-blue-500 focus:outline-none"
-        />
-        <p className="text-xs text-neutral-500 mt-1">
-          Help visitors quickly identify if this is for them
+        
+        <div className="space-y-3">
+          {/* Prefix Editor */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              {editingPrefix ? (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={customPrefix !== null ? 'custom' : localData.targetAudiencePrefix}
+                    onChange={(e) => {
+                      if (e.target.value === 'custom') {
+                        setCustomPrefix(localData.targetAudiencePrefix || '');
+                      } else {
+                        updateField('targetAudiencePrefix', e.target.value);
+                        setCustomPrefix(null);
+                        setEditingPrefix(false);
+                      }
+                    }}
+                    className="px-3 py-2 bg-neutral-800 border border-blue-500 rounded-lg focus:outline-none text-sm min-w-[120px]"
+                  >
+                    {AUDIENCE_PREFIXES.map(prefix => (
+                      <option key={prefix} value={prefix}>{prefix}</option>
+                    ))}
+                    <option value="custom">Custom...</option>
+                  </select>
+                  
+                  {customPrefix !== null && (
+                    <>
+                      <input
+                        type="text"
+                        value={customPrefix}
+                        onChange={(e) => setCustomPrefix(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            updateField('targetAudiencePrefix', customPrefix || 'For');
+                            setCustomPrefix(null);
+                            setEditingPrefix(false);
+                          } else if (e.key === 'Escape') {
+                            setCustomPrefix(null);
+                            setEditingPrefix(false);
+                          }
+                        }}
+                        placeholder="Enter custom prefix..."
+                        className="px-3 py-2 bg-neutral-800 border border-blue-500 rounded-lg focus:outline-none text-sm"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => {
+                          updateField('targetAudiencePrefix', customPrefix || 'For');
+                          setCustomPrefix(null);
+                          setEditingPrefix(false);
+                        }}
+                        className="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm transition-colors"
+                      >
+                        Save
+                      </button>
+                    </>
+                  )}
+                  
+                  {customPrefix === null && (
+                    <button
+                      onClick={() => setEditingPrefix(false)}
+                      className="px-2 py-2 text-neutral-400 hover:text-white transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEditingPrefix(true)}
+                  className="flex items-center gap-1 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 hover:border-neutral-600 rounded-lg transition-colors text-sm"
+                >
+                  <span>{localData.targetAudiencePrefix}</span>
+                  <Edit2 className="w-3 h-3 text-neutral-400" />
+                </button>
+              )}
+            </div>
+            
+            <input
+              type="text"
+              value={localData.targetAudience}
+              onChange={(e) => updateField('targetAudience', e.target.value)}
+              placeholder="beginners who want to learn programming..."
+              className="flex-1 px-4 py-2 bg-neutral-900 rounded-lg border border-neutral-800 focus:border-blue-500 focus:outline-none text-sm"
+            />
+          </div>
+          
+          {/* Quick Examples */}
+          {!localData.targetAudience && (
+            <div className="flex flex-wrap gap-2">
+              <span className="text-xs text-neutral-500">Examples:</span>
+              {[
+                "beginners with no experience",
+                "small business owners",
+                "creative professionals",
+                "anyone who wants to learn"
+              ].map(example => (
+                <button
+                  key={example}
+                  onClick={() => updateField('targetAudience', example)}
+                  className="text-xs px-2 py-1 bg-neutral-800 hover:bg-neutral-700 rounded text-neutral-400 hover:text-white transition-colors"
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        <p className="text-xs text-neutral-500 mt-2">
+          Help visitors quickly identify if this is for them. Will display as: "{localData.targetAudiencePrefix} {localData.targetAudience || '...'}"
         </p>
       </div>
 

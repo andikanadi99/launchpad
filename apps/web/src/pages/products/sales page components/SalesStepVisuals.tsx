@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Upload, Image, Video, Grid3x3, Sparkles, Search, X, Check, Loader, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Upload, Image, Video, Grid3x3, Sparkles, Search, X, Check, Loader, ExternalLink, Crop, Move, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
 // You'll need to get an Unsplash API key from https://unsplash.com/developers
 // Store this in your environment variables for production
@@ -10,6 +10,7 @@ interface VisualsData {
   headerImageAttribution?: { name: string; url: string };
   videoUrl?: string;
   gallery?: string[];
+  galleryPositions?: { [key: number]: string };
 }
 
 interface StepVisualsProps {
@@ -37,7 +38,196 @@ const DEFAULT_SEARCHES = {
   custom: 'business professional success'
 };
 
-// Image Picker Modal Component - Moved outside to prevent re-rendering
+// Gallery Image Editor Modal
+interface ImageEditorModalProps {
+  imageUrl: string;
+  index: number;
+  currentSettings: { scale: number; x: number; y: number };
+  onSave: (index: number, settings: { scale: number; x: number; y: number }) => void;
+  onClose: () => void;
+}
+
+const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
+  imageUrl,
+  index,
+  currentSettings,
+  onSave,
+  onClose
+}) => {
+  // Initialize with existing settings - default to a zoomed-in view if no settings exist
+  const defaultScale = currentSettings?.scale !== undefined ? currentSettings.scale : 1.5;
+  const defaultX = currentSettings?.x !== undefined ? currentSettings.x : 0;
+  const defaultY = currentSettings?.y !== undefined ? currentSettings.y : -50;
+  
+  const [scale, setScale] = useState(defaultScale);
+  const [position, setPosition] = useState({ x: defaultX, y: defaultY });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging) {
+      setPosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleSave = () => {
+    onSave(index, { scale, x: position.x, y: position.y });
+    onClose();
+  };
+
+  const handleReset = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+      <div className="bg-neutral-900 rounded-xl max-w-2xl w-full">
+        <div className="p-4 border-b border-neutral-800">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Crop className="w-5 h-5" />
+              Edit Gallery Thumbnail
+            </h3>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-neutral-800 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {/* Preview Area */}
+          <div 
+            ref={containerRef}
+            className="relative aspect-video bg-neutral-800 rounded-lg overflow-hidden mb-4 cursor-move"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            <div className="absolute inset-0 flex items-center justify-center">
+              <img
+                src={imageUrl}
+                alt="Gallery item"
+                className="select-none max-w-none"
+                style={{
+                  transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                  transition: isDragging ? 'none' : 'transform 0.2s',
+                  width: 'auto',
+                  height: 'auto',
+                  maxWidth: `${scale * 100}%`,
+                  maxHeight: `${scale * 100}%`,
+                }}
+                draggable={false}
+                onError={(e) => {
+                  console.error('Image failed to load:', imageUrl);
+                  e.currentTarget.style.display = 'block';
+                }}
+                onLoad={(e) => {
+                  e.currentTarget.style.display = 'block';
+                }}
+              />
+            </div>
+            
+            {/* Crop Guide */}
+            <div className="absolute inset-0 border-2 border-white/30 pointer-events-none">
+              <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
+                {[...Array(9)].map((_, i) => (
+                  <div key={i} className="border border-white/10" />
+                ))}
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm px-2 py-1 rounded text-xs text-white flex items-center gap-1">
+              <Move className="w-3 h-3" />
+              Drag to reposition
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="space-y-4">
+            {/* Zoom Control */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Zoom</label>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setScale(Math.max(0.5, scale - 0.1))}
+                  className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="3"
+                  step="0.1"
+                  value={scale}
+                  onChange={(e) => setScale(parseFloat(e.target.value))}
+                  className="flex-1 h-2 bg-neutral-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:rounded-full"
+                />
+                <button
+                  onClick={() => setScale(Math.min(3, scale + 0.1))}
+                  className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <span className="text-sm text-neutral-400 w-12 text-right">
+                  {Math.round(scale * 100)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleReset}
+                className="flex-1 px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-neutral-800 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-neutral-400 hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Image Picker Modal Component
 interface ImagePickerModalProps {
   type: 'header';
   onClose: () => void;
@@ -312,15 +502,219 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
   </div>
 );
 
+// Simple Gallery Position Modal with Dragging
+interface GalleryPositionModalProps {
+  imageUrl: string;
+  index: number;
+  currentPosition: string;
+  onSave: (index: number, position: string) => void;
+  onClose: () => void;
+}
+
+const GalleryPositionModal: React.FC<GalleryPositionModalProps> = ({
+  imageUrl,
+  index,
+  currentPosition,
+  onSave,
+  onClose
+}) => {
+  // Parse current position or set defaults
+  const parsePosition = (pos: string) => {
+    const parts = pos.split(' ');
+    let x = 50, y = 50;
+    
+    if (parts[0] === 'left') x = 0;
+    else if (parts[0] === 'right') x = 100;
+    else if (parts[0] === 'center') x = 50;
+    else if (parts[0].includes('%')) x = parseInt(parts[0]);
+    
+    if (parts[1] === 'top') y = 0;
+    else if (parts[1] === 'bottom') y = 100;
+    else if (parts[1] === 'center') y = 50;
+    else if (parts[1]?.includes('%')) y = parseInt(parts[1]);
+    
+    return { x, y };
+  };
+
+  const initialPos = parsePosition(currentPosition);
+  const [position, setPosition] = useState(initialPos);
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    
+    // Set position on click
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      
+      setPosition({
+        x: Math.max(0, Math.min(100, x)),
+        y: Math.max(0, Math.min(100, y))
+      });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !containerRef.current) return;
+    
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    
+    setPosition({
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y))
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Add global event listeners for smooth dragging
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !containerRef.current) return;
+      
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      
+      setPosition({
+        x: Math.max(0, Math.min(100, x)),
+        y: Math.max(0, Math.min(100, y))
+      });
+    };
+
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+      document.addEventListener('mouseup', handleGlobalMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleGlobalMouseMove);
+        document.removeEventListener('mouseup', handleGlobalMouseUp);
+      };
+    }
+  }, [isDragging]);
+
+  const handleSave = () => {
+    onSave(index, `${position.x}% ${position.y}%`);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto">
+      {/* Fixed: Changed from max-w-4xl to max-w-2xl, added max-h-[90vh] and flex flex-col */}
+      <div className="bg-neutral-900 rounded-xl max-w-2xl w-full my-8 max-h-[90vh] flex flex-col">
+        {/* Fixed: Added flex-shrink-0 to header */}
+        <div className="p-4 border-b border-neutral-800 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Adjust Image Focus</h3>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-neutral-800 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Fixed: Added overflow-y-auto and flex-1 for scrollable content */}
+        <div className="p-6 overflow-y-auto flex-1">
+          {/* Fixed: Updated cursor styles and transition timing */}
+          <div 
+            ref={containerRef}
+            className="relative aspect-video bg-neutral-800 rounded-lg overflow-hidden mb-4 select-none"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+          >
+            <img 
+              src={imageUrl} 
+              alt="Gallery preview"
+              className="w-full h-full object-cover pointer-events-none"
+              style={{ 
+                objectPosition: `${position.x}% ${position.y}%`,
+                transition: isDragging ? 'none' : 'object-position 0.1s ease-out'
+              }}
+              draggable={false}
+            />
+            
+            {/* Fixed: Added smooth transition to crosshair */}
+            <div 
+              className="absolute w-8 h-8 pointer-events-none"
+              style={{
+                left: `${position.x}%`,
+                top: `${position.y}%`,
+                transform: 'translate(-50%, -50%)',
+                transition: isDragging ? 'none' : 'all 0.1s ease-out'
+              }}
+            >
+              <div className="absolute inset-x-0 top-1/2 h-px bg-white/50" />
+              <div className="absolute inset-y-0 left-1/2 w-px bg-white/50" />
+              <div className="absolute inset-2 border-2 border-white rounded-full shadow-lg" />
+            </div>
+            
+            {/* Instructions overlay */}
+            <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm px-3 py-1 rounded text-xs text-white flex items-center gap-2">
+              <Move className="w-3 h-3" />
+              Click or drag to adjust focal point
+            </div>
+          </div>
+
+          {/* Helper Text */}
+          <p className="text-xs text-neutral-500">
+            Click or drag anywhere on the image to choose which part stays visible in the thumbnail.
+            The image will automatically crop to fit the frame.
+          </p>
+
+          {/* Position display */}
+          <div className="mt-3 text-xs text-neutral-400">
+            Position: {Math.round(position.x)}% horizontal, {Math.round(position.y)}% vertical
+          </div>
+        </div>
+
+        {/* Fixed: Added flex-shrink-0 to footer to keep it visible */}
+        <div className="p-4 border-t border-neutral-800 flex justify-end gap-3 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-neutral-400 hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors"
+          >
+            Save Position
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
   const [localData, setLocalData] = useState<VisualsData>({
     headerImage: data.visuals?.headerImage,
     headerImageAttribution: data.visuals?.headerImageAttribution,
     videoUrl: data.visuals?.videoUrl,
-    gallery: data.visuals?.gallery || []
+    gallery: data.visuals?.gallery || [],
+    galleryPositions: data.visuals?.galleryPositions || {}
   });
 
   const [activeImagePicker, setActiveImagePicker] = useState<boolean>(false);
+  const [editingGalleryPosition, setEditingGalleryPosition] = useState<{ index: number; url: string } | null>(null);
   const [stockImages, setStockImages] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -451,6 +845,17 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
     }
   };
 
+  // Set gallery image position
+  const setGalleryImagePosition = (index: number, position: string) => {
+    setLocalData(prev => ({
+      ...prev,
+      galleryPositions: {
+        ...prev.galleryPositions,
+        [index]: position
+      }
+    }));
+  };
+
   // Parse video URL to get embed URL
   const parseVideoUrl = (url: string) => {
     if (!url) return '';
@@ -533,7 +938,8 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
                 <img 
                   src={localData.headerImage} 
                   alt="Header" 
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover block"
+                  style={{ display: 'block' }}
                 />
               )}
               
@@ -639,22 +1045,52 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
         </label>
         
         <div className="grid grid-cols-3 gap-4">
-          {/* Existing gallery images */}
+          {/* Existing gallery images - FIXED display issue */}
           {localData.gallery && localData.gallery.map((img, index) => (
-            <div key={index} className="relative aspect-video rounded-lg overflow-hidden border-2 border-neutral-700">
-              <img 
-                src={img} 
-                alt={`Gallery ${index + 1}`}
-                className="w-full h-full object-cover"
-              />
+            <div 
+              key={index} 
+              className="relative aspect-video rounded-lg overflow-hidden border-2 border-neutral-700 group bg-neutral-900 cursor-pointer"
+              onClick={() => setEditingGalleryPosition({ index, url: img })}
+            >
+              {/* Fixed: Added absolute positioned container */}
+              <div className="absolute inset-0">
+                <img 
+                  src={img} 
+                  alt={`Gallery ${index + 1}`}
+                  className="w-full h-full object-cover block"
+                  style={{
+                    objectPosition: localData.galleryPositions?.[index] || 'center center',
+                    display: 'block'
+                  }}
+                />
+              </div>
+              
+              {/* Simple hover overlay */}
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center pointer-events-none">
+                <div className="text-center">
+                  <Crop className="w-6 h-6 text-white mx-auto mb-2" />
+                  <p className="text-xs text-white">Click to adjust</p>
+                </div>
+              </div>
+              
+              {/* Remove button */}
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setLocalData(prev => ({
                     ...prev,
-                    gallery: prev.gallery?.filter((_, i) => i !== index)
+                    gallery: prev.gallery?.filter((_, i) => i !== index),
+                    galleryPositions: Object.keys(prev.galleryPositions || {}).reduce((acc, key) => {
+                      const keyNum = parseInt(key);
+                      if (keyNum !== index) {
+                        const newKey = keyNum > index ? keyNum - 1 : keyNum;
+                        acc[newKey] = prev.galleryPositions![keyNum];
+                      }
+                      return acc;
+                    }, {} as any)
                   }));
                 }}
-                className="absolute top-2 right-2 p-1 bg-black/50 hover:bg-black/70 rounded backdrop-blur-sm transition-colors"
+                className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded opacity-0 group-hover:opacity-100 transition-all"
               >
                 <X className="w-3 h-3 text-white" />
               </button>
@@ -705,7 +1141,7 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
         
         {localData.gallery && localData.gallery.length > 0 && (
           <p className="text-xs text-neutral-500 mt-2">
-            Images will display in order shown. Drag-to-reorder coming soon.
+            Click any image to adjust its focal point. Images are automatically cropped to fit.
           </p>
         )}
       </div>
@@ -732,6 +1168,17 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
           uploadPreview={uploadPreview}
           productName={productName}
           productType={productType}
+        />
+      )}
+
+      {/* Gallery Position Modal */}
+      {editingGalleryPosition && (
+        <GalleryPositionModal
+          imageUrl={editingGalleryPosition.url}
+          index={editingGalleryPosition.index}
+          currentPosition={localData.galleryPositions?.[editingGalleryPosition.index] || 'center center'}
+          onSave={setGalleryImagePosition}
+          onClose={() => setEditingGalleryPosition(null)}
         />
       )}
     </div>

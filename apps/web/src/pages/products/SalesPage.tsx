@@ -13,24 +13,9 @@ import SalesStepValueProp from './sales page components/SalesStepValueProp';
 import SalesPagePreview from './sales page components/SalesPagePreview';
 import SalesStepVisuals from './sales page components/SalesStepVisuals';
 import SalesStepCustomize from './sales page components/SalesStepCustomize';
-// Import other steps as you create them:
-// import SalesStepPublish from './sales-page-components/steps/SalesStepPublish';
+import SalesStepPublish from './sales page components/SalesStepPublish';
 
-const StepPublish = ({ data, updateData }: any) => (
-  <div className="space-y-6">
-    <h2 className="text-2xl font-semibold">Step 5: Publish Settings</h2>
-    <p className="text-neutral-400">Go live and share your page</p>
-    <div className="p-6 bg-neutral-800/50 rounded-lg">
-      <p className="text-neutral-300">StepPublish component will go here</p>
-      <ul className="mt-4 space-y-2 text-sm text-neutral-400">
-        <li>• URL slug</li>
-        <li>• SEO settings</li>
-        <li>• Thank you message</li>
-        <li>• Publish button</li>
-      </ul>
-    </div>
-  </div>
-);
+
 
 // Types
 interface SalesPageData {
@@ -79,7 +64,7 @@ const STEPS = [
   { id: 2, name: 'Value Proposition', component: SalesStepValueProp },
   { id: 3, name: 'Visuals', component: SalesStepVisuals },
   { id: 4, name: 'Customize', component: SalesStepCustomize },
-  { id: 5, name: 'Publish', component: StepPublish },
+  { id: 5, name: 'Publish', component: SalesStepPublish },
 ];
 
 export default function SalesPage() {
