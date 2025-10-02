@@ -71,6 +71,25 @@ const SalesStepCoreInfo: React.FC<StepCoreInfoProps> = ({ data, updateData }) =>
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
+
+    // Auto-scroll to relevant section based on field changed
+    setTimeout(() => {
+      let targetSection = null;
+      
+      if (field === 'name' || field === 'tagline') {
+        targetSection = document.querySelector('#hero-section');
+      } else if (field === 'price' || field === 'compareAtPrice' || field === 'priceType' || 
+                field === 'billingFrequency' || field === 'numberOfPayments' || field === 'paymentFrequency') {
+        targetSection = document.querySelector('#pricing-section');
+      }
+      
+      if (targetSection) {
+        targetSection.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+      }
+    }, 100); // Small delay to ensure DOM has updated
   };
 
   const validateField = (field: string, value: any) => {

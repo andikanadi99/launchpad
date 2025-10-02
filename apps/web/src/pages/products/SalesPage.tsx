@@ -14,6 +14,7 @@ import SalesPagePreview from './sales page components/SalesPagePreview';
 import SalesStepVisuals from './sales page components/SalesStepVisuals';
 import SalesStepCustomize from './sales page components/SalesStepCustomize';
 import SalesStepPublish from './sales page components/SalesStepPublish';
+import SalesPageContent from './sales page components/SalesPageContent';
 
 
 
@@ -472,7 +473,35 @@ export default function SalesPage() {
         {/* Right: Preview */}
         <div className="w-1/2 bg-neutral-900 border-l border-neutral-800 p-8 overflow-hidden">
           <div className={`h-full ${previewMode === 'mobile' ? 'max-w-sm mx-auto' : ''}`}>
-            <SalesPagePreview data={salesPageData} isMobile={previewMode === 'mobile'} />
+            {/* Browser Chrome Wrapper */}
+            <div className="h-full rounded-lg border border-neutral-800 overflow-hidden flex flex-col bg-neutral-950">
+              {/* Browser Chrome UI */}
+              <div className="p-3 bg-neutral-800 border-b border-neutral-700 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                </div>
+                <div className="flex-1 mx-4">
+                  <div className="bg-neutral-900 rounded px-3 py-1 text-xs text-neutral-400 text-center">
+                    launchpad.com/p/{salesPageData.publish?.slug || 'your-product'}
+                  </div>
+                </div>
+                <span className="text-xs text-neutral-500">
+                  {previewMode === 'mobile' ? 'Mobile' : 'Desktop'} Preview
+                </span>
+              </div>
+              
+              {/* Actual Sales Page Content */}
+              <div className="flex-1 overflow-y-auto">
+                <SalesPageContent 
+                  data={salesPageData}
+                  onCtaClick={() => {
+                    console.log('CTA clicked in preview mode');
+                  }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>

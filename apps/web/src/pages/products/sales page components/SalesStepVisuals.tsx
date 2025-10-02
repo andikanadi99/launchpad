@@ -8,6 +8,12 @@ const UNSPLASH_ACCESS_KEY = 'zE8QX3xsv_LTbWSbcK9tPD9TXnYVLldiJt_r-HmLfo4';
 interface VisualsData {
   headerImage?: string;
   headerImageAttribution?: { name: string; url: string };
+  headerImageSettings?: {
+    aspectRatio: 'banner' | 'standard' | 'square' | 'tall';
+    position: { x: number; y: number };
+    zoom: number;
+    height: string;
+  };
   videoUrl?: string;
   gallery?: string[];
   galleryPositions?: { [key: number]: string };
@@ -36,6 +42,313 @@ const DEFAULT_SEARCHES = {
   templates: 'design creative workspace tools',
   community: 'team people collaboration meeting',
   custom: 'business professional success'
+};
+
+// Header Image Editor Modal
+interface HeaderImageEditorModalProps {
+  imageUrl: string;
+  currentSettings: {
+    aspectRatio: 'banner' | 'standard' | 'square' | 'tall';
+    position: { x: number; y: number };
+    zoom: number;
+  };
+  onSave: (settings: any) => void;
+  onClose: () => void;
+}
+
+const HeaderImageEditorModal: React.FC<HeaderImageEditorModalProps> = ({
+  imageUrl,
+  currentSettings,
+  onSave,
+  onClose
+}) => {
+  const [aspectRatio, setAspectRatio] = useState(currentSettings?.aspectRatio || 'banner');
+  const [position, setPosition] = useState(currentSettings?.position || { x: 50, y: 50 });
+  const [zoom, setZoom] = useState(currentSettings?.zoom || 1);
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const aspectRatios = {
+    banner: { 
+      label: 'Banner (Recommended)', 
+      ratio: '21:9', 
+      height: 'h-32 md:h-40',
+      description: 'Slim, professional look that keeps focus on content'
+    },
+    standard: { 
+      label: 'Standard', 
+      ratio: '16:9', 
+      height: 'h-48 md:h-64',
+      description: 'Balanced size for most sales pages'
+    },
+    square: { 
+      label: 'Square', 
+      ratio: '1:1', 
+      height: 'h-64 md:h-80',
+      description: 'Good for logos or centered designs'
+    },
+    tall: { 
+      label: 'Hero', 
+      ratio: '16:10', 
+      height: 'h-64 md:h-96',
+      description: 'Large impact, but pushes content down'
+    }
+  };
+
+  const getAspectClass = () => {
+    switch(aspectRatio) {
+      case 'banner': return 'aspect-[21/9]';
+      case 'square': return 'aspect-square';
+      case 'tall': return 'aspect-[16/10]';
+      default: return 'aspect-video';
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    updatePosition(e);
+  };
+
+  const updatePosition = (e: React.MouseEvent) => {
+    if (!containerRef.current) return;
+    
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    
+    setPosition({
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y))
+    });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging) {
+      updatePosition(e);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleSave = () => {
+    onSave({
+      aspectRatio,
+      position,
+      zoom,
+      height: aspectRatios[aspectRatio as keyof typeof aspectRatios].height
+    });
+    onClose();
+  };
+
+  const resetToDefault = () => {
+    setAspectRatio('banner');  // Changed to banner
+    setPosition({ x: 50, y: 50 });
+    setZoom(1);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+      <div className="bg-neutral-900 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-4 border-b border-neutral-800">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Crop className="w-5 h-5" />
+                Customize Header Image
+              </h3>
+              <p className="text-sm text-neutral-400 mt-1">
+                Choose the best format for your sales page
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-neutral-800 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-3 gap-6">
+            {/* Left: Aspect Ratio Selection */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-3">Choose Format</label>
+                <div className="space-y-2">
+                  {Object.entries(aspectRatios).map(([key, config]) => (
+                    <button
+                      key={key}
+                      onClick={() => setAspectRatio(key as any)}
+                      className={`w-full p-3 rounded-lg border text-left transition-all ${
+                        aspectRatio === key
+                          ? 'border-indigo-500 bg-indigo-500/10'
+                          : 'border-neutral-700 hover:border-neutral-600 bg-neutral-800/50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className={`font-medium ${
+                            aspectRatio === key ? 'text-indigo-300' : 'text-neutral-200'
+                          }`}>
+                            {config.label}
+                          </div>
+                          <div className="text-xs text-neutral-500 mt-1">{config.ratio}</div>
+                        </div>
+                        {key === 'banner' && (
+                          <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">
+                            Best
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
+                        {config.description}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Zoom Control */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Image Zoom</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}
+                    className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.1"
+                    value={zoom}
+                    onChange={(e) => setZoom(parseFloat(e.target.value))}
+                    className="flex-1 h-2 bg-neutral-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:rounded-full"
+                  />
+                  <button
+                    onClick={() => setZoom(Math.min(2, zoom + 0.1))}
+                    className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="text-center text-xs text-neutral-500 mt-1">
+                  {Math.round(zoom * 100)}%
+                </div>
+              </div>
+
+              <button
+                onClick={resetToDefault}
+                className="w-full px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reset to Defaults
+              </button>
+            </div>
+
+            {/* Right: Preview */}
+            <div className="col-span-2 space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-3">
+                  Preview & Position
+                  <span className="text-xs text-neutral-400 ml-2">Click or drag to adjust focal point</span>
+                </label>
+                
+               <div 
+                ref={containerRef}
+                className={`relative ${aspectRatios[aspectRatio as keyof typeof aspectRatios].height} w-full bg-neutral-800 rounded-lg overflow-hidden cursor-crosshair`}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                  <div className="relative w-full h-full">
+                    <img
+                      src={imageUrl}
+                      alt="Header preview"
+                      className="w-full h-full object-cover"
+                      style={{
+                        objectPosition: `${position.x}% ${position.y}%`,
+                        transform: `scale(${zoom})`,
+                        transformOrigin: 'center',
+                        transition: isDragging ? 'none' : 'all 0.2s ease-out'
+                      }}
+                      draggable={false}
+                    />
+                  </div>
+                  
+                  {/* Focal point indicator */}
+                  <div 
+                    className="absolute w-12 h-12 pointer-events-none"
+                    style={{
+                      left: `${position.x}%`,
+                      top: `${position.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      transition: isDragging ? 'none' : 'all 0.2s ease-out'
+                    }}
+                  >
+                    <div className="absolute inset-0 border-2 border-white rounded-full opacity-75" />
+                    <div className="absolute inset-x-0 top-1/2 h-px bg-white opacity-50" />
+                    <div className="absolute inset-y-0 left-1/2 w-px bg-white opacity-50" />
+                  </div>
+
+                  {/* Grid overlay */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    <div className="h-full w-full grid grid-cols-3 grid-rows-3">
+                      {[...Array(9)].map((_, i) => (
+                        <div key={i} className="border border-white/10" />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Size comparison */}
+              <div className="bg-neutral-800/50 rounded-lg p-4">
+                <p className="text-sm font-medium mb-3">Size Preview on Page</p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-neutral-400 w-20">Current:</span>
+                    <div className={`${aspectRatios[aspectRatio as keyof typeof aspectRatios].height} w-full bg-indigo-500/20 rounded border border-indigo-500/50`} />
+                  </div>
+                  <div className="flex items-center gap-3 opacity-50">
+                    <span className="text-xs text-neutral-400 w-20">Original:</span>
+                    <div className="h-16 aspect-video bg-neutral-700/50 rounded border border-neutral-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-neutral-800 flex justify-between items-center">
+          <p className="text-xs text-neutral-400">
+            💡 Tip: Banner format keeps visitors focused on your content instead of scrolling past a large image
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-neutral-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors"
+            >
+              Apply Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // Gallery Image Editor Modal
@@ -708,12 +1021,19 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
   const [localData, setLocalData] = useState<VisualsData>({
     headerImage: data.visuals?.headerImage,
     headerImageAttribution: data.visuals?.headerImageAttribution,
+    headerImageSettings: data.visuals?.headerImageSettings || {
+      aspectRatio: 'banner',  // Changed default to banner
+      position: { x: 50, y: 50 },
+      zoom: 1,
+      height: 'h-32 md:h-40'  // Changed to banner height
+    },
     videoUrl: data.visuals?.videoUrl,
     gallery: data.visuals?.gallery || [],
     galleryPositions: data.visuals?.galleryPositions || {}
   });
 
   const [activeImagePicker, setActiveImagePicker] = useState<boolean>(false);
+  const [editingHeaderImage, setEditingHeaderImage] = useState(false);
   const [editingGalleryPosition, setEditingGalleryPosition] = useState<{ index: number; url: string } | null>(null);
   const [stockImages, setStockImages] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -789,6 +1109,14 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
     
     setActiveImagePicker(false);
     setUploadPreview(null);
+    
+    // Auto-scroll to header image in preview
+    setTimeout(() => {
+      const headerSection = document.querySelector('.h-64.md\\:h-96'); // Header image container
+      if (headerSection) {
+        headerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
   };
 
   // Select gradient
@@ -800,6 +1128,14 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
       headerImageAttribution: undefined
     }));
     setActiveImagePicker(false);
+    
+    // Auto-scroll to header
+    setTimeout(() => {
+      const headerSection = document.querySelector('.h-64.md\\:h-96');
+      if (headerSection) {
+        headerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
   };
 
   // Handle file upload
@@ -843,6 +1179,14 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
     if (files.length > 0 && files[0].type.startsWith('image/')) {
       handleFileUpload(files[0]);
     }
+  };
+
+  // Save header image settings
+  const saveHeaderImageSettings = (settings: any) => {
+    setLocalData(prev => ({
+      ...prev,
+      headerImageSettings: settings
+    }));
   };
 
   // Set gallery image position
@@ -918,7 +1262,12 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
         
         <div 
           onClick={() => setActiveImagePicker(true)}
-          className={`relative h-48 rounded-lg overflow-hidden border-2 transition-all ${
+          className={`relative ${
+            localData.headerImageSettings?.aspectRatio === 'banner' ? 'h-32' :
+            localData.headerImageSettings?.aspectRatio === 'square' ? 'h-64' :
+            localData.headerImageSettings?.aspectRatio === 'tall' ? 'h-64' :
+            'h-48'
+          } rounded-lg overflow-hidden border-2 transition-all ${
             localData.headerImage 
               ? 'border-neutral-700 cursor-pointer hover:border-neutral-600' 
               : 'border-red-900/50 hover:border-red-800/50 cursor-pointer bg-red-950/10'
@@ -939,11 +1288,25 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
                   src={localData.headerImage} 
                   alt="Header" 
                   className="w-full h-full object-cover block"
-                  style={{ display: 'block' }}
+                  style={{ 
+                    display: 'block',
+                    objectPosition: `${localData.headerImageSettings?.position?.x || 50}% ${localData.headerImageSettings?.position?.y || 50}%`,
+                    transform: `scale(${localData.headerImageSettings?.zoom || 1})`,
+                    transformOrigin: 'center'
+                  }}
                 />
               )}
               
               <div className="absolute top-2 right-2 flex gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingHeaderImage(true);
+                  }}
+                  className="p-2 bg-black/50 hover:bg-black/70 rounded-lg backdrop-blur-sm transition-colors"
+                >
+                  <Crop className="w-4 h-4 text-white" />
+                </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1013,7 +1376,19 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
           <input
             type="url"
             value={localData.videoUrl || ''}
-            onChange={(e) => setLocalData(prev => ({ ...prev, videoUrl: e.target.value }))}
+            onChange={(e) => {
+              setLocalData(prev => ({ ...prev, videoUrl: e.target.value }));
+              
+              // Auto-scroll to video section if URL is valid
+              setTimeout(() => {
+                if (e.target.value && parseVideoUrl(e.target.value)) {
+                  const videoSection = document.querySelector('#video-section');
+                  if (videoSection) {
+                    videoSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+                }
+              }, 500); // Longer delay for video to load
+            }}
             placeholder="Paste YouTube, Vimeo, or Loom link..."
             className="w-full px-4 py-3 bg-neutral-800 rounded-lg border border-neutral-700 focus:border-indigo-500 focus:outline-none"
           />
@@ -1089,6 +1464,14 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
                       return acc;
                     }, {} as any)
                   }));
+                  
+                  // Auto-scroll to gallery section
+                  setTimeout(() => {
+                    const gallerySection = document.querySelector('#gallery-section');
+                    if (gallerySection) {
+                      gallerySection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                  }, 100);
                 }}
                 className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded opacity-0 group-hover:opacity-100 transition-all"
               >
@@ -1121,7 +1504,7 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
             className="hidden"
             onChange={(e) => {
               const files = Array.from(e.target.files || []);
-              const remainingSlots = 6 - (localData.gallery?.length || 0);
+const remainingSlots = 6 - (localData.gallery?.length || 0);
               const filesToProcess = files.slice(0, remainingSlots);
               
               filesToProcess.forEach(file => {
@@ -1135,6 +1518,14 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
                 };
                 reader.readAsDataURL(file);
               });
+              
+              // Auto-scroll to gallery section
+              setTimeout(() => {
+                const gallerySection = document.querySelector('#gallery-section');
+                if (gallerySection) {
+                  gallerySection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }, 500); // Delay for images to load
             }}
           />
         </div>
@@ -1145,6 +1536,20 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
           </p>
         )}
       </div>
+
+      {/* Header Image Editor Modal */}
+      {editingHeaderImage && localData.headerImage && !localData.headerImage.startsWith('gradient:') && (
+        <HeaderImageEditorModal
+          imageUrl={localData.headerImage}
+          currentSettings={localData.headerImageSettings || {
+            aspectRatio: 'banner',
+            position: { x: 50, y: 50 },
+            zoom: 1
+          }}
+          onSave={saveHeaderImageSettings}
+          onClose={() => setEditingHeaderImage(false)}
+        />
+      )}
 
       {/* Image Picker Modal */}
       {activeImagePicker && (

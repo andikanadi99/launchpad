@@ -168,8 +168,26 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
       [field]: value,
       isUsingTemplate: false // Any edit marks as customized
     });
-  };
 
+    // Auto-scroll to relevant section based on field changed
+    setTimeout(() => {
+      let targetSection = null;
+      
+      if (field === 'description') {
+        targetSection = document.querySelector('#description-section');
+      } else if (field === 'targetAudience' || field === 'targetAudiencePrefix') {
+        targetSection = document.querySelector('#audience-section');
+      }
+      // Benefits scroll is already handled separately in updateBenefit function
+      
+      if (targetSection) {
+        targetSection.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+      }
+    }, 100);
+  };
   const addBenefit = () => {
     setLocalData({
       ...localData,
@@ -268,38 +286,42 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
         )}
       </div>
 
-      {/* Description - REQUIRED */}
-      <div>
+
+        {/* Description - REQUIRED */}
+        <div>
         <label className="block text-sm font-medium mb-2">
-          Product Description
-          <span className="text-red-500 ml-1">*</span>
+            Product Description
+            <span className="text-red-500 ml-1">*</span>
+            {localData.isUsingTemplate && localData.description.includes('[') && (
+            <span className="ml-3 text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
+                Has placeholders
+            </span>
+            )}
         </label>
         <div className="relative">
-          <textarea
+            <textarea
             value={localData.description}
             onChange={(e) => updateField('description', e.target.value)}
             placeholder={`Describe what ${productName || 'your product'} is and the main outcome customers will achieve...`}
             rows={3}
             className="w-full px-4 py-3 bg-neutral-900 rounded-lg border border-neutral-800 focus:border-blue-500 focus:outline-none resize-none"
-          />
-          {localData.isUsingTemplate && localData.description.includes('[') && (
-            <div className="absolute top-2 right-2">
-              <span className="text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
-                Has placeholders
-              </span>
-            </div>
-          )}
+            />
         </div>
         <p className="text-xs text-neutral-500 mt-1">
-          2-3 sentences. What is it + who it helps + main outcome
+            2-3 sentences. What is it + who it helps + main outcome
         </p>
-      </div>
+        </div>
 
       {/* Benefits - RECOMMENDED */}
-      <div id="benefits-section">
+        <div id="benefits-section">
         <label className="block text-sm font-medium mb-2">
-          Key Benefits
-          <span className="text-neutral-500 ml-2 text-xs font-normal">(Recommended - what customers get)</span>
+            Key Benefits
+            <span className="text-neutral-500 ml-2 text-xs font-normal">(Recommended - what customers get)</span>
+            {localData.isUsingTemplate && localData.benefits.some(b => b.includes('[')) && (
+            <span className="ml-3 text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
+                Has placeholders
+            </span>
+            )}
         </label>
         
         {localData.benefits.length === 0 ? (
@@ -359,10 +381,15 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
       </div>
 
       {/* Target Audience - OPTIONAL */}
-      <div>
+        <div>
         <label className="block text-sm font-medium mb-2">
-          Target Audience
-          <span className="text-neutral-500 ml-2 text-xs font-normal">(Optional)</span>
+            Target Audience
+            <span className="text-neutral-500 ml-2 text-xs font-normal">(Optional)</span>
+            {localData.isUsingTemplate && localData.targetAudience.includes('[') && (
+            <span className="ml-3 text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
+                Has placeholders
+            </span>
+            )}
         </label>
         
         <div className="space-y-3">
