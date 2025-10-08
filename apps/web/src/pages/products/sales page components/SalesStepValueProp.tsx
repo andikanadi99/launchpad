@@ -168,7 +168,8 @@ export default function SalesStepValueProp({
   // Sync with parent
   useEffect(() => {
     onChange(localData);
-  }, [localData, onChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localData]);
 
   const hasCustomContent = () => {
     return (

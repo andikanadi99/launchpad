@@ -16,8 +16,6 @@ import SalesStepCustomize from './sales page components/SalesStepCustomize';
 import SalesStepPublish from './sales page components/SalesStepPublish';
 import SalesPageContent from './sales page components/SalesPageContent';
 
-
-
 // Types
 interface SalesPageData {
   coreInfo: {
@@ -76,7 +74,6 @@ interface SalesPageData {
     ctaButtonText: string;
     customCSS?: string;
     animations: boolean;
-    // Advanced component settings
     heroTitleSize?: 'small' | 'medium' | 'large' | 'xl';
     heroAlignment?: 'left' | 'center' | 'right';
     benefitsLayout?: 'single' | 'double' | 'grid';
@@ -85,20 +82,16 @@ interface SalesPageData {
     buttonSize?: 'small' | 'medium' | 'large' | 'xl';
     galleryColumns?: 2 | 3 | 4 | 6;
     contentWidth?: 'narrow' | 'standard' | 'wide';
-    // Effects Settings
     buttonShadow?: 'none' | 'small' | 'medium' | 'large';
     cardElevation?: 'flat' | 'raised' | 'floating';
     imageBorderRadius?: 'none' | 'small' | 'medium' | 'large';
     hoverIntensity?: 'subtle' | 'normal' | 'bold';
-    // Typography Settings
     textScale?: 'small' | 'normal' | 'large' | 'xlarge';
     lineHeight?: 'tight' | 'normal' | 'relaxed';
     letterSpacing?: 'tight' | 'normal' | 'wide';
     headingWeight?: 'light' | 'normal' | 'bold' | 'black';
-    // Mobile Settings
     mobileHideSections?: string[];
     mobileFontScale?: number;
-    // Accessibility Settings
     highContrast?: boolean;
     focusIndicatorStyle?: 'default' | 'bold' | 'minimal';
     reducedMotion?: boolean;
@@ -120,6 +113,25 @@ interface SalesPageData {
   };
 }
 
+// Unified Product Interface
+interface ProductMetadata {
+  type: 'sales-page';
+  published: boolean;
+  delivery: {
+    type: 'none' | 'content' | 'redirect' | 'file';
+    status: 'pending' | 'configured';
+    content?: string;
+    redirectUrl?: string;
+    files?: string[];
+    accessInstructions?: string;
+  };
+  analytics: {
+    views: number;
+    sales: number;
+    revenue: number;
+  };
+}
+
 const STEPS = [
   { id: 1, name: 'Core Info', component: SalesStepCoreInfo },
   { id: 2, name: 'Value Proposition', component: SalesStepValueProp },
@@ -138,6 +150,7 @@ export default function SalesPage() {
   const [productId, setProductId] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
   const [showTemplateWarning, setShowTemplateWarning] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState(false);
 
   const [salesPageData, setSalesPageData] = useState<SalesPageData>({
     coreInfo: {
@@ -190,6 +203,36 @@ export default function SalesPage() {
     },
   });
 
+  // Product metadata state
+  const [productMetadata, setProductMetadata] = useState<ProductMetadata>({
+    type: 'sales-page',
+    published: false,
+    delivery: {
+      type: 'none',
+      status: 'pending'
+    },
+    analytics: {
+      views: 0,
+      sales: 0,
+      revenue: 0
+    }
+  });
+
+  // Helper function to clean undefined values
+  const cleanData = (obj: any): any => {
+    if (obj === null || obj === undefined) return null;
+    if (Array.isArray(obj)) return obj.map(cleanData);
+    if (typeof obj === 'object') {
+      return Object.entries(obj).reduce((acc, [key, value]) => {
+        if (value !== undefined) {
+          acc[key] = cleanData(value);
+        }
+        return acc;
+      }, {} as any);
+    }
+    return obj;
+  };
+
   // Initialize product and load data
   useEffect(() => {
     const init = async () => {
@@ -206,25 +249,56 @@ export default function SalesPage() {
           let prodId = params?.productId as string;
 
           if (!prodId) {
+            // Create new product with unified structure
             prodId = `product_${Date.now()}`;
             const productRef = doc(db, 'users', user.uid, 'products', prodId);
-            await setDoc(productRef, {
-              createdAt: new Date(),
-              status: 'draft',
+            
+            await setDoc(productRef, cleanData({
               type: 'sales-page',
+              createdAt: new Date(),
+              lastUpdated: new Date(),
+              published: false,
               salesPage: salesPageData,
-            });
+              delivery: {
+                type: 'none',
+                status: 'pending'
+              },
+              analytics: {
+                views: 0,
+                sales: 0,
+                revenue: 0
+              }
+            }));
 
+            console.log('Created new product:', prodId);
             navigate(`/products/${prodId}/landing/edit`, { replace: true });
           } else {
+            // Load existing product
             const productRef = doc(db, 'users', user.uid, 'products', prodId);
             const productSnap = await getDoc(productRef);
 
             if (productSnap.exists()) {
               const data = productSnap.data();
+              
+              // Load sales page data
               if (data.salesPage) {
                 setSalesPageData(data.salesPage);
               }
+              
+              // Load product metadata
+              setProductMetadata({
+                type: data.type || 'sales-page',
+                published: data.published || false,
+                delivery: data.delivery || {
+                  type: 'none',
+                  status: 'pending'
+                },
+                analytics: data.analytics || {
+                  views: 0,
+                  sales: 0,
+                  revenue: 0
+                }
+              });
             }
           }
 
@@ -250,10 +324,11 @@ export default function SalesPage() {
       setIsSaving(true);
       try {
         const productRef = doc(db, 'users', userId, 'products', productId);
-        await updateDoc(productRef, {
+        await updateDoc(productRef, cleanData({
           salesPage: salesPageData,
+          type: 'sales-page',
           lastUpdated: new Date(),
-        });
+        }));
         console.log('Auto-saved');
       } catch (error) {
         console.error('Error saving:', error);
@@ -263,7 +338,7 @@ export default function SalesPage() {
     }, 2000);
 
     return () => clearTimeout(saveTimer);
-  }, [salesPageData, productId, userId]);
+  }, [salesPageData, productId, userId, isLoading]);
 
   const updateData = (stepKey: keyof SalesPageData, data: any) => {
     setSalesPageData(prev => ({
@@ -273,7 +348,6 @@ export default function SalesPage() {
   };
 
   const handleNext = () => {
-    // Check for template warning on step 2
     if (currentStep === 2 && salesPageData.valueProp.isUsingTemplate) {
       setShowTemplateWarning(true);
       setTimeout(() => setShowTemplateWarning(false), 5000);
@@ -292,11 +366,9 @@ export default function SalesPage() {
       return hasName && hasValidPrice;
     }
     if (currentStep === 2) {
-      // Step 2: Value Prop - description is required
       return salesPageData.valueProp.description && salesPageData.valueProp.description.trim().length > 0;
     }
     if (currentStep === 3) {
-      // Step 3: Visuals - header image is required
       return salesPageData.visuals.headerImage ? true : false;
     }
     return true;
@@ -309,7 +381,7 @@ export default function SalesPage() {
   };
 
   const handlePublish = async () => {
-    // Check if using template content
+    // Check template content FIRST
     if (salesPageData.valueProp.isUsingTemplate) {
       const confirmPublish = window.confirm(
         'You are still using template content with placeholder text. Are you sure you want to publish without customizing it?'
@@ -317,7 +389,7 @@ export default function SalesPage() {
       if (!confirmPublish) return;
     }
 
-    // Validate all required fields
+    // Validate required fields
     if (!canPublish) {
       alert('Please complete all required fields before publishing:\n\n' +
         '✓ Product name and price\n' +
@@ -327,6 +399,13 @@ export default function SalesPage() {
         '✓ SEO title and description (Step 5)\n' +
         '✓ Thank you message (Step 5)'
       );
+      return;
+    }
+
+    console.log('Publishing with:', { userId, productId, slug: salesPageData.publish.slug });
+    
+    if (!userId || !productId) {
+      alert('Error: Missing user or product ID. Please refresh and try again.');
       return;
     }
 
@@ -342,24 +421,20 @@ export default function SalesPage() {
         return;
       }
 
-      // 1. Check slug availability in registry
+      // Check slug availability
       const slugRef = doc(db, 'slugs', slug);
       const slugDoc = await getDoc(slugRef);
       
       if (slugDoc.exists()) {
         const existingData = slugDoc.data();
-        
-        // If slug exists but belongs to a different product, it's taken
         if (existingData.productId !== productId) {
           alert('This URL is already taken. Please choose a different slug.');
           setIsSaving(false);
           return;
         }
-        
-        // If it's the same product, we're republishing (OK to continue)
       }
 
-      // 2. Register/update slug ownership
+      // Register slug ownership
       await setDoc(slugRef, {
         productId: productId,
         userId: userId,
@@ -367,40 +442,46 @@ export default function SalesPage() {
         lastUpdated: new Date()
       });
 
-      // 3. Create/update public published page
+      // Create public published page
       const publishedRef = doc(db, 'published_pages', slug);
-      await setDoc(publishedRef, {
+      await setDoc(publishedRef, cleanData({
         userId: userId,
         productId: productId,
         slug: slug,
         salesPage: salesPageData,
         publishedAt: new Date(),
         lastUpdated: new Date(),
-        // Optional: Add metadata for easier querying
         productName: salesPageData.coreInfo.name,
         price: salesPageData.coreInfo.price,
         priceType: salesPageData.coreInfo.priceType,
         metaTitle: salesPageData.publish.metaTitle,
         metaDescription: salesPageData.publish.metaDescription
-      });
+      }));
 
-      // 4. Update private product document
+      // Update private product document with unified structure
       const productRef = doc(db, 'users', userId, 'products', productId);
-      await updateDoc(productRef, {
+      await updateDoc(productRef, cleanData({
         'salesPage.publish.status': 'published',
         'salesPage.publish.publishedAt': new Date(),
         'salesPage.publish.slug': slug,
         published: true,
+        type: 'sales-page',
         lastUpdated: new Date()
-      });
+      }));
 
-      // Success! Navigate to success page
-      navigate(`/products/${productId}/success`);
+      console.log('✅ Successfully published!');
+      
+      // Show success banner
+      setPublishSuccess(true);
+      
+      // Navigate after 2 seconds
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 2000);
       
     } catch (error) {
       console.error('Error publishing:', error);
       
-      // Type-safe error handling
       let errorMessage = 'Failed to publish. Please check your internet connection and try again.';
       
       if (error && typeof error === 'object' && 'code' in error) {
@@ -419,29 +500,21 @@ export default function SalesPage() {
     }
   };
 
- // In SalesPage.tsx, replace canPublish with:
-const canPublish = 
-  // Step 1: Core Info
-  salesPageData.coreInfo.name && 
-  salesPageData.coreInfo.name.trim().length > 0 &&
-  (salesPageData.coreInfo.priceType === 'free' || salesPageData.coreInfo.price >= 0) &&
-  
-  // Step 2: Value Prop
-  salesPageData.valueProp.description &&
-  salesPageData.valueProp.description.trim().length > 0 &&
-  
-  // Step 3: Visuals
-  salesPageData.visuals.headerImage &&
-  
-  // Step 5: Publish Settings (NEW!)
-  salesPageData.publish.slug &&
-  salesPageData.publish.slug.trim().length >= 3 &&
-  salesPageData.publish.metaTitle &&
-  salesPageData.publish.metaTitle.trim().length > 0 &&
-  salesPageData.publish.metaDescription &&
-  salesPageData.publish.metaDescription.trim().length > 0 &&
-  salesPageData.publish.thankYouMessage &&
-  salesPageData.publish.thankYouMessage.trim().length > 0;
+  const canPublish = 
+    salesPageData.coreInfo.name && 
+    salesPageData.coreInfo.name.trim().length > 0 &&
+    (salesPageData.coreInfo.priceType === 'free' || salesPageData.coreInfo.price >= 0) &&
+    salesPageData.valueProp.description &&
+    salesPageData.valueProp.description.trim().length > 0 &&
+    salesPageData.visuals.headerImage &&
+    salesPageData.publish.slug &&
+    salesPageData.publish.slug.trim().length >= 3 &&
+    salesPageData.publish.metaTitle &&
+    salesPageData.publish.metaTitle.trim().length > 0 &&
+    salesPageData.publish.metaDescription &&
+    salesPageData.publish.metaDescription.trim().length > 0 &&
+    salesPageData.publish.thankYouMessage &&
+    salesPageData.publish.thankYouMessage.trim().length > 0;
 
   if (isLoading) {
     return (
@@ -453,7 +526,6 @@ const canPublish =
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      {/* Header */}
       <header className="border-b border-neutral-800 bg-neutral-900/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
@@ -473,7 +545,6 @@ const canPublish =
             </div>
 
             <div className="flex items-center gap-4">
-              {/* Save indicator */}
               <div className="flex items-center gap-2">
                 {isSaving ? (
                   <>
@@ -488,7 +559,6 @@ const canPublish =
                 )}
               </div>
 
-              {/* Preview toggle */}
               <div className="flex items-center gap-1 bg-neutral-800 rounded-lg p-1">
                 <button
                   onClick={() => setPreviewMode('desktop')}
@@ -504,7 +574,6 @@ const canPublish =
                 </button>
               </div>
 
-              {/* Publish button */}
               {currentStep === 5 && (
                 <button
                   onClick={handlePublish}
@@ -518,7 +587,6 @@ const canPublish =
           </div>
         </div>
 
-        {/* Progress bar */}
         <div className="px-6 pb-4">
           <div className="flex items-center gap-2">
             {STEPS.map((step) => (
@@ -539,6 +607,18 @@ const canPublish =
         </div>
       </header>
 
+      {/* Success Banner */}
+      {publishSuccess && (
+        <div className="bg-green-500/10 border-b border-green-500/30 px-6 py-3">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-green-500" />
+            <p className="text-sm text-green-500">
+              ✅ Successfully published! Redirecting to dashboard...
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Template Warning Banner */}
       {showTemplateWarning && (
         <div className="bg-amber-500/10 border-b border-amber-500/30 px-6 py-3">
@@ -551,9 +631,7 @@ const canPublish =
         </div>
       )}
 
-      {/* Main content */}
       <div className="flex h-[calc(100vh-120px)]">
-        {/* Left: Form */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-2xl mx-auto p-8">
             {currentStep === 1 && (
@@ -588,7 +666,6 @@ const canPublish =
               />
             )}
 
-            {/* Navigation buttons */}
             <div className="mt-8 flex items-center justify-between">
               <button
                 onClick={handlePrevious}
@@ -625,7 +702,6 @@ const canPublish =
               )}
             </div>
 
-            {/* Skip option for optional steps */}
             {currentStep >= 4 && currentStep < 5 && (
               <div className="mt-4 text-center">
                 <button
@@ -639,12 +715,9 @@ const canPublish =
           </div>
         </div>
 
-        {/* Right: Preview */}
         <div className="w-1/2 bg-neutral-900 border-l border-neutral-800 p-8 overflow-hidden">
           <div className={`h-full ${previewMode === 'mobile' ? 'max-w-sm mx-auto' : ''}`}>
-            {/* Browser Chrome Wrapper */}
             <div className="h-full rounded-lg border border-neutral-800 overflow-hidden flex flex-col bg-neutral-950">
-              {/* Browser Chrome UI */}
               <div className="p-3 bg-neutral-800 border-b border-neutral-700 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-red-500" />
@@ -661,7 +734,6 @@ const canPublish =
                 </span>
               </div>
               
-              {/* Actual Sales Page Content */}
               <div className="flex-1 overflow-y-auto">
                 <SalesPageContent 
                   data={salesPageData}

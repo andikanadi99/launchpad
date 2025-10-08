@@ -230,7 +230,8 @@ const SalesStepCustomize: React.FC<StepCustomizeProps> = ({ data, updateData }) 
   // Update parent immediately when data changes
   useEffect(() => {
     updateData('design', localData);
-  }, [localData, updateData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localData]);
 
   const applyTheme = (themeKey: string) => {
     const theme = THEMES[themeKey as keyof typeof THEMES];

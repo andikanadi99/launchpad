@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Copy, Check, AlertCircle, Sparkles, Shield, Zap,
-  Facebook, Twitter, Linkedin, Instagram, Package  
+  Facebook, Twitter, Linkedin, Instagram, Package, Search  
 } from 'lucide-react';
 
 interface PublishData {
@@ -82,6 +82,7 @@ const SalesStepPublish: React.FC<StepPublishProps> = ({ data, updateData }) => {
   // Update parent when data changes
   useEffect(() => {
     updateData('publish', localData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localData]);
 
   const updateField = (field: keyof PublishData | string, value: any) => {
@@ -248,6 +249,41 @@ const SalesStepPublish: React.FC<StepPublishProps> = ({ data, updateData }) => {
             </span>
           </div>
         </div>
+
+        {/* Google Search Preview */}
+        {localData.metaTitle && localData.metaDescription && localData.slug && (
+          <div className="p-4 bg-neutral-800/50 rounded-lg border border-neutral-700">
+            <div className="flex items-center gap-2 mb-3">
+              <Search className="w-4 h-4 text-neutral-400" />
+              <span className="text-sm font-medium text-neutral-300">Google Search Preview</span>
+            </div>
+            
+            {/* Google Search Result Mockup */}
+            <div className="bg-white p-4 rounded">
+              {/* URL breadcrumb */}
+              <div className="flex items-center gap-1 mb-1">
+                <div className="w-4 h-4 bg-neutral-200 rounded-sm flex items-center justify-center text-xs">
+                  🚀
+                </div>
+                <span className="text-sm text-neutral-600">launchpad.app › p › {localData.slug}</span>
+              </div>
+              
+              {/* Title */}
+              <h3 className="text-xl text-blue-600 hover:underline cursor-pointer mb-1 font-normal">
+                {localData.metaTitle}
+              </h3>
+              
+              {/* Description */}
+              <p className="text-sm text-neutral-700 leading-relaxed">
+                {localData.metaDescription}
+              </p>
+            </div>
+            
+            <p className="text-xs text-neutral-500 mt-2 flex items-center gap-1">
+              ⚡ This is how your page will appear in Google search results
+            </p>
+          </div>
+        )}
 
         {/* Thank You Message - REQUIRED */}
         <div>

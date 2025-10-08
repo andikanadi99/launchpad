@@ -1024,6 +1024,7 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
   // Update parent when data changes
   useEffect(() => {
     updateData('visuals', localData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localData]);
 
   // Fetch stock images from Unsplash
