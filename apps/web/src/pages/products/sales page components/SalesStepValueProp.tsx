@@ -1,6 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Plus, X, Sparkles, RotateCcw, GripVertical, Edit2 } from 'lucide-react';
 
+// Data interface
+interface ValuePropData {
+  productType?: 'course' | 'ebook' | 'coaching' | 'templates' | 'community' | 'custom';
+  description: string;
+  benefits: string[];
+  targetAudience: string;
+  targetAudiencePrefix?: string;
+  deliverables: string[];
+  isUsingTemplate: boolean;
+  placeholderStatus?: {
+    description: boolean;
+    benefits: boolean;
+    targetAudience: boolean;
+    hasAny: boolean;
+  };
+}
+
+// Props interface
+interface SalesStepValuePropProps {
+  data: ValuePropData;
+  onChange: (data: ValuePropData) => void;
+  productName: string;
+}
+
 // Template data for different product types
 const TEMPLATES = {
   course: {
@@ -97,17 +121,21 @@ const AUDIENCE_PREFIXES = [
 ];
 
 // Helper function to check for placeholders in each field
-const checkFieldPlaceholders = (data) => {
+const checkFieldPlaceholders = (data: Partial<ValuePropData>) => {
   return {
     description: data.description?.includes('[') || false,
-    benefits: data.benefits?.some(b => b.includes('[')) || false,
+    benefits: data.benefits?.some((b: string) => b.includes('[')) || false,
     targetAudience: data.targetAudience?.includes('[') || false,
     hasAny: false
   };
 };
 
-export default function SalesStepValueProp({ data, onChange, productName }) {
-  const [localData, setLocalData] = useState({
+export default function SalesStepValueProp({ 
+  data, 
+  onChange, 
+  productName 
+}: SalesStepValuePropProps) {
+  const [localData, setLocalData] = useState<ValuePropData>({
     productType: data?.productType || undefined,
     description: data?.description || '',
     benefits: data?.benefits || [],
@@ -118,9 +146,9 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
     placeholderStatus: data?.placeholderStatus || checkFieldPlaceholders(data || {})
   });
 
-  const [draggedIndex, setDraggedIndex] = useState(null);
-  const [editingPrefix, setEditingPrefix] = useState(false);
-  const [customPrefix, setCustomPrefix] = useState(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [editingPrefix, setEditingPrefix] = useState<boolean>(false);
+  const [customPrefix, setCustomPrefix] = useState<string | null>(null);
 
   // Update placeholder status whenever data changes
   useEffect(() => {
@@ -140,7 +168,7 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
   // Sync with parent
   useEffect(() => {
     onChange(localData);
-  }, [localData]);
+  }, [localData, onChange]);
 
   const hasCustomContent = () => {
     return (
@@ -150,7 +178,7 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
     );
   };
 
-  const handleProductTypeSelect = (type) => {
+  const handleProductTypeSelect = (type: string) => {
     // Check if switching templates would overwrite custom content
     if (hasCustomContent() && type !== 'custom' && type !== localData.productType) {
       const confirmed = window.confirm(
@@ -160,9 +188,11 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
     }
 
     if (type && type !== 'custom') {
-      const template = TEMPLATES[type];
+      const template = TEMPLATES[type as keyof typeof TEMPLATES];
+      if (!template) return;
+      
       setLocalData({
-        productType: type,
+        productType: type as ValuePropData['productType'],
         description: template.description,
         benefits: [...template.benefits],
         targetAudiencePrefix: template.targetAudiencePrefix,
@@ -234,7 +264,7 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
     });
   };
 
-  const updateField = (field, value) => {
+  const updateField = (field: keyof ValuePropData, value: any) => {
     setLocalData(prev => ({
       ...prev,
       [field]: value
@@ -272,7 +302,7 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
     }));
   };
 
-  const updateBenefit = (index, value) => {
+  const updateBenefit = (index: number, value: string) => {
     const newBenefits = [...localData.benefits];
     newBenefits[index] = value;
     setLocalData(prev => ({
@@ -281,18 +311,18 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
     }));
   };
 
-  const removeBenefit = (index) => {
+  const removeBenefit = (index: number) => {
     setLocalData(prev => ({
       ...prev,
       benefits: prev.benefits.filter((_, i) => i !== index)
     }));
   };
 
-  const handleDragStart = (index) => {
+  const handleDragStart = (index: number) => {
     setDraggedIndex(index);
   };
 
-  const handleDragOver = (e, index) => {
+  const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (draggedIndex === null || draggedIndex === index) return;
 

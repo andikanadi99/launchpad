@@ -1028,7 +1028,7 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
 
   // Fetch stock images from Unsplash
   const fetchStockImages = async (query: string) => {
-    if (!UNSPLASH_ACCESS_KEY || UNSPLASH_ACCESS_KEY === 'YOUR_ACCESS_KEY_HERE') {
+    if (!UNSPLASH_ACCESS_KEY) {
       console.warn('Please add your Unsplash API key');
       return [];
     }
