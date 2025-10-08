@@ -4,8 +4,9 @@ import {
   GripVertical, ChevronDown, ChevronUp, Monitor, Smartphone,
   Square, Circle, Hexagon, Sun, Moon, Zap, Check, Settings2,
   Sliders, Maximize2, Minimize2, Move, Package, Image, Layers,
-  Accessibility, Shadow, Heading, AlignLeft, AlignCenter, AlignRight
+  Accessibility, Heading, AlignLeft, AlignCenter, AlignRight
 } from 'lucide-react';
+
 
 // Theme presets
 const THEMES = {
@@ -223,7 +224,7 @@ const SalesStepCustomize: React.FC<StepCustomizeProps> = ({ data, updateData }) 
   });
 
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [advancedTab, setAdvancedTab] = useState<'colors' | 'fonts' | 'layout' | 'components'>('colors');
+  const [advancedTab, setAdvancedTab] = useState<'colors' | 'fonts' | 'layout' | 'components' | 'effects'>('colors');
   const [draggedSection, setDraggedSection] = useState<string | null>(null);
 
   // Update parent immediately when data changes
@@ -398,7 +399,7 @@ const SalesStepCustomize: React.FC<StepCustomizeProps> = ({ data, updateData }) 
               Quick Adjustments
             </h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Brand Color */}
               <div>
                 <label className="block text-sm font-medium mb-2">
@@ -438,7 +439,7 @@ const SalesStepCustomize: React.FC<StepCustomizeProps> = ({ data, updateData }) 
             </div>
 
             {/* Most Used Quick Settings */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Font Choice */}
               <div>
                 <label className="block text-sm font-medium mb-2">
@@ -462,12 +463,12 @@ const SalesStepCustomize: React.FC<StepCustomizeProps> = ({ data, updateData }) 
                 <label className="block text-sm font-medium mb-2">
                   Page Density
                 </label>
-                <div className="flex gap-2">
+                <div className="flex gap-1">
                   {['compact', 'comfortable', 'spacious'].map(spacing => (
                     <button
                       key={spacing}
                       onClick={() => updateField('spacing', spacing as any)}
-                      className={`flex-1 px-3 py-3 rounded-lg border capitalize transition-all ${
+                      className={`flex-1 px-3 py-3 rounded-lg border capitalize transition-all text-sm ${
                         localData.spacing === spacing
                           ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300'
                           : 'border-neutral-700 text-neutral-400 hover:border-neutral-600'

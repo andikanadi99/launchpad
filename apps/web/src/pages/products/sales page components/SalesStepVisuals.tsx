@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Image, Video, Grid3x3, Sparkles, Search, X, Check, Loader, ExternalLink, Crop, Move, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
-
+import { storage, auth } from '../../../lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 // You'll need to get an Unsplash API key from https://unsplash.com/developers
 // Store this in your environment variables for production
 const UNSPLASH_ACCESS_KEY = 'zE8QX3xsv_LTbWSbcK9tPD9TXnYVLldiJt_r-HmLfo4';
@@ -552,7 +553,6 @@ interface ImagePickerModalProps {
   isSearching: boolean;
   handleSearch: (e: React.FormEvent) => void;
   selectStockImage: (image: any) => void;
-  selectGradient: () => void;
   handleFileUpload: (file: File) => void;
   handleDragOver: (e: React.DragEvent) => void;
   handleDragLeave: () => void;
@@ -574,7 +574,6 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
   isSearching,
   handleSearch,
   selectStockImage,
-  selectGradient,
   handleFileUpload,
   handleDragOver,
   handleDragLeave,
@@ -641,31 +640,8 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
       {/* Content */}
       <div className="p-6 overflow-y-auto max-h-[60vh]">
         {searchTab === 'suggested' && (
-          <div>
-            {/* AI Gradient Option */}
-            <div className="mb-6">
-              <p className="text-sm text-neutral-400 mb-3">AI-Generated Gradient</p>
-              <div
-                onClick={() => selectGradient()}
-                className="relative h-40 rounded-lg overflow-hidden cursor-pointer group"
-              >
-                <div className={`absolute inset-0 ${GRADIENT_PRESETS[productType as keyof typeof GRADIENT_PRESETS]}`} />
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="text-center text-white">
-                    <Sparkles className="w-8 h-8 mx-auto mb-2" />
-                    <p className="text-sm font-medium">Use AI Gradient</p>
-                  </div>
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <h3 className="text-2xl font-bold text-white text-center px-4">
-                    {productName}
-                  </h3>
-                </div>
-              </div>
-            </div>
-            
-            {/* Stock Images */}
-            <p className="text-sm text-neutral-400 mb-3">Suggested Stock Photos</p>
+        <div>
+          <p className="text-sm text-neutral-400 mb-3">Suggested Stock Photos</p>
             {isSearching ? (
               <div className="flex items-center justify-center py-12">
                 <Loader className="w-6 h-6 animate-spin text-neutral-400" />
@@ -1119,46 +1095,44 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
     }, 100);
   };
 
-  // Select gradient
-  const selectGradient = () => {
-    const gradient = `gradient:${GRADIENT_PRESETS[productType as keyof typeof GRADIENT_PRESETS]}`;
-    setLocalData(prev => ({
-      ...prev,
-      headerImage: gradient,
-      headerImageAttribution: undefined
-    }));
-    setActiveImagePicker(false);
-    
-    // Auto-scroll to header
-    setTimeout(() => {
-      const headerSection = document.querySelector('.h-64.md\\:h-96');
-      if (headerSection) {
-        headerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 100);
-  };
 
   // Handle file upload
-  const handleFileUpload = (file: File) => {
-    // In production, you'd upload to Firebase Storage here
-    // For now, we'll create a preview URL
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const url = e.target?.result as string;
-      setUploadPreview(url);
+  const handleFileUpload = async (file: File) => {
+    try {
+      // Show preview immediately
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setUploadPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+
+      // Upload to Firebase Storage
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        console.error('User not authenticated');
+        return;
+      }
+
+      const timestamp = Date.now();
+      const fileName = `header_${timestamp}_${file.name}`;
+      const storageRef = ref(storage, `users/${userId}/images/${fileName}`);
       
-      // In production: upload to Firebase Storage and get URL
-      // For demo: use the data URL
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadUrl = await getDownloadURL(snapshot.ref);
+      
+      // Update with Firebase Storage URL
       setLocalData(prev => ({
         ...prev,
-        headerImage: url,
+        headerImage: downloadUrl,
         headerImageAttribution: undefined
       }));
       
       setActiveImagePicker(false);
       setUploadPreview(null);
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Failed to upload image. Please try again.');
+    }
   };
 
   // Handle drag and drop
@@ -1275,27 +1249,17 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
         >
           {localData.headerImage ? (
             <>
-              {localData.headerImage.startsWith('gradient:') ? (
-                <div className={`absolute inset-0 ${localData.headerImage.replace('gradient:', '')}`}>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <h3 className="text-2xl font-bold text-white text-center px-4">
-                      {productName}
-                    </h3>
-                  </div>
-                </div>
-              ) : (
-                <img 
-                  src={localData.headerImage} 
-                  alt="Header" 
-                  className="w-full h-full object-cover block"
-                  style={{ 
-                    display: 'block',
-                    objectPosition: `${localData.headerImageSettings?.position?.x || 50}% ${localData.headerImageSettings?.position?.y || 50}%`,
-                    transform: `scale(${localData.headerImageSettings?.zoom || 1})`,
-                    transformOrigin: 'center'
-                  }}
-                />
-              )}
+              <img 
+                src={localData.headerImage} 
+                alt="Header" 
+                className="w-full h-full object-cover block"
+                style={{ 
+                  display: 'block',
+                  objectPosition: `${localData.headerImageSettings?.position?.x || 50}% ${localData.headerImageSettings?.position?.y || 50}%`,
+                  transform: `scale(${localData.headerImageSettings?.zoom || 1})`,
+                  transformOrigin: 'center'
+                }}
+              />
               
               <div className="absolute top-2 right-2 flex gap-2">
                 <button
@@ -1350,7 +1314,6 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
               <div className="text-center">
                 <Image className="w-8 h-8 mx-auto mb-2 text-neutral-500" />
                 <p className="text-sm text-neutral-300 font-medium">Click to add header image</p>
-                <p className="text-xs text-neutral-500 mt-1">Required • AI gradient • Stock photos • Upload</p>
               </div>
             </div>
           )}
@@ -1502,31 +1465,43 @@ const SalesStepVisuals: React.FC<StepVisualsProps> = ({ data, updateData }) => {
             accept="image/*"
             multiple
             className="hidden"
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-const remainingSlots = 6 - (localData.gallery?.length || 0);
-              const filesToProcess = files.slice(0, remainingSlots);
-              
-              filesToProcess.forEach(file => {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                  const url = event.target?.result as string;
-                  setLocalData(prev => ({
-                    ...prev,
-                    gallery: [...(prev.gallery || []), url]
-                  }));
-                };
-                reader.readAsDataURL(file);
-              });
-              
-              // Auto-scroll to gallery section
-              setTimeout(() => {
-                const gallerySection = document.querySelector('#gallery-section');
-                if (gallerySection) {
-                  gallerySection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-              }, 500); // Delay for images to load
-            }}
+           onChange={async (e) => {
+            const files = Array.from(e.target.files || []);
+            const remainingSlots = 6 - (localData.gallery?.length || 0);
+            const filesToProcess = files.slice(0, remainingSlots);
+            
+            const userId = auth.currentUser?.uid;
+            if (!userId) {
+              console.error('User not authenticated');
+              return;
+            }
+
+            for (const file of filesToProcess) {
+              try {
+                const timestamp = Date.now();
+                const fileName = `gallery_${timestamp}_${file.name}`;
+                const storageRef = ref(storage, `users/${userId}/images/${fileName}`);
+                
+                const snapshot = await uploadBytes(storageRef, file);
+                const downloadUrl = await getDownloadURL(snapshot.ref);
+                
+                setLocalData(prev => ({
+                  ...prev,
+                  gallery: [...(prev.gallery || []), downloadUrl]
+                }));
+              } catch (error) {
+                console.error('Error uploading gallery image:', error);
+              }
+            }
+            
+            // Auto-scroll to gallery section
+            setTimeout(() => {
+              const gallerySection = document.querySelector('#gallery-section');
+              if (gallerySection) {
+                gallerySection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 500); // Delay for images to load
+          }}
           />
         </div>
         
@@ -1564,7 +1539,6 @@ const remainingSlots = 6 - (localData.gallery?.length || 0);
           isSearching={isSearching}
           handleSearch={handleSearch}
           selectStockImage={selectStockImage}
-          selectGradient={selectGradient}
           handleFileUpload={handleFileUpload}
           handleDragOver={handleDragOver}
           handleDragLeave={handleDragLeave}

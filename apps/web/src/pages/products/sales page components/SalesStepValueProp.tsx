@@ -96,6 +96,16 @@ const AUDIENCE_PREFIXES = [
   "Made for"
 ];
 
+// Helper function to check for placeholders in each field
+const checkFieldPlaceholders = (data) => {
+  return {
+    description: data.description?.includes('[') || false,
+    benefits: data.benefits?.some(b => b.includes('[')) || false,
+    targetAudience: data.targetAudience?.includes('[') || false,
+    hasAny: false
+  };
+};
+
 export default function SalesStepValueProp({ data, onChange, productName }) {
   const [localData, setLocalData] = useState({
     productType: data?.productType || undefined,
@@ -104,19 +114,51 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
     targetAudiencePrefix: data?.targetAudiencePrefix || 'Perfect for',
     targetAudience: data?.targetAudience || '',
     deliverables: data?.deliverables || [],
-    isUsingTemplate: data?.isUsingTemplate || false
+    isUsingTemplate: data?.isUsingTemplate || false,
+    placeholderStatus: data?.placeholderStatus || checkFieldPlaceholders(data || {})
   });
 
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [editingPrefix, setEditingPrefix] = useState(false);
   const [customPrefix, setCustomPrefix] = useState(null);
 
+  // Update placeholder status whenever data changes
+  useEffect(() => {
+    const placeholders = checkFieldPlaceholders(localData);
+    placeholders.hasAny = placeholders.description || placeholders.benefits || placeholders.targetAudience;
+    
+    if (JSON.stringify(placeholders) !== JSON.stringify(localData.placeholderStatus)) {
+      setLocalData(prev => ({
+        ...prev,
+        placeholderStatus: placeholders,
+        // Only keep isUsingTemplate true if there are still placeholders
+        isUsingTemplate: prev.isUsingTemplate && placeholders.hasAny
+      }));
+    }
+  }, [localData.description, localData.benefits, localData.targetAudience]);
+
   // Sync with parent
   useEffect(() => {
     onChange(localData);
   }, [localData]);
 
+  const hasCustomContent = () => {
+    return (
+      (localData.description && localData.description.length > 0 && !localData.description.includes('[')) ||
+      (localData.benefits && localData.benefits.some(b => b && b.length > 0 && !b.includes('['))) ||
+      (localData.targetAudience && localData.targetAudience.length > 0 && !localData.targetAudience.includes('['))
+    );
+  };
+
   const handleProductTypeSelect = (type) => {
+    // Check if switching templates would overwrite custom content
+    if (hasCustomContent() && type !== 'custom' && type !== localData.productType) {
+      const confirmed = window.confirm(
+        'You have customized content that will be replaced by the template. Are you sure you want to continue?'
+      );
+      if (!confirmed) return;
+    }
+
     if (type && type !== 'custom') {
       const template = TEMPLATES[type];
       setLocalData({
@@ -126,7 +168,13 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
         targetAudiencePrefix: template.targetAudiencePrefix,
         targetAudience: template.targetAudience,
         deliverables: [...template.deliverables],
-        isUsingTemplate: true
+        isUsingTemplate: true,
+        placeholderStatus: {
+          description: true,
+          benefits: true,
+          targetAudience: true,
+          hasAny: true
+        }
       });
       
       // Auto-scroll preview to benefits section after template loads
@@ -138,6 +186,13 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
       }, 300);
     } else {
       // Clear all fields when selecting "Start Blank"
+      if (hasCustomContent()) {
+        const confirmed = window.confirm(
+          'This will clear all your current content. Are you sure?'
+        );
+        if (!confirmed) return;
+      }
+
       setLocalData({
         productType: 'custom',
         description: '',
@@ -145,12 +200,23 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
         targetAudiencePrefix: 'Perfect for',
         targetAudience: '',
         deliverables: [],
-        isUsingTemplate: false
+        isUsingTemplate: false,
+        placeholderStatus: {
+          description: false,
+          benefits: false,
+          targetAudience: false,
+          hasAny: false
+        }
       });
     }
   };
 
   const clearTemplate = () => {
+    const confirmed = window.confirm(
+      'This will clear all content and start fresh. Continue?'
+    );
+    if (!confirmed) return;
+
     setLocalData({
       ...localData,
       description: '',
@@ -158,16 +224,21 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
       targetAudiencePrefix: 'Perfect for',
       targetAudience: '',
       deliverables: [],
-      isUsingTemplate: false
+      isUsingTemplate: false,
+      placeholderStatus: {
+        description: false,
+        benefits: false,
+        targetAudience: false,
+        hasAny: false
+      }
     });
   };
 
   const updateField = (field, value) => {
-    setLocalData({
-      ...localData,
-      [field]: value,
-      isUsingTemplate: false // Any edit marks as customized
-    });
+    setLocalData(prev => ({
+      ...prev,
+      [field]: value
+    }));
 
     // Auto-scroll to relevant section based on field changed
     setTimeout(() => {
@@ -178,7 +249,6 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
       } else if (field === 'targetAudience' || field === 'targetAudiencePrefix') {
         targetSection = document.querySelector('#audience-section');
       }
-      // Benefits scroll is already handled separately in updateBenefit function
       
       if (targetSection) {
         targetSection.scrollIntoView({ 
@@ -188,30 +258,34 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
       }
     }, 100);
   };
+
   const addBenefit = () => {
-    setLocalData({
-      ...localData,
-      benefits: [...localData.benefits, ''],
-      isUsingTemplate: false
-    });
+    // Limit to 10 benefits for UI performance
+    if (localData.benefits.length >= 10) {
+      alert('Maximum of 10 benefits allowed for optimal display');
+      return;
+    }
+
+    setLocalData(prev => ({
+      ...prev,
+      benefits: [...prev.benefits, '']
+    }));
   };
 
   const updateBenefit = (index, value) => {
     const newBenefits = [...localData.benefits];
     newBenefits[index] = value;
-    setLocalData({
-      ...localData,
-      benefits: newBenefits,
-      isUsingTemplate: false
-    });
+    setLocalData(prev => ({
+      ...prev,
+      benefits: newBenefits
+    }));
   };
 
   const removeBenefit = (index) => {
-    setLocalData({
-      ...localData,
-      benefits: localData.benefits.filter((_, i) => i !== index),
-      isUsingTemplate: false
-    });
+    setLocalData(prev => ({
+      ...prev,
+      benefits: prev.benefits.filter((_, i) => i !== index)
+    }));
   };
 
   const handleDragStart = (index) => {
@@ -227,13 +301,19 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
     newBenefits.splice(draggedIndex, 1);
     newBenefits.splice(index, 0, draggedItem);
     
-    setLocalData({
-      ...localData,
-      benefits: newBenefits,
-      isUsingTemplate: false
-    });
+    setLocalData(prev => ({
+      ...prev,
+      benefits: newBenefits
+    }));
     setDraggedIndex(index);
   };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  // Check if we should show warnings
+  const showPlaceholderWarnings = localData.placeholderStatus?.hasAny || false;
 
   return (
     <div className="space-y-8">
@@ -275,7 +355,7 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
           ))}
         </div>
 
-        {localData.isUsingTemplate && (
+        {localData.isUsingTemplate && showPlaceholderWarnings && (
           <button
             onClick={clearTemplate}
             className="mt-3 flex items-center gap-2 text-sm text-neutral-400 hover:text-white transition-colors"
@@ -286,42 +366,50 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
         )}
       </div>
 
-
-        {/* Description - REQUIRED */}
-        <div>
+      {/* Description - REQUIRED */}
+      <div>
         <label className="block text-sm font-medium mb-2">
-            Product Description
-            <span className="text-red-500 ml-1">*</span>
-            {localData.isUsingTemplate && localData.description.includes('[') && (
+          Product Description
+          <span className="text-red-500 ml-1">*</span>
+          {localData.placeholderStatus?.description && (
             <span className="ml-3 text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
-                Has placeholders
+              Has placeholders
             </span>
-            )}
+          )}
         </label>
         <div className="relative">
-            <textarea
+          <textarea
             value={localData.description}
             onChange={(e) => updateField('description', e.target.value)}
             placeholder={`Describe what ${productName || 'your product'} is and the main outcome customers will achieve...`}
             rows={3}
             className="w-full px-4 py-3 bg-neutral-900 rounded-lg border border-neutral-800 focus:border-blue-500 focus:outline-none resize-none"
-            />
+            maxLength={1000}
+          />
+          <div className="absolute bottom-2 right-2 text-xs text-neutral-500">
+            {localData.description.length}/1000
+          </div>
         </div>
         <p className="text-xs text-neutral-500 mt-1">
-            2-3 sentences. What is it + who it helps + main outcome
+          2-3 sentences. What is it + who it helps + main outcome
         </p>
-        </div>
+      </div>
 
       {/* Benefits - RECOMMENDED */}
-        <div id="benefits-section">
+      <div id="benefits-section">
         <label className="block text-sm font-medium mb-2">
-            Key Benefits
-            <span className="text-neutral-500 ml-2 text-xs font-normal">(Recommended - what customers get)</span>
-            {localData.isUsingTemplate && localData.benefits.some(b => b.includes('[')) && (
+          Key Benefits
+          <span className="text-neutral-500 ml-2 text-xs font-normal">(Recommended - what customers get)</span>
+          {localData.placeholderStatus?.benefits && (
             <span className="ml-3 text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
-                Has placeholders
+              Has placeholders
             </span>
-            )}
+          )}
+          {localData.benefits.length > 0 && (
+            <span className="ml-3 text-xs text-neutral-400">
+              {localData.benefits.length}/10
+            </span>
+          )}
         </label>
         
         {localData.benefits.length === 0 ? (
@@ -341,22 +429,25 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
               <div
                 key={index}
                 onDragOver={(e) => handleDragOver(e, index)}
-                onDragEnd={() => setDraggedIndex(null)}
+                onDragEnd={handleDragEnd}
                 className="flex items-center gap-2 group"
-                >
+              >
                 <div
-                    draggable
-                    onDragStart={() => handleDragStart(index)}
-                    className="cursor-move p-1 hover:bg-neutral-800 rounded transition-colors"
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  className="cursor-move p-1 hover:bg-neutral-800 rounded transition-colors"
                 >
-                    <GripVertical className="w-4 h-4 text-neutral-600" />
+                  <GripVertical className="w-4 h-4 text-neutral-600" />
                 </div>
                 <input
-                    type="text"
-                    value={benefit}
-                    onChange={(e) => updateBenefit(index, e.target.value)}
-                    placeholder="Enter a key benefit or outcome..."
-                    className="flex-1 px-3 py-2 bg-neutral-900 rounded-lg border border-neutral-800 focus:border-blue-500 focus:outline-none text-sm"
+                  type="text"
+                  value={benefit}
+                  onChange={(e) => updateBenefit(index, e.target.value)}
+                  placeholder="Enter a key benefit or outcome..."
+                  className={`flex-1 px-3 py-2 bg-neutral-900 rounded-lg border ${
+                    benefit.includes('[') ? 'border-amber-500/50' : 'border-neutral-800'
+                  } focus:border-blue-500 focus:outline-none text-sm`}
+                  maxLength={200}
                 />
                 <button
                   onClick={() => removeBenefit(index)}
@@ -366,30 +457,32 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
                 </button>
               </div>
             ))}
-            <button
-              onClick={addBenefit}
-              className="flex items-center gap-2 text-sm text-blue-500 hover:text-blue-400 transition-colors mt-2"
-            >
-              <Plus className="w-4 h-4" />
-              Add another benefit
-            </button>
+            {localData.benefits.length < 10 && (
+              <button
+                onClick={addBenefit}
+                className="flex items-center gap-2 text-sm text-blue-500 hover:text-blue-400 transition-colors mt-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add another benefit
+              </button>
+            )}
           </div>
         )}
         <p className="text-xs text-neutral-500 mt-2">
-          3-5 benefits work best. Focus on outcomes, not features.
+          3-5 benefits work best. Focus on outcomes, not features. Max 10 benefits.
         </p>
       </div>
 
       {/* Target Audience - OPTIONAL */}
-        <div>
+      <div>
         <label className="block text-sm font-medium mb-2">
-            Target Audience
-            <span className="text-neutral-500 ml-2 text-xs font-normal">(Optional)</span>
-            {localData.isUsingTemplate && localData.targetAudience.includes('[') && (
+          Target Audience
+          <span className="text-neutral-500 ml-2 text-xs font-normal">(Optional)</span>
+          {localData.placeholderStatus?.targetAudience && (
             <span className="ml-3 text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
-                Has placeholders
+              Has placeholders
             </span>
-            )}
+          )}
         </label>
         
         <div className="space-y-3">
@@ -436,6 +529,7 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
                         placeholder="Enter custom prefix..."
                         className="px-3 py-2 bg-neutral-800 border border-blue-500 rounded-lg focus:outline-none text-sm"
                         autoFocus
+                        maxLength={50}
                       />
                       <button
                         onClick={() => {
@@ -475,7 +569,10 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
               value={localData.targetAudience}
               onChange={(e) => updateField('targetAudience', e.target.value)}
               placeholder="beginners who want to learn programming..."
-              className="flex-1 px-4 py-2 bg-neutral-900 rounded-lg border border-neutral-800 focus:border-blue-500 focus:outline-none text-sm"
+              className={`flex-1 px-4 py-2 bg-neutral-900 rounded-lg border ${
+                localData.targetAudience.includes('[') ? 'border-amber-500/50' : 'border-neutral-800'
+              } focus:border-blue-500 focus:outline-none text-sm`}
+              maxLength={200}
             />
           </div>
           
@@ -506,16 +603,27 @@ export default function SalesStepValueProp({ data, onChange, productName }) {
         </p>
       </div>
 
-      {/* Template Status Warning */}
-      {localData.isUsingTemplate && localData.description.includes('[') && (
+      {/* Template Status Warning - Shows when ANY field has placeholders */}
+      {showPlaceholderWarnings && (
         <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
           <div className="flex items-center gap-2 text-amber-500">
             <Sparkles className="w-4 h-4" />
-            <span className="text-sm font-medium">Still using template placeholders</span>
+            <span className="text-sm font-medium">Template placeholders detected</span>
           </div>
           <p className="text-xs text-neutral-400 mt-1">
-            Make sure to replace all [BRACKETED] text before publishing
+            Replace all [BRACKETED] text before publishing:
           </p>
+          <ul className="text-xs text-neutral-400 mt-2 space-y-1">
+            {localData.placeholderStatus?.description && (
+              <li>• Description has placeholders</li>
+            )}
+            {localData.placeholderStatus?.benefits && (
+              <li>• Some benefits have placeholders</li>
+            )}
+            {localData.placeholderStatus?.targetAudience && (
+              <li>• Target audience has placeholders</li>
+            )}
+          </ul>
         </div>
       )}
     </div>

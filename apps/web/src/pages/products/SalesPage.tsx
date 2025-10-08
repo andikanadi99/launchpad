@@ -42,21 +42,81 @@ interface SalesPageData {
   visuals: {
     headerImage?: string;
     headerImageAttribution?: { name: string; url: string };
+    headerImageSettings?: {
+      aspectRatio: 'banner' | 'standard' | 'square' | 'tall';
+      position: { x: number; y: number };
+      zoom: number;
+      height: string;
+    };
     thumbnail?: string;
     videoUrl?: string;
+    videoSettings?: {
+      size?: 'small' | 'medium' | 'large' | 'full';
+      corners?: 'square' | 'rounded' | 'soft' | 'pill';
+      shadow?: 'none' | 'subtle' | 'medium' | 'dramatic';
+      autoplay?: boolean;
+      caption?: string;
+      ctaText?: string;
+    };
     gallery?: string[];
+    galleryPositions?: { [key: number]: string };
   };
   design: {
     theme: string;
     primaryColor: string;
+    secondaryColor: string;
+    backgroundColor: string;
+    textColor: string;
     fontPair: string;
+    buttonStyle: 'rounded' | 'square' | 'pill';
+    cardStyle: 'flat' | 'shadow' | 'border';
+    spacing: 'compact' | 'comfortable' | 'spacious';
     sectionOrder: string[];
+    hiddenSections: string[];
+    ctaButtonText: string;
+    customCSS?: string;
+    animations: boolean;
+    // Advanced component settings
+    heroTitleSize?: 'small' | 'medium' | 'large' | 'xl';
+    heroAlignment?: 'left' | 'center' | 'right';
+    benefitsLayout?: 'single' | 'double' | 'grid';
+    benefitsIconStyle?: 'circle' | 'square' | 'hexagon';
+    pricingBoxWidth?: 'narrow' | 'standard' | 'wide';
+    buttonSize?: 'small' | 'medium' | 'large' | 'xl';
+    galleryColumns?: 2 | 3 | 4 | 6;
+    contentWidth?: 'narrow' | 'standard' | 'wide';
+    // Effects Settings
+    buttonShadow?: 'none' | 'small' | 'medium' | 'large';
+    cardElevation?: 'flat' | 'raised' | 'floating';
+    imageBorderRadius?: 'none' | 'small' | 'medium' | 'large';
+    hoverIntensity?: 'subtle' | 'normal' | 'bold';
+    // Typography Settings
+    textScale?: 'small' | 'normal' | 'large' | 'xlarge';
+    lineHeight?: 'tight' | 'normal' | 'relaxed';
+    letterSpacing?: 'tight' | 'normal' | 'wide';
+    headingWeight?: 'light' | 'normal' | 'bold' | 'black';
+    // Mobile Settings
+    mobileHideSections?: string[];
+    mobileFontScale?: number;
+    // Accessibility Settings
+    highContrast?: boolean;
+    focusIndicatorStyle?: 'default' | 'bold' | 'minimal';
+    reducedMotion?: boolean;
   };
   publish: {
     slug: string;
+    metaTitle: string;
     metaDescription: string;
     thankYouMessage: string;
+    thankYouRedirect?: string;
     status: 'draft' | 'published';
+    publishedAt?: Date;
+    socialLinks?: {
+      facebook?: string;
+      twitter?: string;
+      linkedin?: string;
+      instagram?: string;
+    };
   };
 }
 
@@ -123,6 +183,7 @@ export default function SalesPage() {
     },
     publish: {
       slug: '',
+      metaTitle: '',
       metaDescription: '',
       thankYouMessage: 'Thank you for your purchase! You will receive an email with access details shortly.',
       status: 'draft',
@@ -256,27 +317,131 @@ export default function SalesPage() {
       if (!confirmPublish) return;
     }
 
+    // Validate all required fields
+    if (!canPublish) {
+      alert('Please complete all required fields before publishing:\n\n' +
+        '✓ Product name and price\n' +
+        '✓ Product description\n' +
+        '✓ Header image\n' +
+        '✓ URL slug (Step 5)\n' +
+        '✓ SEO title and description (Step 5)\n' +
+        '✓ Thank you message (Step 5)'
+      );
+      return;
+    }
+
     setIsSaving(true);
     try {
+      const slug = salesPageData.publish.slug.toLowerCase().trim();
+      
+      // Validate slug format
+      const slugRegex = /^[a-z0-9-]{3,50}$/;
+      if (!slugRegex.test(slug)) {
+        alert('Invalid URL slug. Use only lowercase letters, numbers, and hyphens (3-50 characters).');
+        setIsSaving(false);
+        return;
+      }
+
+      // 1. Check slug availability in registry
+      const slugRef = doc(db, 'slugs', slug);
+      const slugDoc = await getDoc(slugRef);
+      
+      if (slugDoc.exists()) {
+        const existingData = slugDoc.data();
+        
+        // If slug exists but belongs to a different product, it's taken
+        if (existingData.productId !== productId) {
+          alert('This URL is already taken. Please choose a different slug.');
+          setIsSaving(false);
+          return;
+        }
+        
+        // If it's the same product, we're republishing (OK to continue)
+      }
+
+      // 2. Register/update slug ownership
+      await setDoc(slugRef, {
+        productId: productId,
+        userId: userId,
+        createdAt: slugDoc.exists() ? slugDoc.data().createdAt : new Date(),
+        lastUpdated: new Date()
+      });
+
+      // 3. Create/update public published page
+      const publishedRef = doc(db, 'published_pages', slug);
+      await setDoc(publishedRef, {
+        userId: userId,
+        productId: productId,
+        slug: slug,
+        salesPage: salesPageData,
+        publishedAt: new Date(),
+        lastUpdated: new Date(),
+        // Optional: Add metadata for easier querying
+        productName: salesPageData.coreInfo.name,
+        price: salesPageData.coreInfo.price,
+        priceType: salesPageData.coreInfo.priceType,
+        metaTitle: salesPageData.publish.metaTitle,
+        metaDescription: salesPageData.publish.metaDescription
+      });
+
+      // 4. Update private product document
       const productRef = doc(db, 'users', userId, 'products', productId);
       await updateDoc(productRef, {
         'salesPage.publish.status': 'published',
         'salesPage.publish.publishedAt': new Date(),
+        'salesPage.publish.slug': slug,
         published: true,
+        lastUpdated: new Date()
       });
 
+      // Success! Navigate to success page
       navigate(`/products/${productId}/success`);
+      
     } catch (error) {
       console.error('Error publishing:', error);
+      
+      // Type-safe error handling
+      let errorMessage = 'Failed to publish. Please check your internet connection and try again.';
+      
+      if (error && typeof error === 'object' && 'code' in error) {
+        const firebaseError = error as { code: string };
+        
+        if (firebaseError.code === 'permission-denied') {
+          errorMessage = 'Permission denied. Please make sure you are logged in.';
+        } else if (firebaseError.code === 'not-found') {
+          errorMessage = 'Product not found. Please try again.';
+        }
+      }
+      
+      alert(errorMessage);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const canPublish = salesPageData.coreInfo.name && 
-                     salesPageData.coreInfo.price >= 0 && 
-                     salesPageData.valueProp.description &&
-                     salesPageData.visuals.headerImage;
+ // In SalesPage.tsx, replace canPublish with:
+const canPublish = 
+  // Step 1: Core Info
+  salesPageData.coreInfo.name && 
+  salesPageData.coreInfo.name.trim().length > 0 &&
+  (salesPageData.coreInfo.priceType === 'free' || salesPageData.coreInfo.price >= 0) &&
+  
+  // Step 2: Value Prop
+  salesPageData.valueProp.description &&
+  salesPageData.valueProp.description.trim().length > 0 &&
+  
+  // Step 3: Visuals
+  salesPageData.visuals.headerImage &&
+  
+  // Step 5: Publish Settings (NEW!)
+  salesPageData.publish.slug &&
+  salesPageData.publish.slug.trim().length >= 3 &&
+  salesPageData.publish.metaTitle &&
+  salesPageData.publish.metaTitle.trim().length > 0 &&
+  salesPageData.publish.metaDescription &&
+  salesPageData.publish.metaDescription.trim().length > 0 &&
+  salesPageData.publish.thankYouMessage &&
+  salesPageData.publish.thankYouMessage.trim().length > 0;
 
   if (isLoading) {
     return (
@@ -285,32 +450,6 @@ export default function SalesPage() {
       </div>
     );
   }
-
-  const CurrentStepComponent = STEPS[currentStep - 1].component;
-
-  // Prepare props for SalesStepValueProp and SalesStepVisuals
-  const getStepProps = () => {
-    if (currentStep === 1) {
-      return {
-        data: salesPageData,
-        updateData,
-      };
-    }
-    if (currentStep === 2) {
-      return {
-        data: salesPageData.valueProp,
-        onChange: (data: any) => updateData('valueProp', data),
-        productName: salesPageData.coreInfo.name,
-      };
-    }
-    if (currentStep === 3) {
-      return {
-        data: salesPageData,
-        updateData,
-      };
-    }
-    return { data: salesPageData, updateData };
-  };
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -417,7 +556,37 @@ export default function SalesPage() {
         {/* Left: Form */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-2xl mx-auto p-8">
-            <CurrentStepComponent {...getStepProps()} />
+            {currentStep === 1 && (
+              <SalesStepCoreInfo 
+                data={salesPageData}
+                updateData={updateData as (stepKey: string, data: any) => void}
+              />
+            )}
+            {currentStep === 2 && (
+              <SalesStepValueProp
+                data={salesPageData.valueProp}
+                onChange={(data: any) => updateData('valueProp', data)}
+                productName={salesPageData.coreInfo.name}
+              />
+            )}
+            {currentStep === 3 && (
+              <SalesStepVisuals
+                data={salesPageData}
+                updateData={updateData as (stepKey: string, data: any) => void}
+              />
+            )}
+            {currentStep === 4 && (
+              <SalesStepCustomize
+                data={salesPageData}
+                updateData={updateData as (stepKey: string, data: any) => void}
+              />
+            )}
+            {currentStep === 5 && (
+              <SalesStepPublish
+                data={salesPageData}
+                updateData={updateData as (stepKey: string, data: any) => void}
+              />
+            )}
 
             {/* Navigation buttons */}
             <div className="mt-8 flex items-center justify-between">
