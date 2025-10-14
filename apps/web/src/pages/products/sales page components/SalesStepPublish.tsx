@@ -4,11 +4,12 @@ import {
   Facebook, Twitter, Linkedin, Instagram, Package, Search  
 } from 'lucide-react';
 
+import { auth } from '../../../lib/firebase';
+
 interface PublishData {
   slug: string;
   metaTitle: string;
   metaDescription: string;
-  thankYouMessage: string;
   thankYouRedirect?: string;
   status: 'draft' | 'published';
   publishedAt?: Date;
@@ -26,21 +27,22 @@ interface StepPublishProps {
 }
 
 const SalesStepPublish: React.FC<StepPublishProps> = ({ data, updateData }) => {
-  const [localData, setLocalData] = useState<PublishData>({
-    slug: '',
-    metaTitle: '',
-    metaDescription: '',
-    thankYouMessage: 'Thank you for your purchase! You will receive an email with access details shortly.',
-    thankYouRedirect: '',
-    status: 'draft',
-    publishedAt: undefined,
-    socialLinks: {
-      facebook: '',
-      twitter: '',
-      linkedin: '',
-      instagram: ''
-    },
-    ...data.publish
+  const [localData, setLocalData] = useState<PublishData>(() => {
+    const publishData = data.publish || {};
+    return {
+      slug: publishData.slug || '',
+      metaTitle: publishData.metaTitle || '',
+      metaDescription: publishData.metaDescription || '',
+      thankYouRedirect: publishData.thankYouRedirect || '',
+      status: publishData.status || 'draft',
+      publishedAt: publishData.publishedAt,
+      socialLinks: publishData.socialLinks || {
+        facebook: '',
+        twitter: '',
+        linkedin: '',
+        instagram: ''
+      }
+    };
   });
 
   const [slugError, setSlugError] = useState('');
@@ -48,7 +50,6 @@ const SalesStepPublish: React.FC<StepPublishProps> = ({ data, updateData }) => {
   const [showSocialLinks, setShowSocialLinks] = useState(false);
 
   const productName = data.coreInfo?.name || 'Your Product';
-  const priceType = data.coreInfo?.priceType || 'one-time';
   const baseUrl = 'https://launchpad.app/p/';
 
   // Generate slug from product name
@@ -84,6 +85,20 @@ const SalesStepPublish: React.FC<StepPublishProps> = ({ data, updateData }) => {
     updateData('publish', localData);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localData]);
+
+  // Validate slug on mount and when it changes
+  useEffect(() => {
+    if (localData.slug) {
+      const slug = localData.slug.toLowerCase();
+      if (slug !== localData.slug) {
+        setSlugError('Only lowercase letters, numbers, and hyphens allowed');
+      } else if (slug.length < 3) {
+        setSlugError('Slug must be at least 3 characters');
+      } else {
+        setSlugError('');
+      }
+    }
+  }, [localData.slug]);
 
   const updateField = (field: keyof PublishData | string, value: any) => {
     if (field.includes('.')) {
@@ -122,22 +137,12 @@ const SalesStepPublish: React.FC<StepPublishProps> = ({ data, updateData }) => {
     setTimeout(() => setCopiedUrl(false), 2000);
   };
 
-  const getDefaultThankYouMessage = () => {
-    if (priceType === 'free') {
-      return "Success! Check your email for access to your free resource.";
-    } else if (priceType === 'subscription') {
-      return "Welcome to the community! Your subscription is now active. Check your email for login details.";
-    } else {
-      return "Thank you for your purchase! You'll receive an email with access details shortly.";
-    }
-  };
-
   return (
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-semibold">Step 5: Publish Settings</h2>
         <p className="text-neutral-400 mt-1">
-          Configure your page URL and final details
+          Set your page URL and SEO details
         </p>
       </div>
 
@@ -160,6 +165,82 @@ const SalesStepPublish: React.FC<StepPublishProps> = ({ data, updateData }) => {
                 <span className="text-sm font-medium text-amber-500">Draft Mode - Ready to Publish</span>
               </>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Order Confirmation Email Section */}
+      <div>
+        <div className="border-2 border-neutral-700 rounded-lg overflow-hidden">
+          {/* Header */}
+          <div className="bg-neutral-800/50 px-4 py-3 border-b border-neutral-700">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-neutral-400" />
+                <h3 className="text-sm font-medium">Order Confirmation Email</h3>
+              </div>
+              <span className="text-xs px-2 py-1 bg-green-500/20 text-green-500 rounded-full">
+                ✓ Auto-Configured
+              </span>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 bg-neutral-900/30 space-y-4">
+            {/* Info Box */}
+            <div className="flex items-start gap-3 p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-indigo-300">
+                  Customers automatically receive this email after purchase. Set up product delivery (files, content, or redirect) from your dashboard after publishing.
+                </p>
+              </div>
+            </div>
+
+            {/* From Address Display */}
+            <div>
+              <label className="block text-xs font-medium text-neutral-400 mb-2">
+                From
+              </label>
+              <div className="px-3 py-2 bg-neutral-950 border border-neutral-700 rounded-lg text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-neutral-300">Launchpad</span>
+                  <span className="text-neutral-500">&lt;orders@launchpad.app&gt;</span>
+                </div>
+                <div className="text-xs text-neutral-500 mt-1">
+                  Replies go to: {auth.currentUser?.email || 'your-email@example.com'}
+                </div>
+              </div>
+            </div>
+
+            {/* Email Subject Field */}
+            <div>
+              <label className="block text-xs font-medium text-neutral-400 mb-2">
+                Subject Line
+              </label>
+              <input
+                type="text"
+                value="Thank you for your purchase!"
+                readOnly
+                className="w-full px-3 py-2 bg-neutral-950 border border-neutral-700 rounded-lg text-sm text-neutral-400"
+              />
+            </div>
+
+            {/* Email Body Field */}
+            <div>
+              <label className="block text-xs font-medium text-neutral-400 mb-2">
+                Email Body
+              </label>
+              <textarea
+                value={`Hi there! Thank you for purchasing ${productName}.\n\nYour order is confirmed. We're working on your product and will send access details to this email soon.\n\nQuestions? Reply to this email.\n\nThanks!`}
+                readOnly
+                rows={6}
+                className="w-full px-3 py-2 bg-neutral-950 border border-neutral-700 rounded-lg text-sm text-neutral-400 resize-none leading-relaxed"
+              />
+              <p className="text-xs text-neutral-500 mt-1">
+                ✉️ Sent automatically after each successful purchase
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -285,66 +366,22 @@ const SalesStepPublish: React.FC<StepPublishProps> = ({ data, updateData }) => {
           </div>
         )}
 
-        {/* Thank You Message - REQUIRED */}
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            Thank You Message
-            <span className="text-red-500 ml-1">*</span>
-          </label>
-          <textarea
-            value={localData.thankYouMessage}
-            onChange={(e) => updateField('thankYouMessage', e.target.value)}
-            placeholder={getDefaultThankYouMessage()}
-            rows={3}
-            className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg focus:border-indigo-500 focus:outline-none resize-none"
-          />
-          <p className="text-xs text-neutral-500 mt-1">
-            Shown after successful {priceType === 'free' ? 'signup' : 'purchase'}
-          </p>
-          
-          {/* Quick Templates */}
-          <div className="flex gap-2 mt-2">
-            <span className="text-xs text-neutral-500">Quick fill:</span>
-            {[
-              { label: 'Course', message: "Welcome! Your course access has been activated. Check your email for login details." },
-              { label: 'Digital', message: "Success! Check your email for download links and access instructions." },
-              { label: 'Free', message: "All set! Your free resource is on its way to your inbox." }
-            ].map(template => (
-              <button
-                key={template.label}
-                onClick={() => {
-                  const hasCustomContent = localData.thankYouMessage && 
-                    localData.thankYouMessage.trim() !== '' && 
-                    localData.thankYouMessage !== getDefaultThankYouMessage();
-                  
-                  if (hasCustomContent) {
-                    const confirmReplace = window.confirm('Replace current message with template?');
-                    if (!confirmReplace) return;
-                  }
-                  
-                  updateField('thankYouMessage', template.message);
-                }}
-                className="text-xs text-indigo-400 hover:text-indigo-300 underline"
-              >
-                {template.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Redirect URL - OPTIONAL */}
         <div>
           <label className="block text-sm font-medium mb-2">
-            Redirect URL
-            <span className="text-neutral-500 ml-2 text-xs">(Optional - redirect after purchase)</span>
+            Post-Purchase Redirect
+            <span className="text-neutral-500 ml-2 text-xs">(Optional)</span>
           </label>
           <input
             type="url"
             value={localData.thankYouRedirect || ''}
             onChange={(e) => updateField('thankYouRedirect', e.target.value)}
-            placeholder="https://members.yoursite.com"
+            placeholder="https://members.yoursite.com/welcome"
             className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg focus:border-indigo-500 focus:outline-none"
           />
+          <p className="text-xs text-neutral-500 mt-1">
+            Redirect customers to your course platform, membership site, or custom thank you page
+          </p>
         </div>
 
         {/* Social Links - OPTIONAL (Collapsible) */}
@@ -355,7 +392,7 @@ const SalesStepPublish: React.FC<StepPublishProps> = ({ data, updateData }) => {
           >
             {showSocialLinks ? '−' : '+'} 
             Social Links 
-            <span className="text-xs font-normal">(Optional)</span>
+            <span className="text-xs font-normal">(Optional - shows in footer)</span>
           </button>
           
           {showSocialLinks && (
@@ -384,10 +421,11 @@ const SalesStepPublish: React.FC<StepPublishProps> = ({ data, updateData }) => {
         </div>
 
         {/* Validation Notice */}
-        {(!localData.slug || !localData.metaTitle || !localData.metaDescription || !localData.thankYouMessage) && (
-          <div className="bg-neutral-800/50 rounded-lg p-3">
-            <p className="text-xs text-neutral-400">
-              * Required fields must be completed before publishing
+        {(!localData.slug || !localData.metaTitle || !localData.metaDescription) && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+            <p className="text-sm text-amber-400 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              Complete all required fields (*) to publish
             </p>
           </div>
         )}

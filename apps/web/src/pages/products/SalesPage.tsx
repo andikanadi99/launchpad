@@ -100,7 +100,6 @@ interface SalesPageData {
     slug: string;
     metaTitle: string;
     metaDescription: string;
-    thankYouMessage: string;
     thankYouRedirect?: string;
     status: 'draft' | 'published';
     publishedAt?: Date;
@@ -118,11 +117,30 @@ interface ProductMetadata {
   type: 'sales-page';
   published: boolean;
   delivery: {
-    type: 'none' | 'content' | 'redirect' | 'file';
+    type: 'email-only' | 'content' | 'redirect' | 'file';
     status: 'pending' | 'configured';
+    
+    // Email-only fields
+    emailSubject?: string;
+    emailBody?: string;
+    
+    // Content delivery fields
     content?: string;
+    
+    // File delivery fields
+    files?: Array<{
+      url: string;
+      name: string;
+      size: number;
+      uploadedAt: Date;
+    }>;
+    
+    // Redirect delivery fields
     redirectUrl?: string;
-    files?: string[];
+    redirectDelay?: number;
+    showThankYouFirst?: boolean;
+    
+    // Common to all types
     accessInstructions?: string;
   };
   analytics: {
@@ -198,25 +216,33 @@ export default function SalesPage() {
       slug: '',
       metaTitle: '',
       metaDescription: '',
-      thankYouMessage: 'Thank you for your purchase! You will receive an email with access details shortly.',
       status: 'draft',
     },
   });
 
   // Product metadata state
   const [productMetadata, setProductMetadata] = useState<ProductMetadata>({
-    type: 'sales-page',
-    published: false,
-    delivery: {
-      type: 'none',
-      status: 'pending'
-    },
-    analytics: {
-      views: 0,
-      sales: 0,
-      revenue: 0
-    }
-  });
+        type: 'sales-page',
+        published: false,
+        delivery: {
+          type: 'email-only',
+          status: 'configured',
+          emailSubject: 'Thank you for your purchase!',
+          emailBody: `Hi there! Thank you for purchasing {{product_name}}.
+
+Your order is confirmed. We're working on your product and will send access details to this email soon.
+
+Questions? Reply to this email.
+
+Thanks!`,
+          accessInstructions: undefined
+        },
+        analytics: {
+          views: 0,
+          sales: 0,
+          revenue: 0
+        }
+});
 
   // Helper function to clean undefined values
   const cleanData = (obj: any): any => {
@@ -260,8 +286,17 @@ export default function SalesPage() {
               published: false,
               salesPage: salesPageData,
               delivery: {
-                type: 'none',
-                status: 'pending'
+              type: 'email-only',
+              status: 'configured',
+              emailSubject: 'Thank you for your purchase!',
+                emailBody: `Hi there! Thank you for purchasing {{product_name}}.
+
+Your order is confirmed. We're working on your product and will send access details to this email soon.
+
+Questions? Reply to this email.
+
+Thanks!`,
+                accessInstructions: null
               },
               analytics: {
                 views: 0,
@@ -290,8 +325,16 @@ export default function SalesPage() {
                 type: data.type || 'sales-page',
                 published: data.published || false,
                 delivery: data.delivery || {
-                  type: 'none',
-                  status: 'pending'
+                  type: 'email-only',
+                  status: 'configured',
+                  emailSubject: 'Thank you for your purchase!',
+                  emailBody: `Hi there! Thank you for purchasing {{product_name}}.
+
+Your order is confirmed. We're working on your product and will send access details to this email soon.
+
+Questions? Reply to this email.
+
+Thanks!`
                 },
                 analytics: data.analytics || {
                   views: 0,
@@ -396,8 +439,7 @@ export default function SalesPage() {
         '✓ Product description\n' +
         '✓ Header image\n' +
         '✓ URL slug (Step 5)\n' +
-        '✓ SEO title and description (Step 5)\n' +
-        '✓ Thank you message (Step 5)'
+        '✓ SEO title and description (Step 5)'
       );
       return;
     }
@@ -500,10 +542,11 @@ export default function SalesPage() {
     }
   };
 
+  // ✅ UPDATED: Removed thankYouMessage validation
   const canPublish = 
     salesPageData.coreInfo.name && 
     salesPageData.coreInfo.name.trim().length > 0 &&
-    (salesPageData.coreInfo.priceType === 'free' || salesPageData.coreInfo.price >= 0) &&
+    (salesPageData.coreInfo.priceType === 'free' || salesPageData.coreInfo.price > 0) &&
     salesPageData.valueProp.description &&
     salesPageData.valueProp.description.trim().length > 0 &&
     salesPageData.visuals.headerImage &&
@@ -512,9 +555,7 @@ export default function SalesPage() {
     salesPageData.publish.metaTitle &&
     salesPageData.publish.metaTitle.trim().length > 0 &&
     salesPageData.publish.metaDescription &&
-    salesPageData.publish.metaDescription.trim().length > 0 &&
-    salesPageData.publish.thankYouMessage &&
-    salesPageData.publish.thankYouMessage.trim().length > 0;
+    salesPageData.publish.metaDescription.trim().length > 0;
 
   if (isLoading) {
     return (
