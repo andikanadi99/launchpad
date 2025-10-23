@@ -18,12 +18,14 @@ import AccountPage from "./pages/onboarding/account/AccountPage";
 import StripePage from "./pages/onboarding/account/Stripe";
 
 //Product Page
-import NewProduct from "./pages/products/NewProduct";
+// import NewProduct from "./pages/products/NewProduct";
 import ProductPage from './pages/products/Product';
 import Success from "./pages/products/Success";
-import EditProduct from './pages/products/EditProduct';
+// import EditProduct from './pages/products/EditProduct';
 import Support from "./pages/Support";
 import ProductPagePreview from "./pages/products/product page components/ProductPagePreview";
+import DeliveryBuilder from "./pages/products/DeliveryBuilder";
+
 
 //Sales Page
 import SalesPage from "./pages/products/SalesPage";
@@ -46,12 +48,10 @@ export default function App() {
         <Route path="preview/sales/:productId" element={<SalesPagePreview />} />
         <Route path="preview/product/:productId" element={<ProductPagePreview />} />
         <Route path="products">
-          <Route path="new" element={<NewProduct />} />
           <Route path="sales" element={<SalesPage />} />
-          <Route path=":productId/landing/edit" element={<SalesPage />} />  {/* ← ADD THIS */}
-          <Route path=":productId/content" element={<NewProduct />} />  {/* ← ADD THIS */}
-          <Route path=":productId/success" element={<Success />} />  {/* ← ADD THIS */}
-          <Route path="edit/:productId" element={<EditProduct />} />
+          <Route path=":productId/landing/edit" element={<SalesPage />} />  
+          <Route path=":productId/success" element={<Success />} /> 
+          <Route path=":productId/delivery" element={<DeliveryBuilder />} />
         </Route>
         <Route path="settings" element={<Settings />} />
 
