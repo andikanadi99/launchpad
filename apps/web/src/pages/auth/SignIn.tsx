@@ -141,161 +141,217 @@ export default function SignIn() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0B0D] text-neutral-100 grid place-items-center p-6">
-      <div className="w-full max-w-lg rounded-2xl border border-neutral-800 bg-neutral-900/70 p-8 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)]">
-        <h1 className="text-2xl font-semibold">Sign in to LaunchPad</h1>
-        <p className="mt-2 text-sm text-neutral-400">
-          New here?{' '}
-          <Link
-            to={`/auth/signup?next=${encodeURIComponent(next)}${email ? `&email=${encodeURIComponent(email)}` : ''}`}
-            className="text-indigo-400 hover:underline"
-          >
-            Create an account
-          </Link>
-          .
-        </p>
+    <div className="min-h-screen bg-[#0B0B0D] text-neutral-100 grid place-items-center p-6 relative">
+      {/* Background gradient effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full filter blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full filter blur-3xl" />
+      </div>
 
-        {/* Primary: Email + Password */}
-        <form onSubmit={onEmailSubmit} className="mt-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-neutral-300 mb-1.5" htmlFor="email">Email</label>
-            <div className="relative">
-              <input
-                id="email"
-                name="email"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (!emailTouched) setEmailTouched(true);
-                }}
-                onBlur={() => setEmailTouched(true)}
-                placeholder="you@business.com"
-                type="email"
-                autoComplete="email"
-                required
-                className={`w-full rounded-lg border ${
-                  emailTouched 
-                    ? emailValid 
-                      ? 'border-green-600 focus:ring-green-500/60' 
-                      : 'border-red-600 focus:ring-red-500/60'
-                    : 'border-neutral-700 focus:ring-indigo-500/60'
-                } bg-neutral-950 px-3 py-2.5 pr-10 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 transition-colors`}
-              />
-              {emailTouched && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  {emailValid ? (
-                    <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+      <div className="w-full max-w-xl relative">
+        {/* Main card with gradient border */}
+        <div className="p-[1px] rounded-3xl bg-gradient-to-b from-neutral-700 via-neutral-800 to-neutral-900 shadow-2xl">
+          <div className="rounded-3xl bg-gradient-to-b from-neutral-900 via-[#0B0B0D] to-neutral-950 p-10">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-neutral-200 to-neutral-400 bg-clip-text text-transparent">
+                Welcome back to LaunchPad
+              </h1>
+              <p className="mt-3 text-neutral-400">
+                New here?{' '}
+                <Link
+                  to={`/auth/signup?next=${encodeURIComponent(next)}${email ? `&email=${encodeURIComponent(email)}` : ''}`}
+                  className="text-indigo-400 hover:text-indigo-300 hover:underline font-medium transition-colors"
+                >
+                  Create an account
+                </Link>
+              </p>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={onEmailSubmit} className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-neutral-200 mb-2" htmlFor="email">
+                  Email address
+                </label>
+                <div className="relative group">
+                  <input
+                    id="email"
+                    name="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (!emailTouched) setEmailTouched(true);
+                    }}
+                    onBlur={() => setEmailTouched(true)}
+                    placeholder="you@business.com"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    className={`w-full rounded-xl border-2 ${
+                      emailTouched 
+                        ? emailValid 
+                          ? 'border-green-500/50 bg-green-500/5 focus:border-green-400' 
+                          : 'border-red-500/50 bg-red-500/5 focus:border-red-400'
+                        : 'border-neutral-700 bg-neutral-950/50 focus:border-indigo-500'
+                    } px-4 py-3.5 pr-12 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 transition-all duration-200`}
+                  />
+                  {emailTouched && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      {emailValid ? (
+                        <div className="w-6 h-6 rounded-full bg-green-500 grid place-items-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-red-500 grid place-items-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-            {emailTouched && !emailValid && (
-              <p className="mt-1.5 text-xs text-red-400">Enter a valid email address</p>
-            )}
-          </div>
+                {emailTouched && !emailValid && (
+                  <p className="mt-2 text-sm text-red-400 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    Enter a valid email address
+                  </p>
+                )}
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-neutral-300 mb-1.5" htmlFor="password">Password</label>
-            <div className="relative">
-              <input
-                id="password"
-                name="password"
-                value={pw}
-                onChange={(e) => {
-                  setPw(e.target.value);
-                  if (!pwTouched) setPwTouched(true);
-                }}
-                onBlur={() => setPwTouched(true)}
-                placeholder="••••••••"
-                type="password"
-                autoComplete="current-password"
-                required
-                className={`w-full rounded-lg border ${
-                  pwTouched 
-                    ? pwValid 
-                      ? 'border-green-600 focus:ring-green-500/60' 
-                      : 'border-red-600 focus:ring-red-500/60'
-                    : 'border-neutral-700 focus:ring-indigo-500/60'
-                } bg-neutral-950 px-3 py-2.5 pr-10 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 transition-colors`}
-              />
-              {pwTouched && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  {pwValid ? (
-                    <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-neutral-200" htmlFor="password">
+                    Password
+                  </label>
+                  <Link
+                    to={`/auth/forgetpassword?next=${encodeURIComponent(next)}${email ? `&email=${encodeURIComponent(email)}` : ''}`}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    value={pw}
+                    onChange={(e) => {
+                      setPw(e.target.value);
+                      if (!pwTouched) setPwTouched(true);
+                    }}
+                    onBlur={() => setPwTouched(true)}
+                    placeholder="••••••••"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    className={`w-full rounded-xl border-2 ${
+                      pwTouched 
+                        ? pwValid 
+                          ? 'border-green-500/50 bg-green-500/5 focus:border-green-400' 
+                          : 'border-red-500/50 bg-red-500/5 focus:border-red-400'
+                        : 'border-neutral-700 bg-neutral-950/50 focus:border-indigo-500'
+                    } px-4 py-3.5 pr-12 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 transition-all duration-200`}
+                  />
+                  {pwTouched && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      {pwValid ? (
+                        <div className="w-6 h-6 rounded-full bg-green-500 grid place-items-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-red-500 grid place-items-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
 
-          {/* Forgot password link */}
-          <div className="flex justify-end">
-            <Link
-              to={`/auth/forgetpassword?next=${encodeURIComponent(next)}${email ? `&email=${encodeURIComponent(email)}` : ''}`}
-              className="text-xs text-indigo-400 hover:underline"
+              <button
+                type="submit"
+                disabled={loading || !emailValid || !pwValid}
+                className="relative w-full group"
+              >
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 opacity-100 group-hover:opacity-90 group-disabled:opacity-50 transition-opacity" />
+                <div className="relative rounded-xl bg-gradient-to-r from-indigo-600 to-violet-700 px-6 py-4 text-white font-semibold text-lg shadow-xl hover:shadow-2xl disabled:cursor-not-allowed transition-all duration-200 hover:-translate-y-0.5">
+                  {loading ? (
+                    <div className="flex items-center justify-center gap-3">
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Signing in...
+                    </div>
+                  ) : (
+                    'Sign in'
+                  )}
+                </div>
+              </button>
+            </form>
+
+            {/* Divider */}
+            <div className="my-8 flex items-center gap-4">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-neutral-700 to-transparent" />
+              <span className="text-xs text-neutral-500 font-medium uppercase tracking-wider">or continue with</span>
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-neutral-700 to-transparent" />
+            </div>
+
+            {/* Google button */}
+            <button
+              onClick={onGoogleClick}
+              disabled={loading}
+              className="relative w-full group"
             >
-              Forgot password?
-            </Link>
+              <div className="absolute inset-0 rounded-xl bg-white/10 group-hover:bg-white/20 transition-colors" />
+              <div className="relative flex items-center justify-center gap-3 rounded-xl border-2 border-neutral-700 bg-neutral-900/50 px-6 py-4 font-semibold hover:border-neutral-600 hover:bg-neutral-900 disabled:opacity-60 transition-all duration-200">
+                <svg width="20" height="20" viewBox="0 0 533.5 544.3">
+                  <path fill="#EA4335" d="M533.5 278.4c0-18.6-1.5-37-4.7-54.8H272.1v103.8h147c-6.3 34-25 62.8-53.6 82.1v68.1h86.5c50.6-46.5 81.5-115.1 81.5-199.2z"/>
+                  <path fill="#34A853" d="M272.1 544.3c73.7 0 135.7-24.4 180.9-66.5l-86.5-68.1c-24 16.1-54.7 25.7-94.4 25.7-72.6 0-134.2-49-156.3-115.1H26.3v72.2c45.3 89.9 138.4 151.8 245.8 151.8z"/>
+                  <path fill="#4A90E2" d="M115.8 320.3c-10.4-30.9-10.4-64.4 0-95.3V152.8H26.3c-44.7 88.9-44.7 195.5 0 284.4l89.5-72.2z"/>
+                  <path fill="#FBBC05" d="M272.1 106.9c39.9-.6 78.1 14 107.4 41.1l80.2-80.2C408.1 24 345.8 0 272.1 0 164.7 0 71.7 61.9 26.3 151.8l89.5 72.2c22-66.1 83.6-117.1 156.3-117.1z"/>
+                </svg>
+                <span className="text-white">Continue with Google</span>
+              </div>
+            </button>
+
+            {/* Error message */}
+            {msg && (
+              <div className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+                <p className="text-sm text-red-300 flex items-start gap-2">
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {msg}
+                </p>
+              </div>
+            )}
+
+            {/* Legal note */}
+            <p className="mt-8 text-xs text-neutral-500 text-center leading-relaxed">
+              By continuing, you agree to the{' '}
+              <Link to="/terms" className="text-neutral-400 hover:text-neutral-300 underline">Terms</Link>
+              {' '}and acknowledge the{' '}
+              <Link to="/privacy" className="text-neutral-400 hover:text-neutral-300 underline">Privacy Policy</Link>.
+            </p>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-
-        {/* Divider */}
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-neutral-800" />
-          <span className="text-xs text-neutral-500">or</span>
-          <div className="h-px flex-1 bg-neutral-800" />
         </div>
-
-        {/* Secondary: Google with logo */}
-        <button
-          onClick={onGoogleClick}
-          disabled={loading}
-          className="w-full inline-flex items-center justify-center gap-3 rounded-lg bg-white text-black px-4 py-2.5 text-sm font-semibold hover:bg-white/90 disabled:opacity-60 transition-colors"
-          aria-label="Continue with Google"
-        >
-          {/* Google 'G' logo (SVG) */}
-          <svg width="18" height="18" viewBox="0 0 533.5 544.3" aria-hidden="true">
-            <path fill="#EA4335" d="M533.5 278.4c0-18.6-1.5-37-4.7-54.8H272.1v103.8h147c-6.3 34-25 62.8-53.6 82.1v68.1h86.5c50.6-46.5 81.5-115.1 81.5-199.2z"/>
-            <path fill="#34A853" d="M272.1 544.3c73.7 0 135.7-24.4 180.9-66.5l-86.5-68.1c-24 16.1-54.7 25.7-94.4 25.7-72.6 0-134.2-49-156.3-115.1H26.3v72.2c45.3 89.9 138.4 151.8 245.8 151.8z"/>
-            <path fill="#4A90E2" d="M115.8 320.3c-10.4-30.9-10.4-64.4 0-95.3V152.8H26.3c-44.7 88.9-44.7 195.5 0 284.4l89.5-72.2z"/>
-            <path fill="#FBBC05" d="M272.1 106.9c39.9-.6 78.1 14 107.4 41.1l80.2-80.2C408.1 24 345.8 0 272.1 0 164.7 0 71.7 61.9 26.3 151.8l89.5 72.2c22-66.1 83.6-117.1 156.3-117.1z"/>
-          </svg>
-          Continue with Google
-        </button>
-
-        {/* Inline feedback */}
-        {msg && <p className="mt-4 text-sm text-red-400">{msg}</p>}
-
-        {/* Legal note */}
-        <p className="mt-6 text-xs text-neutral-500 text-center">
-          By continuing, you agree to the Terms and acknowledge the Privacy Policy.
-        </p>
       </div>
 
       {/* Small pop-up when redirected from a protected page */}
       {showGuardModal && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm p-4"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setShowGuardModal(false);
           }}
@@ -304,18 +360,29 @@ export default function SignIn() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="login-required-title"
-            className="w-full max-w-md rounded-2xl border border-neutral-700 bg-neutral-900 p-6 shadow-xl"
+            className="w-full max-w-md rounded-2xl border border-neutral-700/50 bg-gradient-to-b from-neutral-900 to-neutral-950 p-8 shadow-2xl"
           >
-            <h2 id="login-required-title" className="text-xl font-semibold">Please sign in</h2>
-            <p className="mt-2 text-sm text-neutral-300">
-              You need to be signed in to view that page.
-            </p>
-            <div className="mt-5 flex justify-end">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-indigo-500/20 grid place-items-center flex-shrink-0">
+                <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h2 id="login-required-title" className="text-xl font-semibold text-white">
+                  Sign in required
+                </h2>
+                <p className="mt-2 text-sm text-neutral-300">
+                  You need to be signed in to access that page. Please sign in to continue.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setShowGuardModal(false)}
-                className="rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm font-medium text-neutral-200 hover:bg-neutral-800 transition-colors"
+                className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors"
               >
-                Okay
+                Got it
               </button>
             </div>
           </div>

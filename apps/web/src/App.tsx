@@ -1,9 +1,10 @@
 // apps/web/src/App.tsx
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import RequireAuth from "./components/RequireAuth";
 
-import Home from "./pages/Home";
+import RootRedirect from "./components/RootRedirect";
+import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -18,14 +19,11 @@ import AccountPage from "./pages/onboarding/account/AccountPage";
 import StripePage from "./pages/onboarding/account/Stripe";
 
 //Product Page
-// import NewProduct from "./pages/products/NewProduct";
 import ProductPage from './pages/products/Product';
 import Success from "./pages/products/Success";
-// import EditProduct from './pages/products/EditProduct';
 import Support from "./pages/Support";
 import ProductPagePreview from "./pages/products/product page components/ProductPagePreview";
 import DeliveryBuilder from "./pages/products/DeliveryBuilder";
-
 
 //Sales Page
 import SalesPage from "./pages/products/SalesPage";
@@ -37,25 +35,34 @@ export default function App() {
       
       <Route path="/p/:userId/:productId" element={<ProductPage />} />
       <Route path="/success" element={<Success />} />
-      {/* Preview Routes */}
 
       {/* Protected area: shows header/nav via AppLayout */}
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
-        <Route index element={<Home />} />
+        {/* Root redirect - smart routing based on user state */}
+        <Route index element={<RootRedirect />} />
+        
+        {/* Onboarding route - for new users or users in progress */}
+        <Route path="onboarding" element={<Onboarding />} />
+        
+        {/* Dashboard route - for users with products */}
         <Route path="dashboard" element={<Dashboard />} />
+        
         <Route path="support" element={<Support />} />
-        {/* Preview Routes - MOVE HERE */}
+        
+        {/* Preview Routes */}
         <Route path="preview/sales/:productId" element={<SalesPagePreview />} />
         <Route path="preview/product/:productId" element={<ProductPagePreview />} />
+        
         <Route path="products">
           <Route path="sales" element={<SalesPage />} />
           <Route path=":productId/landing/edit" element={<SalesPage />} />  
           <Route path=":productId/success" element={<Success />} /> 
           <Route path=":productId/delivery" element={<DeliveryBuilder />} />
         </Route>
+        
         <Route path="settings" element={<Settings />} />
 
-        {/* Onboarding inside the layout → header visible */}
+        {/* Onboarding steps inside the layout */}
         <Route path="onboarding">
           <Route path="account" element={<AccountPage />} /> 
           <Route path="stripe" element={<StripePage />} /> 
