@@ -21,12 +21,26 @@ export default function ForgetPassword() {
   const [msg, setMsg] = useState<string | null>(null);    // success or info message
   const [err, setErr] = useState<string | null>(null);    // error message (only for invalid inputs)
 
+  // Validation state
+  const [emailTouched, setEmailTouched] = useState(false);
+
   // Optional: prefill from ?email=alice@site.com
   const [params] = useSearchParams();
   useEffect(() => {
     const prefill = params.get('email');
-    if (prefill) setEmail(prefill);
+    if (prefill) {
+      setEmail(prefill);
+      setEmailTouched(true);
+    }
   }, [params]);
+
+  // Validation helper
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const emailValid = isValidEmail(email);
 
   /* Handle form submit:
      - Ask Firebase to send a reset email.
@@ -62,53 +76,96 @@ export default function ForgetPassword() {
   /* UI */
   return (
     <div className="min-h-screen bg-[#0B0B0D] text-neutral-100 grid place-items-center p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900/70 p-6 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)]">
-        <h1 className="text-xl font-semibold">Forgot your password?</h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          Enter your email. We’ll send a link to reset it.
+      <div className="w-full max-w-lg rounded-2xl border border-neutral-800 bg-neutral-900/70 p-8 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)]">
+        <h1 className="text-2xl font-semibold">Forgot your password?</h1>
+        <p className="mt-2 text-sm text-neutral-400">
+          Enter your email and we'll send you a link to reset your password.
         </p>
 
-        <form onSubmit={onSubmit} className="mt-5 space-y-3">
-          <label className="block text-sm text-neutral-300" htmlFor="email">Email</label>
-          <input
-            id="email"
-            name="email"
-            value={email}
-            onChange={(e)=>setEmail(e.target.value)}
-            placeholder="you@business.com"
-            type="email"
-            autoComplete="email"
-            required
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
-          />
+        <form onSubmit={onSubmit} className="mt-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-300 mb-1.5" htmlFor="email">Email</label>
+            <div className="relative">
+              <input
+                id="email"
+                name="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (!emailTouched) setEmailTouched(true);
+                }}
+                onBlur={() => setEmailTouched(true)}
+                placeholder="you@business.com"
+                type="email"
+                autoComplete="email"
+                required
+                className={`w-full rounded-lg border ${
+                  emailTouched 
+                    ? emailValid 
+                      ? 'border-green-600 focus:ring-green-500/60' 
+                      : 'border-red-600 focus:ring-red-500/60'
+                    : 'border-neutral-700 focus:ring-indigo-500/60'
+                } bg-neutral-950 px-3 py-2.5 pr-10 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 transition-colors`}
+              />
+              {emailTouched && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {emailValid ? (
+                    <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </div>
+              )}
+            </div>
+            {emailTouched && !emailValid && (
+              <p className="mt-1.5 text-xs text-red-400">Enter a valid email address</p>
+            )}
+          </div>
 
           <button
             type="submit"
-            disabled={loading || !email}
-            className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+            disabled={loading || !emailValid}
+            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? 'Sending…' : 'Send reset link'}
           </button>
 
           {/* Inline messages */}
-          {msg && <p className="mt-3 text-sm text-emerald-400">{msg}</p>}
-          {err && <p className="mt-2 text-sm text-red-400">{err}</p>}
+          {msg && (
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <p className="text-sm text-emerald-400">{msg}</p>
+            </div>
+          )}
+          {err && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+              <p className="text-sm text-red-400">{err}</p>
+            </div>
+          )}
         </form>
 
         {/* Helpful links */}
-        <div className="mt-5 flex flex-col gap-2 text-sm">
-          <Link to="/auth/signin" className="text-indigo-400 hover:underline">
-            Back to Sign in
+        <div className="mt-6 pt-6 border-t border-neutral-800 flex flex-col gap-3 text-sm">
+          <Link to="/auth/signin" className="text-indigo-400 hover:underline transition-colors">
+            ← Back to Sign in
           </Link>
-          <Link to={`/auth/signup${email ? `?email=${encodeURIComponent(email)}` : ''}`} className="text-indigo-400 hover:underline">
-            Create a new account
+          <Link 
+            to={`/auth/signup${email ? `?email=${encodeURIComponent(email)}` : ''}`} 
+            className="text-neutral-400 hover:text-indigo-400 transition-colors"
+          >
+            Don't have an account? Create one
           </Link>
         </div>
 
         {/* Small note */}
-        <p className="mt-4 text-xs text-neutral-500">
-          Didn’t get the email? Check spam or try again.
-        </p>
+        <div className="mt-6 p-3 rounded-lg bg-neutral-800/30">
+          <p className="text-xs text-neutral-400">
+            💡 <strong>Tip:</strong> Didn't receive the email? Check your spam folder or try again in a few minutes.
+          </p>
+        </div>
       </div>
     </div>
   );

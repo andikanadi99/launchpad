@@ -7,7 +7,8 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithEmailAndPassword,
-  fetchSignInMethodsForEmail,
+  setPersistence,
+  browserLocalPersistence,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -43,17 +44,36 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Validation states
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [pwTouched, setPwTouched] = useState(false);
+
   // If user was redirected from a protected page, show a small pop-up
   const [showGuardModal, setShowGuardModal] = useState(false);
 
-  // Where to go after sign-in (defaults to onboarding)
+  // Where to go after sign-in (defaults to dashboard)
   const next = params.get('next') || '/';
 
   useEffect(() => {
     if (params.get('reason') === 'protected') {
       setShowGuardModal(true);
     }
+    // Prefill email if provided
+    const prefill = params.get('email');
+    if (prefill) {
+      setEmail(prefill);
+      setEmailTouched(true);
+    }
   }, [params]);
+
+  // Validation helpers
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const emailValid = isValidEmail(email);
+  const pwValid = pw.length >= 6;
 
   /* After successful auth:
      1) Ensure users/{uid} exists (or update lastLoginAt)
@@ -75,6 +95,7 @@ export default function SignIn() {
     setLoading(true);
     setMsg(null);
     try {
+      await setPersistence(auth, browserLocalPersistence);
       await signInWithEmailAndPassword(auth, email, pw);
       await afterAuth();
     } catch (e: any) {
@@ -105,6 +126,7 @@ export default function SignIn() {
     setLoading(true);
     setMsg(null);
     try {
+      await setPersistence(auth, browserLocalPersistence);
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
@@ -120,9 +142,9 @@ export default function SignIn() {
 
   return (
     <div className="min-h-screen bg-[#0B0B0D] text-neutral-100 grid place-items-center p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900/70 p-6 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)]">
-        <h1 className="text-xl font-semibold">Sign in to LaunchPad</h1>
-        <p className="mt-1 text-sm text-neutral-400">
+      <div className="w-full max-w-lg rounded-2xl border border-neutral-800 bg-neutral-900/70 p-8 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)]">
+        <h1 className="text-2xl font-semibold">Sign in to LaunchPad</h1>
+        <p className="mt-2 text-sm text-neutral-400">
           New here?{' '}
           <Link
             to={`/auth/signup?next=${encodeURIComponent(next)}${email ? `&email=${encodeURIComponent(email)}` : ''}`}
@@ -134,39 +156,92 @@ export default function SignIn() {
         </p>
 
         {/* Primary: Email + Password */}
-        <form onSubmit={onEmailSubmit} className="mt-5 space-y-3">
-          <label className="block text-sm text-neutral-300">Email</label>
-          <input
-            value={email}
-            onChange={(e)=>setEmail(e.target.value)}
-            placeholder="you@business.com"
-            type="email"
-            autoComplete="email"
-            required
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
-          />
-          <label className="block text-sm text-neutral-300">Password</label>
-          <input
-            value={pw}
-            onChange={(e)=>setPw(e.target.value)}
-            placeholder="••••••••"
-            type="password"
-            autoComplete="current-password"
-            required
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
-          />
+        <form onSubmit={onEmailSubmit} className="mt-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-300 mb-1.5" htmlFor="email">Email</label>
+            <div className="relative">
+              <input
+                id="email"
+                name="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (!emailTouched) setEmailTouched(true);
+                }}
+                onBlur={() => setEmailTouched(true)}
+                placeholder="you@business.com"
+                type="email"
+                autoComplete="email"
+                required
+                className={`w-full rounded-lg border ${
+                  emailTouched 
+                    ? emailValid 
+                      ? 'border-green-600 focus:ring-green-500/60' 
+                      : 'border-red-600 focus:ring-red-500/60'
+                    : 'border-neutral-700 focus:ring-indigo-500/60'
+                } bg-neutral-950 px-3 py-2.5 pr-10 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 transition-colors`}
+              />
+              {emailTouched && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {emailValid ? (
+                    <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </div>
+              )}
+            </div>
+            {emailTouched && !emailValid && (
+              <p className="mt-1.5 text-xs text-red-400">Enter a valid email address</p>
+            )}
+          </div>
 
+          <div>
+            <label className="block text-sm font-medium text-neutral-300 mb-1.5" htmlFor="password">Password</label>
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                value={pw}
+                onChange={(e) => {
+                  setPw(e.target.value);
+                  if (!pwTouched) setPwTouched(true);
+                }}
+                onBlur={() => setPwTouched(true)}
+                placeholder="••••••••"
+                type="password"
+                autoComplete="current-password"
+                required
+                className={`w-full rounded-lg border ${
+                  pwTouched 
+                    ? pwValid 
+                      ? 'border-green-600 focus:ring-green-500/60' 
+                      : 'border-red-600 focus:ring-red-500/60'
+                    : 'border-neutral-700 focus:ring-indigo-500/60'
+                } bg-neutral-950 px-3 py-2.5 pr-10 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 transition-colors`}
+              />
+              {pwTouched && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {pwValid ? (
+                    <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
-          >
-            {loading ? 'Please wait…' : 'Continue'}
-          </button>
-
-          {/* Forgot password */}
-          <div className="mt-1 flex justify-end">
+          {/* Forgot password link */}
+          <div className="flex justify-end">
             <Link
               to={`/auth/forgetpassword?next=${encodeURIComponent(next)}${email ? `&email=${encodeURIComponent(email)}` : ''}`}
               className="text-xs text-indigo-400 hover:underline"
@@ -175,21 +250,17 @@ export default function SignIn() {
             </Link>
           </div>
 
-          {/* Helper link */}
-          <div className="mt-2 text-xs text-neutral-500">
-            Don’t have an account?{' '}
-            <Link
-              to={`/auth/signup?next=${encodeURIComponent(next)}${email ? `&email=${encodeURIComponent(email)}` : ''}`}
-              className="text-indigo-400 hover:underline"
-            >
-              Create one
-            </Link>
-            .
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
         </form>
 
         {/* Divider */}
-        <div className="my-5 flex items-center gap-3">
+        <div className="my-6 flex items-center gap-3">
           <div className="h-px flex-1 bg-neutral-800" />
           <span className="text-xs text-neutral-500">or</span>
           <div className="h-px flex-1 bg-neutral-800" />
@@ -199,7 +270,7 @@ export default function SignIn() {
         <button
           onClick={onGoogleClick}
           disabled={loading}
-          className="w-full inline-flex items-center justify-center gap-3 rounded-lg bg-white text-black px-3 py-2 text-sm font-medium hover:bg-white/90 disabled:opacity-60"
+          className="w-full inline-flex items-center justify-center gap-3 rounded-lg bg-white text-black px-4 py-2.5 text-sm font-semibold hover:bg-white/90 disabled:opacity-60 transition-colors"
           aria-label="Continue with Google"
         >
           {/* Google 'G' logo (SVG) */}
@@ -212,9 +283,11 @@ export default function SignIn() {
           Continue with Google
         </button>
 
+        {/* Inline feedback */}
         {msg && <p className="mt-4 text-sm text-red-400">{msg}</p>}
 
-        <p className="mt-4 text-xs text-neutral-500">
+        {/* Legal note */}
+        <p className="mt-6 text-xs text-neutral-500 text-center">
           By continuing, you agree to the Terms and acknowledge the Privacy Policy.
         </p>
       </div>
@@ -231,16 +304,16 @@ export default function SignIn() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="login-required-title"
-            className="w-full max-w-sm rounded-2xl border border-neutral-700 bg-neutral-900 p-5 shadow-xl"
+            className="w-full max-w-md rounded-2xl border border-neutral-700 bg-neutral-900 p-6 shadow-xl"
           >
-            <h2 id="login-required-title" className="text-lg font-semibold">Please sign in</h2>
+            <h2 id="login-required-title" className="text-xl font-semibold">Please sign in</h2>
             <p className="mt-2 text-sm text-neutral-300">
               You need to be signed in to view that page.
             </p>
-            <div className="mt-4 flex justify-end">
+            <div className="mt-5 flex justify-end">
               <button
                 onClick={() => setShowGuardModal(false)}
-                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
+                className="rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm font-medium text-neutral-200 hover:bg-neutral-800 transition-colors"
               >
                 Okay
               </button>
