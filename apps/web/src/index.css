@@ -2,17 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Optional: minimal base tokens for a dark-first theme */
+/* ============================================
+   THEME SYSTEM - Light & Dark Mode Support
+   ============================================ */
 @layer base {
-  /* Dark background + readable text */
+  /* Default (Dark Mode) - Purple theme */
   :root {
-    /* tweak these to taste */
-    --bg: 222 47% 6%;     /* deep navy/ink */
-    --fg: 210 20% 96%;    /* near-white */
+    --bg: 270 50% 8%;     /* deep purple/ink */
+    --fg: 270 20% 96%;    /* near-white with purple tint */
+  }
+
+  /* Light Mode */
+  :root.light {
+    --bg: 0 0% 100%;      /* pure white */
+    --fg: 270 47% 11%;    /* dark text with purple tint */
+  }
+
+  /* Ensure dark class also works (for compatibility) */
+  :root.dark {
+    --bg: 270 50% 8%;     /* deep purple/ink */
+    --fg: 270 20% 96%;    /* near-white with purple tint */
   }
 
   body {
     @apply bg-[hsl(var(--bg))] text-[hsl(var(--fg))] antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 }
 
@@ -27,4 +41,3 @@
     @apply py-6 lg:py-8;
   }
 }
-

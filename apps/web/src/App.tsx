@@ -2,6 +2,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import RequireAuth from "./components/RequireAuth";
+import { ThemeProvider } from "./components/ThemeContext"; 
 
 import RootRedirect from "./components/RootRedirect";
 import Onboarding from "./pages/Onboarding";
@@ -31,6 +32,7 @@ import SalesPagePreview from "./pages/products/sales page components/SalesPagePr
 
 export default function App() {
   return (
+    <ThemeProvider>
     <Routes>
       
       <Route path="/p/:userId/:productId" element={<ProductPage />} />
@@ -79,5 +81,6 @@ export default function App() {
       {/* 404 */}
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </ThemeProvider>
   );
 }
