@@ -81,11 +81,15 @@ export default function Onboarding() {
         onboardingComplete: true,
       });
       
-      // If they already have a product, go to edit it
-      if (productStatus.productId) {
+      // Route based on selected path
+      if (selectedPath === 'guided') {
+        // Guided path - go to Product Idea Co-Pilot
+        nav('/product-idea-copilot');
+      } else if (productStatus.productId) {
+        // Fast track with existing product - edit it
         nav(`/products/${productStatus.productId}/landing/edit`);
       } else {
-        // Otherwise create new
+        // Fast track - create new
         nav('/products/sales');
       }
     } catch (error) {

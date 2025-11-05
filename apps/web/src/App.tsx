@@ -30,6 +30,9 @@ import DeliveryBuilder from "./pages/products/DeliveryBuilder";
 import SalesPage from "./pages/products/SalesPage";
 import SalesPagePreview from "./pages/products/sales page components/SalesPagePreview";
 
+// Product Idea Generator
+import ProductIdeaGenerator from "./pages/product-idea/ProductIdeaGenerator";
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -45,6 +48,9 @@ export default function App() {
         
         {/* Onboarding route - for new users or users in progress */}
         <Route path="onboarding" element={<Onboarding />} />
+        
+        {/* Product Idea Co-Pilot */}
+        <Route path="product-idea-copilot" element={<ProductIdeaGenerator />} />
         
         {/* Dashboard route - for users with products */}
         <Route path="dashboard" element={<Dashboard />} />
