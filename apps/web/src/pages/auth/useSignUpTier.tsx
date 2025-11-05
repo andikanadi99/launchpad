@@ -202,8 +202,8 @@ async function getAutoAssignedTier(): Promise<TierInfo> {
           spotsLeft: 10 - foundingBetaCount,
           benefits: [
             'Free access forever',
-            'AI Product Idea Generator',
-            'AI Sales Copywriter',
+            'Product Idea Co-Pilot',
+            'Guided Sales Copywriter',
             'Personal Sales Page Review',
             'Launch Day Promotion',
             'Priority support'
@@ -228,8 +228,8 @@ async function getAutoAssignedTier(): Promise<TierInfo> {
           spotsLeft: 50 - foundingMemberCount,
           benefits: [
             '$29/month locked in forever',
-            'AI Product Idea Generator',
-            'AI Sales Copywriter',
+            'Product Idea Co-Pilot',
+            'Guided Sales Copywriter',
             'Personal Sales Page Review',
             'Launch Day Promotion',
             'Priority support'
@@ -257,7 +257,7 @@ async function getAutoAssignedTier(): Promise<TierInfo> {
         'Product delivery system',
         'Custom URLs',
         'Unlimited products',
-        'AI Sales Copywriter'
+        'Guided Sales Copywriter'
       ],
       badge: {
         emoji: '✨',

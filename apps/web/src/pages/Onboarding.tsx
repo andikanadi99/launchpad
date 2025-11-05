@@ -29,11 +29,6 @@ export default function Onboarding() {
         const data = userSnap.data();
         setUserData(data);
         
-        // If they already completed onboarding, redirect to dashboard
-        if (data.onboardingComplete) {
-          nav('/dashboard', { replace: true });
-          return;
-        }
         
         // If they already selected a path, show it
         if (data.onboardingPath) {
@@ -207,7 +202,7 @@ export default function Onboarding() {
                 <div className="space-y-2.5 mb-6">
                   <div className="flex items-start gap-2.5 text-sm text-neutral-600 dark:text-neutral-400">
                     <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                    <span>AI product idea generator</span>
+                    <span>Product AI Co-Pilot</span>
                   </div>
                   <div className="flex items-start gap-2.5 text-sm text-neutral-600 dark:text-neutral-400">
                     <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
@@ -249,21 +244,36 @@ export default function Onboarding() {
                   )}
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-neutral-900 dark:text-white">
-                    {selectedPath === 'fast' ? 'Fast Track' : 'Guided Journey'}
-                  </h3>
-                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                    Great choice! Here's what happens next:
-                  </p>
+                  <h3 className="text-xl font-bold mb-2">Guided Journey</h3>
+                  <p className="text-neutral-400 mb-6">Let's discover your perfect product idea together! Here's what happens next:</p>
                 </div>
               </div>
 
               <div className="space-y-4 mb-8">
-                <StepItem number={1} text="Fill in your product details (name, price, description)" />
-                <StepItem number={2} text="Choose your value proposition and benefits" />
-                <StepItem number={3} text="Add visuals and customize the design" />
-                <StepItem number={4} text="Preview your page and make final tweaks" />
-                <StepItem number={5} text="Save as draft (publish when ready to accept payments)" />
+                <StepItem 
+                  number={1} 
+                  text="Product Idea Co-Pilot - Discover your winning product idea" 
+                />
+                <StepItem 
+                  number={2} 
+                  text="Fill in your product details (name, price, description)" 
+                />
+                <StepItem 
+                  number={3} 
+                  text="Choose your value proposition and benefits with Guided Sales Copywriter" 
+                />
+                <StepItem 
+                  number={4} 
+                  text="Add visuals and customize the design" 
+                />
+                <StepItem 
+                  number={5} 
+                  text="Preview your page and make final tweaks" 
+                />
+                <StepItem 
+                  number={6} 
+                  text="Save as draft (publish when ready to accept payments)" 
+                />
               </div>
 
               <button

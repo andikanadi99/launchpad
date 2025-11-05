@@ -23,7 +23,7 @@ export default function AppLayout() {
           {/* Tabs */}
           <nav className="flex items-center gap-1">
             <NavLink to="/dashboard" className={tabClass}>Dashboard</NavLink>
-            <NavLink to="/products/sales" className={tabClass}>New Product</NavLink>
+            <NavLink to="/onboarding" className={tabClass}>New Product</NavLink>
             <NavLink to="/settings" className={tabClass}>Settings</NavLink>
           </nav>
 

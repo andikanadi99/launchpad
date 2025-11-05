@@ -28,7 +28,7 @@ export interface UserDocument {
   firstSalesPageDate: any | null; // NEW: When they created their first page
   lastSalesPageDate: any | null; // NEW: When they last edited a sales page
   onboardingPath: 'fast' | 'guided' | null; // NEW: Which onboarding path they chose
-  usedProductQuiz: boolean; // NEW: Whether they used the AI product idea generator
+  usedProductQuiz: boolean; // NEW: Whether they used the Product Idea Co-Pilot
   leadSource: string | null; // NEW: Where they came from (utm_source, referrer, etc.)
   
   // === CONVERSION TRACKING (NEW) ===
