@@ -29,6 +29,7 @@ export interface QuestionData {
   helpText?: string;
   examples?: string[];
   showAIHelper?: boolean;
+  smartSuggestion?: boolean; 
 }
 
 interface QuestionStepProps {

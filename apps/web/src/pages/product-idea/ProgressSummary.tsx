@@ -41,7 +41,15 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
       'niche_expertise': 'Niche Expertise'
     };
     
-    return skills.map(skill => skillMap[skill] || skill);
+    return skills.map(skill => {
+      // Handle object format {value, custom}
+      if (typeof skill === 'object' && skill !== null) {
+        const label = skillMap[skill.value] || skill.value;
+        return skill.custom ? `${label}: ${skill.custom}` : label;
+      }
+      // Handle string format
+      return skillMap[skill] || skill;
+    });
   };
 
   // Helper to get audience labels
@@ -128,7 +136,7 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                   <div className="space-y-1">
                     {getSkillLabels(answers.craft_skills).map((skill, idx) => (
                       <div key={idx} className="text-sm text-neutral-600 dark:text-neutral-400 pl-6">
-                        • {skill}
+                        - {skill}
                       </div>
                     ))}
                   </div>
@@ -169,12 +177,12 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     Your Focus
                   </h3>
                   <div className="space-y-1 text-sm text-neutral-600 dark:text-neutral-400 pl-6">
-                    <div>• Approach: <span className="font-medium">{answers.approach_choice === 'architect' ? 'Architect (one niche)' : 'Archaeologist (explore)'}</span></div>
+                    <div>- Approach: <span className="font-medium">{answers.approach_choice === 'architect' ? 'Architect (one niche)' : 'Archaeologist (explore)'}</span></div>
                     {answers.target_who && (
-                      <div>• Target: <span className="font-medium">{getAudienceLabels(answers.target_who)}</span></div>
+                      <div>- Target: <span className="font-medium">{getAudienceLabels(answers.target_who)}</span></div>
                     )}
                     {answers.target_outcome && (
-                      <div>• Outcome: <span className="font-medium">"{answers.target_outcome}"</span></div>
+                      <div>- Outcome: <span className="font-medium">"{answers.target_outcome}"</span></div>
                     )}
                   </div>
                 </div>
@@ -203,31 +211,31 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-600 dark:text-neutral-400">Like it:</span>
                       {answers.do_i_like_it === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Yes</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">âœ… Yes</span>
                       ) : answers.do_i_like_it === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">🟡 Maybe</span>
+                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">ðŸŸ¡ Maybe</span>
                       ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">❌ No</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">âŒ No</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-600 dark:text-neutral-400">Can help:</span>
                       {answers.can_i_help === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Yes</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">âœ… Yes</span>
                       ) : answers.can_i_help === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">🟡 Maybe</span>
+                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">ðŸŸ¡ Maybe</span>
                       ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">❌ No</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">âŒ No</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-600 dark:text-neutral-400">Will pay:</span>
                       {answers.will_they_pay === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Yes</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">âœ… Yes</span>
                       ) : answers.will_they_pay === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">🟡 Maybe</span>
+                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">ðŸŸ¡ Maybe</span>
                       ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">❌ No</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">âŒ No</span>
                       )}
                     </div>
                   </div>
@@ -236,9 +244,9 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     validationScore >= 2 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
                     'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
                   }`}>
-                    {validationScore >= 3 ? '🟢 Green Light' : 
-                     validationScore >= 2 ? '🟡 Yellow Light' : 
-                     '🔴 Red Light'}
+                    {validationScore >= 3 ? 'ðŸŸ¢ Green Light' : 
+                     validationScore >= 2 ? 'ðŸŸ¡ Yellow Light' : 
+                     'ðŸ”´ Red Light'}
                   </div>
                 </div>
               )}

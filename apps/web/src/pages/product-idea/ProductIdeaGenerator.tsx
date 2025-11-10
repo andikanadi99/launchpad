@@ -25,7 +25,8 @@ import {
   Trophy,
   Star,
   Award,
-  Briefcase
+  Briefcase,
+  Sparkles
 } from 'lucide-react';
 
 import ProgressBar from './ProgressBar';
@@ -55,6 +56,132 @@ interface GeneratedIdea {
   guarantee: string;
   whyItFits: string;
 }
+
+// ========================================
+// SMART SUGGESTION GENERATOR
+// ========================================
+const generateSmartSuggestion = (questionId: string, answers: Answers): string => {
+  switch(questionId) {
+    case 'confidence_test':
+      // Generate based on skills and requests
+      const skills = answers.craft_skills || [];
+      const requests = answers.actual_requests || '';
+      
+      // Return empty if prerequisites not met
+      if (!skills.length || !requests) {
+        return '';
+      }
+      // Extract key skills
+      const skillLabels: string[] = [];
+      skills.forEach((skill: any) => {
+        const value = typeof skill === 'object' ? skill.value : skill;
+        const custom = typeof skill === 'object' ? skill.custom : null;
+        
+        if (value === 'professional_current') skillLabels.push('current job expertise');
+        if (value === 'professional_past') skillLabels.push('past work experience');
+        if (value === 'technical_tools') skillLabels.push('software and tools training');
+        if (value === 'personal_transformation') skillLabels.push('transformation coaching');
+        if (value === 'creative_hobbies') skillLabels.push('creative skills teaching');
+        if (value === 'life_skills') skillLabels.push('life skills consulting');
+        if (value === 'academic_knowledge') skillLabels.push('tutoring and test prep');
+        if (value === 'niche_expertise' && custom) skillLabels.push(custom.toLowerCase());
+      });
+      
+      // Extract key phrases from requests
+      const requestKeywords = requests.toLowerCase().match(/(?:help with|ask for|want|need|asks?)\s+([^,.]+)/g) || [];
+      const specificRequests = requestKeywords.slice(0, 2).map(r => r.replace(/(?:help with|ask for|want|need|asks?)\s+/, '').trim());
+      
+      // Build suggestion
+      if (skillLabels.length > 0 && specificRequests.length > 0) {
+        return `I could charge $50/hour for ${specificRequests[0]}, leveraging my ${skillLabels[0]}. Based on what people already ask me for, I could also offer ${specificRequests[1] || 'consulting services'} and training sessions.`;
+      } else if (skillLabels.length > 0) {
+        return `I could charge $50/hour for ${skillLabels[0]}, providing consulting and implementation support to help clients achieve quick wins.`;
+      }
+      return '';
+      
+    case 'dream_outcome':
+      // Generate based on niche and validation
+      const who = answers.target_who;
+      const outcome = answers.target_outcome || '';
+
+      // Return empty if prerequisites not met
+      if (!who || !outcome) {
+        return '';
+  }
+      
+      // Build transformation narrative
+      if (outcome) {
+        const painPoint = outcome.includes('save') ? 'wasting time and resources' : 
+                         outcome.includes('get') || outcome.includes('build') ? 'struggling to achieve results' :
+                         outcome.includes('pass') ? 'feeling overwhelmed and underprepared' :
+                         outcome.includes('launch') ? 'stuck in analysis paralysis' :
+                         outcome.includes('automate') ? 'drowning in manual tasks' :
+                         'facing constant challenges';
+                         
+        const biggerWin = outcome.includes('save') ? 'having automated systems that run without them' :
+                         outcome.includes('get') || outcome.includes('build') ? 'building sustainable, scalable success' :
+                         outcome.includes('pass') ? 'becoming recognized experts in their field' :
+                         outcome.includes('launch') ? 'running a profitable business on autopilot' :
+                         outcome.includes('automate') ? 'focusing on strategy while systems handle execution' :
+                         'achieving industry leadership';
+        
+        return `They transform from ${painPoint} to not just ${outcome.toLowerCase()}, but ultimately ${biggerWin}. They go from stressed and reactive to confident and proactive, with measurable results they can show to stakeholders. Their success becomes repeatable and scalable.`;
+      }
+      return '';
+      
+    case 'value_stack':
+      // Generate based on all previous answers
+      const userSkills = answers.craft_skills || [];
+      const targetOutcome = answers.target_outcome || '';
+
+      if (!userSkills.length) {
+        return '';
+      }
+      const bonuses: string[] = [];
+      
+      // Add skill-specific bonuses
+      if (userSkills.some((s: any) => {
+        const val = typeof s === 'object' ? s.value : s;
+        return val === 'technical_tools' || val === 'professional_current';
+      })) {
+        bonuses.push('Templates and frameworks library (Value: $497)');
+        bonuses.push('Pre-built automation scripts and tools (Value: $297)');
+      }
+      
+      if (userSkills.some((s: any) => {
+        const val = typeof s === 'object' ? s.value : s;
+        return val === 'personal_transformation' || val === 'life_skills';
+      })) {
+        bonuses.push('Weekly group coaching calls for 3 months (Value: $997)');
+        bonuses.push('Private community access with daily support (Value: $497)');
+      }
+      
+      // Add outcome-specific bonuses
+      if (targetOutcome.toLowerCase().includes('save')) {
+        bonuses.push('Time-tracking optimization toolkit (Value: $197)');
+      }
+      if (targetOutcome.toLowerCase().includes('get') || targetOutcome.toLowerCase().includes('client')) {
+        bonuses.push('Client acquisition email templates (Value: $297)');
+      }
+      if (targetOutcome.toLowerCase().includes('launch')) {
+        bonuses.push('Launch week checklist and timeline (Value: $397)');
+      }
+      if (targetOutcome.toLowerCase().includes('automate')) {
+        bonuses.push('Automation blueprints and workflow diagrams (Value: $497)');
+      }
+      
+      // Add universal high-value bonuses
+      bonuses.push('30-day implementation roadmap with daily tasks (Value: $197)');
+      bonuses.push('"Emergency hotline" - 3 panic button calls (Value: $597)');
+      bonuses.push('Success metrics dashboard template (Value: $97)');
+      bonuses.push('Lifetime updates to all materials (Value: $297)');
+      
+      return bonuses.slice(0, 7).join('\n');
+      
+    default:
+      return '';
+  }
+};
 
 // Define all questions following our framework
 const questions: QuestionData[] = [
@@ -113,7 +240,8 @@ const questions: QuestionData[] = [
         value: 'niche_expertise',
         label: 'Unique/Niche Knowledge',
         description: 'Specific interests you\'ve gone deep on',
-        icon: <Lightbulb className="w-5 h-5 text-indigo-600" />
+        icon: <Lightbulb className="w-5 h-5 text-indigo-600" />,
+        allowCustom: true
       }
     ],
     validation: {
@@ -149,14 +277,15 @@ const questions: QuestionData[] = [
     question: "The Confidence Test: What could you charge $50/hour for TODAY?",
     subtext: "Don't overthink - what would people realistically pay you for right now?",
     type: 'textarea',
-    placeholder: "I could charge $50/hour to teach Excel, help with job interviews, plan meal prep...",
+    placeholder: "I'll suggest something based on your previous answers...",
     validation: {
       required: true,
       minLength: 20,
       maxLength: 300
     },
     helpText: "If you're unsure, think about what you do at work that others struggle with, or personal transformations you've achieved.",
-    showAIHelper: true
+    showAIHelper: true,
+    smartSuggestion: true
   },
 
   // ========================================
@@ -392,7 +521,7 @@ const questions: QuestionData[] = [
     question: "The DREAM: What's the ultimate transformation they want?",
     subtext: "Think bigger than the immediate result - what does success really mean to them?",
     type: 'textarea',
-    placeholder: "Not just 'learn Excel' but 'Get promoted and earn $20K more'. Not just 'lose weight' but 'Feel confident at the beach vacation'...",
+    placeholder: "I'll suggest a transformation based on your niche...",
     validation: {
       required: true,
       minLength: 30,
@@ -400,11 +529,12 @@ const questions: QuestionData[] = [
     },
     helpText: "Go deeper: If they achieve your outcome, what does that enable in their life?",
     examples: [
-      "Not just organized → Finally have time for family instead of working weekends",
-      "Not just fit → Walk into any room with confidence and energy",
-      "Not just more sales → Build a business that runs without them"
+      "Not just organized â†’ Finally have time for family instead of working weekends",
+      "Not just fit â†’ Walk into any room with confidence and energy",
+      "Not just more sales â†’ Build a business that runs without them"
     ],
-    showAIHelper: true
+    showAIHelper: true,
+    smartSuggestion: true
   },
 
   {
@@ -546,78 +676,20 @@ const questions: QuestionData[] = [
   },
 
   {
-    id: 'value_stack',
-    question: "The STACK: What bonuses make this irresistible?",
-    subtext: "What extra value could you add? (You'll create these later)",
-    type: 'checkbox',
-    options: [
-      {
-        value: 'quick_start_guide',
-        label: 'Quick Start Guide',
-        description: 'Get going in 15 minutes'
-      },
-      {
-        value: 'cheat_sheet',
-        label: 'Ultimate Cheat Sheet',
-        description: 'All key info on 1 page'
-      },
-      {
-        value: 'calculator_tool',
-        label: 'Calculator/Assessment Tool',
-        description: 'Personalized recommendations'
-      },
-      {
-        value: 'email_series',
-        label: 'Email Course Follow-up',
-        description: '30 days of tips'
-      },
-      {
-        value: 'office_hours',
-        label: 'Monthly Office Hours',
-        description: 'Live Q&A sessions'
-      },
-      {
-        value: 'interviews',
-        label: 'Expert Interviews',
-        description: 'Learn from the best'
-      },
-      {
-        value: 'lifetime_updates',
-        label: 'Lifetime Updates',
-        description: 'Always current'
-      },
-      {
-        value: 'private_podcast',
-        label: 'Private Podcast',
-        description: 'Exclusive audio content'
-      },
-      {
-        value: 'worksheets',
-        label: 'Action Worksheets',
-        description: 'Implementation guides'
-      },
-      {
-        value: 'case_studies',
-        label: 'Real Case Studies',
-        description: 'See it in action'
-      },
-      {
-        value: 'resource_vault',
-        label: 'Resource Vault',
-        description: 'Curated tools & links'
-      },
-      {
-        value: 'certificate',
-        label: 'Completion Certificate',
-        description: 'Professional credential'
-      }
-    ],
-    validation: {
-      required: true,
-      minSelections: 2
-    },
-    helpText: "Pick 2-5 bonuses you could realistically create. These multiply perceived value without much extra work."
-  }
+  id: 'value_stack',
+  question: "The STACK: What bonuses make this irresistible?",
+  subtext: "List 5-10 bonuses that make your offer irresistible",
+  type: 'textarea',
+  placeholder: "I'll suggest valuable bonuses based on your skills and niche...",
+  validation: {
+    required: true,
+    minLength: 50,
+    maxLength: 600
+  },
+  helpText: "Each bonus should solve a specific objection or fear. Assign a value to each!",
+  showAIHelper: true,
+  smartSuggestion: true
+}
 ];
 
 export default function ProductIdeaGenerator() {
@@ -627,6 +699,7 @@ export default function ProductIdeaGenerator() {
   const [aiResponses, setAiResponses] = useState<AIResponses>({});
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [showSmartSuggestion, setShowSmartSuggestion] = useState<string | null>(null);  // ADD THIS
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
   const [generatedIdeas, setGeneratedIdeas] = useState<GeneratedIdea[]>([]);
   const [nicheScore, setNicheScore] = useState<{ score: number; feedback: string }>({ score: 0, feedback: '' });
@@ -694,16 +767,30 @@ export default function ProductIdeaGenerator() {
       
       // Generate feedback
       if (score >= 3) {
-        feedback = "🟢 GREEN LIGHT! This niche has strong potential. Full speed ahead!";
+        feedback = "ðŸŸ¢ GREEN LIGHT! This niche has strong potential. Full speed ahead!";
       } else if (score >= 2) {
-        feedback = "🟡 YELLOW LIGHT: Proceed with caution. Some challenges but workable for 6 weeks.";
+        feedback = "ðŸŸ¡ YELLOW LIGHT: Proceed with caution. Some challenges but workable for 6 weeks.";
       } else {
-        feedback = "🔴 RED LIGHT: High risk niche. Consider pivoting to something with better alignment.";
+        feedback = "ðŸ”´ RED LIGHT: High risk niche. Consider pivoting to something with better alignment.";
       }
       
       setNicheScore({ score, feedback });
     }
   }, [answers.do_i_like_it, answers.can_i_help, answers.will_they_pay]);
+
+  useEffect(() => {
+    if (currentQuestion.smartSuggestion && !answers[currentQuestion.id]) {
+      const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
+      if (suggestion) {
+        setShowSmartSuggestion(suggestion);
+        // Pre-fill the answer with the suggestion
+        setAnswers(prev => ({
+          ...prev,
+          [currentQuestion.id]: suggestion
+        }));
+      }
+    }
+  }, [currentQuestionIndex, currentQuestion]);
 
   // Handle answer changes
   const handleAnswerChange = (answer: any) => {
@@ -711,6 +798,11 @@ export default function ProductIdeaGenerator() {
       ...prev,
       [currentQuestion.id]: answer
     }));
+    
+    // Clear smart suggestion notification after user interacts
+    if (showSmartSuggestion) {
+      setTimeout(() => setShowSmartSuggestion(null), 2000);
+    }
 
     // Trigger AI response for specific questions
     if (currentQuestion.showAIHelper && answer) {
@@ -729,8 +821,14 @@ export default function ProductIdeaGenerator() {
       switch(questionId) {
         case 'craft_skills':
           const skillCount = answer.length;
-          const hasProfessional = answer.some((s: string) => s.includes('professional'));
-          const hasPersonal = answer.some((s: string) => s.includes('personal') || s.includes('transformation'));
+          const hasProfessional = answer.some((s: any) => {
+            const value = typeof s === 'object' ? s.value : s;
+            return value.includes('professional');
+          });
+          const hasPersonal = answer.some((s: any) => {
+            const value = typeof s === 'object' ? s.value : s;
+            return value.includes('personal') || value.includes('transformation');
+          });
           
           if (hasProfessional && hasPersonal) {
             response = `Excellent mix! You have ${skillCount} skill areas. Professional skills (like your job expertise) typically monetize faster with higher prices. Personal transformations build more passionate communities. Let's dig into what people actually need from you...`;
@@ -776,9 +874,9 @@ export default function ProductIdeaGenerator() {
           break;
           
         case 'value_stack':
-          const bonusCount = answer.length;
-          response = `Excellent stack! With ${bonusCount} bonuses, you can create massive perceived value. Price anchor: "Worth $${bonusCount * 97}, get it for $47" = irresistible offer. People buy when value exceeds price by 10x.`;
-          break;
+        const bonusCount = (answer.split('\n') || []).filter((line: string) => line.trim()).length;
+        response = `Excellent stack! With ${bonusCount} bonuses, you can create massive perceived value. Hormozi's rule: Stack value until it feels like they're stealing from you. Each bonus should solve a specific objection or fear.`;
+        break;
       }
       
       if (response) {
@@ -1046,7 +1144,7 @@ export default function ProductIdeaGenerator() {
                         onClick={() => selectProductIdea(idea)}
                         className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-indigo-700 transition-all text-sm"
                       >
-                        Build This Product →
+                        Build This Product â†’
                       </button>
                     </div>
 
@@ -1104,14 +1202,17 @@ export default function ProductIdeaGenerator() {
             <div className="text-center mb-8">
               <button
                 onClick={() => navigate('/onboarding')}
-                className="inline-flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white mb-4 transition-colors"
+                className="inline-flex items-center gap-2 text-sm mr-px  text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white mb-4 transition-colors"
+                style={{
+                  marginRight:'1rem'
+                }}
               >
                 <ArrowLeft className="w-4 h-4" />
                 Back to Onboarding
               </button>
               
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 mb-4">
-                <Rocket className="w-8 h-8 text-white" />
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 mb-4">
+                <Rocket className="w-6 h-6 text-white" />
               </div>
               <h1 className="text-3xl md:text-4xl font-bold text-neutral-900 dark:text-white mb-3">
                 Product Idea Co-Pilot
@@ -1141,6 +1242,23 @@ export default function ProductIdeaGenerator() {
               </span>
             </div>
 
+            {/* Smart Suggestion Notification */}
+            {showSmartSuggestion && (
+              <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                <div className="flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-purple-600 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
+                      We've pre-filled this based on your previous answers!
+                    </p>
+                    <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
+                      Feel free to edit or keep as is - this suggestion follows proven frameworks for success.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Question Card */}
             <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 p-8 md:p-12 mb-6">
               <QuestionStep
@@ -1162,18 +1280,20 @@ export default function ProductIdeaGenerator() {
                 onClick={() => navigate('/products/sales')}
                 className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
               >
-                Skip and go directly to sales page builder →
+                Skip and go directly to sales page builder â†’
               </button>
             </div>
           </div>
         </div>
 
         {/* Mobile Progress Summary */}
-        <ProgressSummary
-          answers={answers}
-          currentPhase={currentPhase}
-          questions={questions}
-        />
+        <div className="lg:hidden">
+          <ProgressSummary
+            answers={answers}
+            currentPhase={currentPhase}
+            questions={questions}
+          />
+        </div>
       </div>
     </div>
   );
