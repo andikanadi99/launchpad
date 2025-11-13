@@ -1186,9 +1186,9 @@ export default function ProductIdeaGenerator() {
   return (
     <div className="min-h-screen bg-white dark:bg-[#0B0B0D] py-12">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex gap-8">
+        <div className="flex gap-8 justify-center"> 
           {/* Left Sidebar - Progress Summary (Desktop Only) */}
-          <div className="hidden lg:block w-80 flex-shrink-0">
+          <div >
             <ProgressSummary
               answers={answers}
               currentPhase={currentPhase}
@@ -1197,7 +1197,7 @@ export default function ProductIdeaGenerator() {
           </div>
 
           {/* Main Content */}
-          <div className="flex-1 max-w-3xl">
+          <div className="flex-1 max-w-4xl">
             {/* Header */}
             <div className="text-center mb-8">
               <button
