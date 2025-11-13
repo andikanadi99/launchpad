@@ -197,8 +197,11 @@ const questions: QuestionData[] = [
       {
         value: 'professional_current',
         label: 'Current Job Skills',
-        description: 'What you\'re literally paid to do now',
-        icon: <Briefcase className="w-5 h-5 text-blue-600" />
+        description: 'Specify your current role',
+        icon: <Briefcase className="w-5 h-5 text-blue-600" />,
+        allowCustom: true,
+        customRequired: true,  
+        customPlaceholder: 'Your job title (e.g., Cybersecurity Engineer, Product Manager...)'
       },
       {
         value: 'professional_past',
@@ -241,7 +244,9 @@ const questions: QuestionData[] = [
         label: 'Unique/Niche Knowledge',
         description: 'Specific interests you\'ve gone deep on',
         icon: <Lightbulb className="w-5 h-5 text-indigo-600" />,
-        allowCustom: true
+        allowCustom: true,
+        customRequired: true,  // Add this to make it required
+        customPlaceholder: 'Your area of expertise (e.g., cybersecurity, machine learning, woodworking...)'
       }
     ],
     validation: {
@@ -804,8 +809,19 @@ export default function ProductIdeaGenerator() {
       setTimeout(() => setShowSmartSuggestion(null), 2000);
     }
 
-    // Trigger AI response for specific questions
-    if (currentQuestion.showAIHelper && answer) {
+    // Check if answer is empty
+    const isEmpty = !answer || (Array.isArray(answer) && answer.length === 0) || answer === '';
+    
+    if (isEmpty) {
+      // Clear AI response when answer is empty
+      setAiResponses(prev => {
+        const newResponses = { ...prev };
+        delete newResponses[currentQuestion.id];
+        return newResponses;
+      });
+      setIsProcessingAI(false);
+    } else if (currentQuestion.showAIHelper) {
+      // Generate AI response only when there's content
       generateAIResponse(currentQuestion.id, answer);
     }
   };

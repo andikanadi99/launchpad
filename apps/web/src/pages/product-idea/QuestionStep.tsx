@@ -9,7 +9,9 @@ export interface Option {
   label: string;
   description?: string;
   icon?: React.ReactNode;
-  allowCustom?: boolean; // For "Other" option with text input
+  allowCustom?: boolean; 
+  customPlaceholder?: string; 
+  customRequired?: boolean; 
 }
 
 export interface QuestionData {
@@ -101,6 +103,30 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
         return false;
       }
     }
+    if (question.type === 'checkbox' && question.options) {
+        const selections = answer as any[];
+        
+        for (const selection of selections) {
+            // Check if this selection requires custom input
+            if (typeof selection === 'object' && selection.value) {
+            // Find the corresponding option
+            const option = question.options.find(opt => opt.value === selection.value);
+            
+            if (option?.customRequired && (!selection.custom || selection.custom.trim() === '')) {
+                setError(`Please specify details for "${option.label}"`);
+                return false;
+            }
+            } else if (typeof selection === 'string') {
+            // Check if this string selection should have custom input
+            const option = question.options.find(opt => opt.value === selection);
+            
+            if (option?.allowCustom && option?.customRequired) {
+                setError(`Please specify details for "${option.label}"`);
+                return false;
+            }
+            }
+        }
+        }
     
     return true;
   };
@@ -312,7 +338,14 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                         type="text"
                         value={customInputs[option.value] || ''}
                         onChange={(e) => handleCustomInputChange(option.value, e.target.value)}
-                        placeholder="Please specify (e.g., 'Retired teachers', 'Dog trainers', 'Wine enthusiasts')..."
+                        placeholder={
+                            option.customPlaceholder || 
+                            (option.value === 'professional_current' 
+                                ? "Your job title (e.g., Software Engineer, Marketing Manager...)" 
+                                : option.value === 'professional_past'
+                                ? "Previous role (e.g., Data Analyst, Product Manager...)"
+                                : "Please specify...")
+                            }
                         className="w-full px-3 py-2 rounded-md border border-purple-300 dark:border-purple-600 bg-white dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 placeholder-neutral-400 dark:placeholder-neutral-500"
                       />
                     </div>
@@ -327,6 +360,26 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
         return null;
     }
   };
+  const isNextDisabled = () => {
+    if (!question.validation?.required) return false;
+    
+    // Check if answer is empty
+    if (!answer || (Array.isArray(answer) && answer.length === 0)) return true;
+    
+    // Check for required custom inputs in checkboxes
+    if (question.type === 'checkbox' && Array.isArray(answer)) {
+        for (const selection of answer) {
+        if (typeof selection === 'object' && selection.value) {
+            const option = question.options?.find(opt => opt.value === selection.value);
+            if (option?.customRequired && (!selection.custom || selection.custom.trim() === '')) {
+            return true;
+            }
+        }
+        }
+    }
+    
+    return false;
+    };
 
   return (
     <div className="space-y-6">
@@ -434,12 +487,17 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
         </button>
         
         <button
-          onClick={handleNext}
-          className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center gap-2"
-        >
-          {isLastQuestion ? 'See Results' : 'Next'}
-          <ChevronRight className="w-4 h-4" />
-        </button>
+            onClick={handleNext}
+            disabled={isNextDisabled()}
+            className={`px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2
+                ${isNextDisabled()
+                ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-50'
+                : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700'
+                }`}
+            >
+            {isLastQuestion ? 'See Results' : 'Next'}
+            <ChevronRight className="w-4 h-4" />
+            </button>
       </div>
     </div>
   );

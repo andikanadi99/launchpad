@@ -96,8 +96,12 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
   const validationScore = getValidationScore();
 
   // Don't show if no data yet
-  if (!answers.craft_skills && currentPhase === 1) return null;
+  const hasPhase1Data = answers.craft_skills && answers.craft_skills.length > 0;
+    const hasPhase2Data = answers.approach_choice || answers.target_who || answers.target_outcome || answers.mission_statement;
+    const hasPhase3Data = answers.do_i_like_it || answers.can_i_help || answers.will_they_pay;
+    const hasPhase4Data = answers.dream_outcome || answers.speed_to_value || answers.value_stack || answers.guarantees || answers.naming_brainstorm;
 
+    if (!hasPhase1Data && !hasPhase2Data && !hasPhase3Data && !hasPhase4Data) return null;
   return (
     <>
       {/* Desktop Version - Sticky Sidebar */}
