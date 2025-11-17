@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, Sparkles, MessageCircle, AlertCircle } from 'lucide-react';
+import { Wand2, Sparkles, ChevronRight, MessageCircle, AlertCircle } from 'lucide-react';
+
 
 // Types for different question formats
 export type QuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'hybrid';
@@ -32,6 +33,7 @@ export interface QuestionData {
   examples?: string[];
   showAIHelper?: boolean;
   smartSuggestion?: boolean; 
+  showAutoGenerate?: boolean;
 }
 
 interface QuestionStepProps {
@@ -44,6 +46,11 @@ interface QuestionStepProps {
   isLastQuestion: boolean;
   aiResponse?: string;
   isProcessingAI?: boolean;
+  onAutoGenerate?: () => void; 
+  onImproveAnswer?: (currentAnswer: string) => void; 
+  improvementSuggestion?: string; 
+  onAcceptImprovement?: () => void;
+  onRejectImprovement?: () => void; 
 }
 
 const QuestionStep: React.FC<QuestionStepProps> = ({
@@ -56,11 +63,31 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
   isLastQuestion,
   aiResponse,
   isProcessingAI = false,
+  onAutoGenerate,              
+  onImproveAnswer,            
+  improvementSuggestion,       
+  onAcceptImprovement,         
+  onRejectImprovement,         
 }) => {
+
   const [error, setError] = useState<string>('');
   const [customInput, setCustomInput] = useState<string>('');
   const [customInputs, setCustomInputs] = useState<{[key: string]: string}>({});
   const [showExamples, setShowExamples] = useState(false);
+
+  // Auto-resize textarea when answer changes
+    useEffect(() => {
+    if (question.type === 'textarea') {
+        // Small delay to ensure DOM is ready
+        setTimeout(() => {
+        const textarea = document.querySelector('textarea');
+        if (textarea && answer) {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
+        }, 50);
+    }
+    }, [answer, question.type]);
 
   // Validate answer before proceeding
   const validateAnswer = (): boolean => {
@@ -215,23 +242,121 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
         );
 
       case 'textarea':
-        return (
-          <div className="space-y-2">
-            <textarea
-              value={answer || ''}
-              onChange={(e) => onAnswerChange(e.target.value)}
-              placeholder={question.placeholder || 'Type your answer here...'}
-              rows={4}
-              className="w-full px-4 py-3 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 resize-none"
-            />
-            {question.validation?.maxLength && (
-              <div className="text-sm text-neutral-500 dark:text-neutral-400 text-right">
-                {(answer || '').length} / {question.validation.maxLength}
-              </div>
-            )}
-          </div>
-        );
+        // Debug log to check if showAutoGenerate is set
+        console.log('Question ID:', question.id, 'ShowAutoGenerate:', question.showAutoGenerate);
+        
+        case 'textarea':
+            console.log('Rendering textarea - showAutoGenerate:', question.showAutoGenerate, 'Answer:', answer);
+            
+            return (
+                <div className="space-y-3">
+                {/* Generate/Improve Buttons */}
+                <div className="flex gap-2">
+                    {question.showAutoGenerate && (!answer || answer === '' || answer.length === 0) && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                        console.log('Generate button clicked!');
+                        if (onAutoGenerate) {
+                            onAutoGenerate();
+                        } else {
+                            console.log('onAutoGenerate function is not defined');
+                        }
+                        }}
+                        className="flex items-center gap-2 text-sm font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 bg-purple-50 dark:bg-purple-900/20 px-3 py-1.5 rounded-lg border border-purple-200 dark:border-purple-800 hover:border-purple-300 dark:hover:border-purple-700 transition-all"
+                    >
+                        <Wand2 className="w-4 h-4" />
+                        Generate optimal answer
+                    </button>
+                    )}
+                    {answer && answer.length > 10 && !improvementSuggestion && (
+                    <button
+                        type="button"
+                        onClick={() => onImproveAnswer?.(answer)}
+                        className="flex items-center gap-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all"
+                    >
+                        <Sparkles className="w-4 h-4" />
+                        Improve my answer
+                    </button>
+                    )}
+                </div>
 
+                {/* Improvement Preview */}
+                {improvementSuggestion && (
+                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg p-4 border border-indigo-200 dark:border-indigo-800">
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-indigo-900 dark:text-indigo-100">
+                            Suggested Improvement:
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                            type="button"
+                            onClick={onAcceptImprovement}
+                            className="text-xs px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors"
+                            >
+                            Accept
+                            </button>
+                            <button
+                            type="button"
+                            onClick={onRejectImprovement}
+                            className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"
+                            >
+                            Reject
+                            </button>
+                        </div>
+                        </div>
+                        <p className="text-sm text-indigo-800 dark:text-indigo-200 whitespace-pre-wrap">
+                        {improvementSuggestion}
+                        </p>
+                    </div>
+                    </div>
+                )}
+
+                {/* Tip for empty field */}
+                {question.showAutoGenerate && (!answer || answer === '' || answer.length === 0) && (
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 italic">
+                    💡 Tip: Click "Generate optimal answer" to get a suggestion based on your previous answers
+                    </p>
+                )}
+
+                {/* Textarea */}
+                <textarea
+                ref={(el) => {
+                    if (el && answer) {
+                    // Auto-resize on mount/update
+                    el.style.height = 'auto';
+                    el.style.height = el.scrollHeight + 'px';
+                    }
+                }}
+                value={answer || ''}
+                onChange={(e) => {
+                    onAnswerChange(e.target.value);
+                    // Auto-resize textarea
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                }}
+                onInput={(e) => {
+                    // Auto-resize on input as well
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = target.scrollHeight + 'px';
+                }}
+                placeholder={question.placeholder || 'Type your answer here...'}
+                rows={4}
+                maxLength={question.validation?.maxLength}
+                className="w-full px-4 py-3 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 resize-none overflow-hidden transition-all"
+                style={{ minHeight: '120px' }}
+                />
+                
+                {/* Character counter */}
+                {question.validation?.maxLength && (
+                    <div className="text-sm text-neutral-500 dark:text-neutral-400 text-right">
+                    {(answer || '').length} / {question.validation.maxLength}
+                    </div>
+                )}
+                </div>
+            );
       case 'radio':
         return (
           <div className="space-y-3">
@@ -364,7 +489,12 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
     if (!question.validation?.required) return false;
     
     // Check if answer is empty
-    if (!answer || (Array.isArray(answer) && answer.length === 0)) return true;
+    if (!answer || (Array.isArray(answer) && answer.length === 0) || answer === '') return true;
+    
+    // Check textarea minimum length
+    if (question.type === 'textarea' && question.validation?.minLength) {
+        if (!answer || answer.length < question.validation.minLength) return true;
+    }
     
     // Check for required custom inputs in checkboxes
     if (question.type === 'checkbox' && Array.isArray(answer)) {
@@ -400,8 +530,8 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
         <div className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
           <button
             onClick={() => setShowExamples(!showExamples)}
-            className="flex items-center gap-2 text-sm font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"
-          >
+            className="flex items-center gap-2 text-sm font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 bg-white dark:bg-neutral-800 px-3 py-2 rounded-lg border border-purple-300 dark:border-purple-700 hover:border-purple-400 dark:hover:border-purple-600 transition-all"
+            >
             <Sparkles className="w-4 h-4" />
             {showExamples ? 'Hide' : 'Show'} Examples to Get You Started
           </button>

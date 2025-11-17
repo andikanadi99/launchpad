@@ -9,7 +9,8 @@ import {
   Target,
   Zap,
   Trophy,
-  Star
+  Star,
+  Eye
 } from 'lucide-react';
 
 interface ProgressSummaryProps {
@@ -17,6 +18,45 @@ interface ProgressSummaryProps {
   currentPhase: number;
   questions: any[];
 }
+
+// Component for truncated text with show more/less
+const TooltipText: React.FC<{
+  fullText: string;
+  maxLength?: number;
+  className?: string;
+  prefix?: string;
+}> = ({ fullText, maxLength = 100, className = "", prefix = "" }) => {
+  const [showFull, setShowFull] = useState(false);
+  const needsTruncation = fullText.length > maxLength;
+  const truncatedText = needsTruncation 
+    ? fullText.substring(0, maxLength - 3) + '...' 
+    : fullText;
+  
+  if (!needsTruncation) {
+    return (
+      <span className={className}>
+        {prefix}{fullText}
+      </span>
+    );
+  }
+  
+  return (
+    <div className="w-full">
+      <span className={`${className} break-words`}>
+        {prefix}{showFull ? fullText : truncatedText}
+      </span>
+      {needsTruncation && (
+        <button 
+          type="button"
+          className="ml-1 text-purple-500 hover:text-purple-600 text-xs font-medium"
+          onClick={() => setShowFull(!showFull)}
+        >
+          {showFull ? '(less)' : '(more)'}
+        </button>
+      )}
+    </div>
+  );
+};
 
 const ProgressSummary: React.FC<ProgressSummaryProps> = ({ 
   answers, 
@@ -97,17 +137,31 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
 
   // Don't show if no data yet
   const hasPhase1Data = answers.craft_skills && answers.craft_skills.length > 0;
-    const hasPhase2Data = answers.approach_choice || answers.target_who || answers.target_outcome || answers.mission_statement;
-    const hasPhase3Data = answers.do_i_like_it || answers.can_i_help || answers.will_they_pay;
-    const hasPhase4Data = answers.dream_outcome || answers.speed_to_value || answers.value_stack || answers.guarantees || answers.naming_brainstorm;
+  const hasPhase2Data = answers.approach_choice || answers.target_who || answers.target_outcome || answers.mission_statement;
+  const hasPhase3Data = answers.do_i_like_it || answers.can_i_help || answers.will_they_pay;
+  const hasPhase4Data = answers.dream_outcome || answers.speed_to_value || answers.value_stack || answers.guarantees || answers.naming_brainstorm;
 
-    if (!hasPhase1Data && !hasPhase2Data && !hasPhase3Data && !hasPhase4Data) return null;
+  if (!hasPhase1Data && !hasPhase2Data && !hasPhase3Data && !hasPhase4Data) return null;
+  
   return (
     <>
+      <style jsx>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-4px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+      
       {/* Desktop Version - Sticky Sidebar */}
-      <div className="hidden lg:block sticky top-6">
+      <div className="hidden lg:block sticky top-6 w-72 flex-shrink-0">
         <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden shadow-sm">
-          {/* Header */}
+        {/* Header */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="w-full px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 flex items-center justify-between hover:from-purple-100 hover:to-indigo-100 dark:hover:from-purple-900/30 dark:hover:to-indigo-900/30 transition-colors"
@@ -129,7 +183,7 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
 
           {/* Content */}
           {isExpanded && (
-            <div className="p-4 space-y-4 max-h-[600px] overflow-y-auto">
+            <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
               {/* Phase 1: Skills */}
               {answers.craft_skills && (
                 <div className="space-y-2">
@@ -139,8 +193,8 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                   </h3>
                   <div className="space-y-1">
                     {getSkillLabels(answers.craft_skills).map((skill, idx) => (
-                      <div key={idx} className="text-sm text-neutral-600 dark:text-neutral-400 pl-6">
-                        - {skill}
+                      <div key={idx} className="text-sm text-neutral-600 dark:text-neutral-400 pl-6 break-words overflow-hidden">
+                        - <TooltipText fullText={skill} maxLength={40} />
                       </div>
                     ))}
                   </div>
@@ -150,15 +204,15 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
               {/* What people ask for */}
               {answers.actual_requests && (
                 <div className="space-y-2">
-                  <h3 className="font-semibold text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
+                    <h3 className="font-semibold text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-500" />
                     People Ask You For
-                  </h3>
-                  <div className="text-sm text-neutral-600 dark:text-neutral-400 pl-6 italic">
-                    "{answers.actual_requests.substring(0, 100)}..."
-                  </div>
+                    </h3>
+                    <div className="text-sm text-neutral-600 dark:text-neutral-400 pl-6 italic break-words">
+                    <TooltipText fullText={answers.actual_requests} maxLength={50} prefix='"' />
+                    </div>
                 </div>
-              )}
+                )}
 
               {/* Confidence Test */}
               {answers.confidence_test && (
@@ -168,7 +222,7 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     You Could Charge $50/hr For
                   </h3>
                   <div className="text-sm text-neutral-600 dark:text-neutral-400 pl-6 italic">
-                    "{answers.confidence_test.substring(0, 80)}..."
+                    <TooltipText fullText={answers.confidence_test} maxLength={80} prefix='"' />
                   </div>
                 </div>
               )}
@@ -186,7 +240,12 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                       <div>- Target: <span className="font-medium">{getAudienceLabels(answers.target_who)}</span></div>
                     )}
                     {answers.target_outcome && (
-                      <div>- Outcome: <span className="font-medium">"{answers.target_outcome}"</span></div>
+                      <div>- Outcome: <TooltipText 
+                        fullText={answers.target_outcome} 
+                        maxLength={50} 
+                        className="font-medium"
+                        prefix='"' 
+                      /></div>
                     )}
                   </div>
                 </div>
@@ -199,7 +258,7 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     MISSION
                   </h3>
                   <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
-                    {answers.mission_statement}
+                    <TooltipText fullText={answers.mission_statement} maxLength={60} />
                   </p>
                 </div>
               )}
@@ -215,31 +274,31 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-600 dark:text-neutral-400">Like it:</span>
                       {answers.do_i_like_it === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">âœ… Yes</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Yes</span>
                       ) : answers.do_i_like_it === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">ðŸŸ¡ Maybe</span>
+                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">🟡 Maybe</span>
                       ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">âŒ No</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">❌ No</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-600 dark:text-neutral-400">Can help:</span>
                       {answers.can_i_help === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">âœ… Yes</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Yes</span>
                       ) : answers.can_i_help === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">ðŸŸ¡ Maybe</span>
+                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">🟡 Maybe</span>
                       ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">âŒ No</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">❌ No</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-600 dark:text-neutral-400">Will pay:</span>
                       {answers.will_they_pay === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">âœ… Yes</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Yes</span>
                       ) : answers.will_they_pay === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">ðŸŸ¡ Maybe</span>
+                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">🟡 Maybe</span>
                       ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">âŒ No</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">❌ No</span>
                       )}
                     </div>
                   </div>
@@ -248,9 +307,9 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     validationScore >= 2 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
                     'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
                   }`}>
-                    {validationScore >= 3 ? 'ðŸŸ¢ Green Light' : 
-                     validationScore >= 2 ? 'ðŸŸ¡ Yellow Light' : 
-                     'ðŸ”´ Red Light'}
+                    {validationScore >= 3 ? '🟢 Green Light' : 
+                     validationScore >= 2 ? '🟡 Yellow Light' : 
+                     '🔴 Red Light'}
                   </div>
                 </div>
               )}
@@ -263,7 +322,7 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     Value Creation
                   </h3>
                   <div className="text-sm text-neutral-600 dark:text-neutral-400 pl-6 italic">
-                    Dream: "{answers.dream_outcome.substring(0, 80)}..."
+                    Dream: <TooltipText fullText={answers.dream_outcome} maxLength={80} prefix='"' />
                   </div>
                 </div>
               )}
@@ -304,15 +363,22 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
               
               {/* Same content as desktop but condensed */}
               <div className="space-y-3 text-sm">
+                {/* Phase 1: Skills */}
                 {answers.craft_skills && (
-                  <div>
-                    <h4 className="font-medium text-neutral-700 dark:text-neutral-300 mb-1">Your Skills:</h4>
-                    <div className="text-neutral-600 dark:text-neutral-400">
-                      {getSkillLabels(answers.craft_skills).join(', ')}
+                <div className="space-y-2">
+                    <h3 className="font-semibold text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    Your Skills
+                    </h3>
+                    <div className="space-y-1">
+                    {getSkillLabels(answers.craft_skills).map((skill, idx) => (
+                        <div key={idx} className="text-sm text-neutral-600 dark:text-neutral-400 pl-6 break-all">
+                        - <TooltipText fullText={skill} maxLength={30} />
+                        </div>
+                    ))}
                     </div>
-                  </div>
+                </div>
                 )}
-                
                 {answers.mission_statement && (
                   <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-2">
                     <p className="font-medium text-purple-900 dark:text-purple-100">

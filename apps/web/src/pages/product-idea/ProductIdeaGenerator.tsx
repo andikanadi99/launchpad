@@ -62,18 +62,49 @@ interface GeneratedIdea {
 // ========================================
 const generateSmartSuggestion = (questionId: string, answers: Answers): string => {
   switch(questionId) {
+    case 'actual_requests':
+      // Generate based on skills following Million Dollar Weekend validation principle
+      const skills = answers.craft_skills || [];
+      if (!skills.length) return '';
+      
+      const requests: string[] = [];
+      
+      skills.forEach((skill: any) => {
+        const value = typeof skill === 'object' ? skill.value : skill;
+        const custom = typeof skill === 'object' ? skill.custom : null;
+        
+        // Noah Kagan's principle: Real problems = real requests
+        if (value === 'professional_current' && custom) {
+          requests.push(`At work: Colleagues constantly ask me to review their ${custom.toLowerCase()} work, train new team members on our processes, and solve complex technical problems they're stuck on`);
+        }
+        if (value === 'technical_tools') {
+          requests.push(`Tech support: Friends need help automating their workflows, coworkers want my Excel templates and scripts, people ask for tool recommendations`);
+        }
+        if (value === 'niche_expertise' && custom) {
+          requests.push(`Specialty requests: Online communities ask for ${custom.toLowerCase()} advice, people DM me for tutorials, friends want consulting on specific ${custom.toLowerCase()} challenges`);
+        }
+        if (value === 'personal_transformation') {
+          requests.push(`Personal help: Friends ask how I achieved my transformation, family wants my methods and systems, social media followers request coaching`);
+        }
+      });
+      
+      // Add universal requests (Hormozi's "everyone has these problems")
+      requests.push(`Personal favors: Family needs tech help, friends want career advice, people ask how to get started in my field`);
+      
+      return requests.slice(0, 2).join('. ');
+      
     case 'confidence_test':
       // Generate based on skills and requests
-      const skills = answers.craft_skills || [];
-      const requests = answers.actual_requests || '';
+      const userSkills = answers.craft_skills || [];
+      const userRequests = answers.actual_requests || '';
       
       // Return empty if prerequisites not met
-      if (!skills.length || !requests) {
+      if (!userSkills.length || !userRequests) {
         return '';
       }
       // Extract key skills
       const skillLabels: string[] = [];
-      skills.forEach((skill: any) => {
+      userSkills.forEach((skill: any) => {
         const value = typeof skill === 'object' ? skill.value : skill;
         const custom = typeof skill === 'object' ? skill.custom : null;
         
@@ -88,7 +119,7 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
       });
       
       // Extract key phrases from requests
-      const requestKeywords = requests.toLowerCase().match(/(?:help with|ask for|want|need|asks?)\s+([^,.]+)/g) || [];
+      const requestKeywords = userRequests.toLowerCase().match(/(?:help with|ask for|want|need|asks?)\s+([^,.]+)/g) || [];
       const specificRequests = requestKeywords.slice(0, 2).map(r => r.replace(/(?:help with|ask for|want|need|asks?)\s+/, '').trim());
       
       // Build suggestion
@@ -107,7 +138,7 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
       // Return empty if prerequisites not met
       if (!who || !outcome) {
         return '';
-  }
+      }
       
       // Build transformation narrative
       if (outcome) {
@@ -131,16 +162,16 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
       
     case 'value_stack':
       // Generate based on all previous answers
-      const userSkills = answers.craft_skills || [];
+      const stackSkills = answers.craft_skills || [];
       const targetOutcome = answers.target_outcome || '';
 
-      if (!userSkills.length) {
+      if (!stackSkills.length) {
         return '';
       }
       const bonuses: string[] = [];
       
       // Add skill-specific bonuses
-      if (userSkills.some((s: any) => {
+      if (stackSkills.some((s: any) => {
         const val = typeof s === 'object' ? s.value : s;
         return val === 'technical_tools' || val === 'professional_current';
       })) {
@@ -148,7 +179,7 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
         bonuses.push('Pre-built automation scripts and tools (Value: $297)');
       }
       
-      if (userSkills.some((s: any) => {
+      if (stackSkills.some((s: any) => {
         const val = typeof s === 'object' ? s.value : s;
         return val === 'personal_transformation' || val === 'life_skills';
       })) {
@@ -180,6 +211,63 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
       
     default:
       return '';
+  }
+};
+// Generate improved version of user's answer
+const generateImprovedAnswer = (questionId: string, currentAnswer: string): string => {
+  switch(questionId) {
+    case 'actual_requests':
+      // Improve structure and specificity following Million Dollar Weekend principles
+      const improved = currentAnswer
+        .split(/[.,;]/)
+        .filter(s => s.trim())
+        .map(request => {
+          // Add specificity and context
+          if (request.toLowerCase().includes('help')) {
+            return request.trim() + ' (validated pain point - people actively seek this)';
+          }
+          return request.trim();
+        });
+      
+      return `At work: ${improved.slice(0, Math.ceil(improved.length/2)).join(', ')}. 
+Personally: ${improved.slice(Math.ceil(improved.length/2)).join(', ')}.
+Key insight: These are REAL problems people already pay to solve - perfect for productization.`;
+
+    case 'confidence_test':
+      // Add Hormozi's value equation perspective
+      return `${currentAnswer}
+
+Applying Hormozi's framework:
+- Dream Outcome: Clear transformation I deliver
+- Perceived Likelihood: Proven track record with similar clients
+- Time Delay: Results within first session
+- Effort & Sacrifice: Minimal - I do the heavy lifting
+
+This positions me for $50-150/hour consulting or $297+ for packaged solutions.`;
+
+    case 'target_outcome':
+      // Make it more specific and measurable
+      const measurable = currentAnswer.replace(/better|improve|more|less/gi, (match) => {
+        const replacements: {[key: string]: string} = {
+          'better': '25% better',
+          'improve': 'improve by 30%',
+          'more': '50% more',
+          'less': '50% less'
+        };
+        return replacements[match.toLowerCase()] || match;
+      });
+      
+      return `${measurable} - with measurable KPIs and clear success metrics that they can show to stakeholders`;
+
+    default:
+      // Generic improvement: add structure and clarity
+      return `${currentAnswer}
+
+Key points:
+1. Immediate value delivery
+2. Proven methodology
+3. Clear success metrics
+4. Risk reversal guarantee`;
   }
 };
 
@@ -274,7 +362,8 @@ const questions: QuestionData[] = [
       "Clients pay me for logo design, coworkers want my presentation templates. Friends ask how I grew my Instagram, sister wants budgeting advice",
       "I fix everyone's Excel formulas at work, neighbors ask about dog training, book club wants my speed reading tips"
     ],
-    showAIHelper: true
+    showAIHelper: true,
+    showAutoGenerate: true 
   },
 
   {
@@ -708,8 +797,45 @@ export default function ProductIdeaGenerator() {
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
   const [generatedIdeas, setGeneratedIdeas] = useState<GeneratedIdea[]>([]);
   const [nicheScore, setNicheScore] = useState<{ score: number; feedback: string }>({ score: 0, feedback: '' });
+  const [improvementSuggestion, setImprovementSuggestion] = useState<string>('');
+  const [isGeneratingImprovement, setIsGeneratingImprovement] = useState(false);
+
+  const generateContextualExamples = (questionId: string): string[] => {
+    if (questionId === 'actual_requests' && answers.craft_skills) {
+      const skills = answers.craft_skills;
+      const examples: string[] = [];
+      
+      // Check what skills the user has
+      skills.forEach((skill: any) => {
+        const value = typeof skill === 'object' ? skill.value : skill;
+        const custom = typeof skill === 'object' ? skill.custom : null;
+        
+        if (value === 'professional_current' && custom) {
+          examples.push(`At work: Team asks for my ${custom} expertise, colleagues need help with complex problems, boss wants me to mentor junior staff`);
+        }
+        if (value === 'technical_tools') {
+          examples.push(`Tech requests: People need automation help, want code reviews, ask for tool recommendations and setup guidance`);
+        }
+        if (value === 'niche_expertise' && custom) {
+          examples.push(`Specialty requests: Friends ask about ${custom}, online communities seek my advice, people want tutorials on specific techniques`);
+        }
+      });
+      
+      // Add a personal example
+      if (examples.length < 3) {
+        examples.push(`Personal: Friends ask for career advice, family needs tech support, people want to learn what I do`);
+      }
+      
+      return examples.slice(0, 3);
+    }
+    
+    return questions[currentQuestionIndex].examples || [];
+  };
 
   const currentQuestion = questions[currentQuestionIndex];
+  console.log('ProductIdeaGenerator - Current Question:', currentQuestion.id);
+  console.log('ProductIdeaGenerator - ShowAutoGenerate:', currentQuestion.showAutoGenerate);
+  console.log('ProductIdeaGenerator - Full question object:', currentQuestion);
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
   
   // Determine current phase based on question index
@@ -825,6 +951,60 @@ export default function ProductIdeaGenerator() {
       generateAIResponse(currentQuestion.id, answer);
     }
   };
+  // Handle auto-generate button click
+const handleAutoGenerate = () => {
+  const currentAnswer = answers[currentQuestion.id];  // Get the current answer from state
+  if (currentAnswer && currentAnswer.length > 0) {
+    if (!confirm('This will replace your current answer. Continue?')) {
+      return;
+    }
+  }
+  
+  const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
+  if (suggestion) {
+    setAnswers(prev => ({
+      ...prev,
+      [currentQuestion.id]: suggestion
+    }));
+    // Trigger AI response for the generated content
+    if (currentQuestion.showAIHelper) {
+      generateAIResponse(currentQuestion.id, suggestion);
+    }
+  }
+};
+
+// Handle improve answer button
+const handleImproveAnswer = (currentAnswer: string) => {
+  setIsGeneratingImprovement(true);
+  
+  // Simulate processing time
+  setTimeout(() => {
+    const improved = generateImprovedAnswer(currentQuestion.id, currentAnswer);
+    setImprovementSuggestion(improved);
+    setIsGeneratingImprovement(false);
+  }, 500);
+};
+
+// Handle accepting improvement
+const handleAcceptImprovement = () => {
+  if (improvementSuggestion) {
+    setAnswers(prev => ({
+      ...prev,
+      [currentQuestion.id]: improvementSuggestion
+    }));
+    setImprovementSuggestion('');
+    
+    // Trigger AI response for the improved content
+    if (currentQuestion.showAIHelper) {
+      generateAIResponse(currentQuestion.id, improvementSuggestion);
+    }
+  }
+};
+
+// Handle rejecting improvement
+const handleRejectImprovement = () => {
+  setImprovementSuggestion('');
+};
 
   // Generate AI response (enhanced with context-aware responses)
   const generateAIResponse = async (questionId: string, answer: any) => {
@@ -1200,20 +1380,20 @@ export default function ProductIdeaGenerator() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0B0B0D] py-12">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="flex gap-8 justify-center"> 
-          {/* Left Sidebar - Progress Summary (Desktop Only) */}
-          <div >
-            <ProgressSummary
-              answers={answers}
-              currentPhase={currentPhase}
-              questions={questions}
-            />
-          </div>
+   <div className="min-h-screen bg-white dark:bg-[#0B0B0D] py-12">
+    <div className="max-w-7xl mx-auto px-4">
+      <div className="flex gap-8"> 
+        {/* Left Sidebar - Progress Summary (Desktop Only) */}
+        <div className="hidden lg:block  flex-shrink-0">
+          <ProgressSummary
+            answers={answers}
+            currentPhase={currentPhase}
+            questions={questions}
+          />
+        </div>
 
-          {/* Main Content */}
-          <div className="flex-1 max-w-4xl">
+        {/* Main Content - Center it when sidebar is hidden */}
+        <div className="flex-1 max-w-4xl mx-auto">
             {/* Header */}
             <div className="text-center mb-8">
               <button
@@ -1278,11 +1458,21 @@ export default function ProductIdeaGenerator() {
             {/* Question Card */}
             <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 p-8 md:p-12 mb-6">
               <QuestionStep
-                question={currentQuestion}
+                question={{
+                  ...currentQuestion,
+                  examples: currentQuestion.id === 'actual_requests' 
+                    ? generateContextualExamples('actual_requests')
+                    : currentQuestion.examples
+                }}
                 answer={answers[currentQuestion.id]}
                 onAnswerChange={handleAnswerChange}
                 onNext={handleNext}
                 onBack={handleBack}
+                onAutoGenerate={handleAutoGenerate}
+                onImproveAnswer={handleImproveAnswer}
+                improvementSuggestion={currentQuestionIndex === questions.findIndex(q => q.id === currentQuestion.id) ? improvementSuggestion : ''}
+                onAcceptImprovement={handleAcceptImprovement}
+                onRejectImprovement={handleRejectImprovement}
                 isFirstQuestion={currentQuestionIndex === 0}
                 isLastQuestion={currentQuestionIndex === questions.length - 1}
                 aiResponse={aiResponses[currentQuestion.id]}
