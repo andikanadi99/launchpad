@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { doc, updateDoc, setDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { 
   Lightbulb, 
   Users, 
@@ -33,6 +34,7 @@ import ProgressBar from './ProgressBar';
 import QuestionStep, { QuestionData } from './QuestionStep';
 import ProgressSummary from './ProgressSummary';
 
+const functions = getFunctions();
 // Types
 interface Answers {
   [key: string]: any;
@@ -288,60 +290,72 @@ const questions: QuestionData[] = [
         description: 'Specify your current role',
         icon: <Briefcase className="w-5 h-5 text-blue-600" />,
         allowCustom: true,
-        customRequired: true,  
-        customPlaceholder: 'Your job title (e.g., Cybersecurity Engineer, Product Manager...)'
+        customRequired: true,
+        customPlaceholder: 'Your job title (e.g., Software Engineer, Marketing Manager...)'
       },
       {
         value: 'professional_past',
         label: 'Past Work Experience',
-        description: 'Skills from previous jobs/careers',
-        icon: <Award className="w-5 h-5 text-green-600" />
+        description: 'What roles or industries?',
+        icon: <Award className="w-5 h-5 text-green-600" />,
+        allowCustom: true,
+        customPlaceholder: 'Previous roles (e.g., Sales Manager at tech startup, Consultant...)'
       },
       {
         value: 'technical_tools',
         label: 'Software/Tools Expertise',
-        description: 'Excel, Photoshop, specific apps',
-        icon: <Zap className="w-5 h-5 text-purple-600" />
+        description: 'Which specific tools?',
+        icon: <Zap className="w-5 h-5 text-purple-600" />,
+        allowCustom: true,
+        customPlaceholder: 'Tools you master (e.g., Excel, Photoshop, Salesforce, Python...)'
       },
       {
         value: 'personal_transformation',
         label: 'Personal Transformations',
-        description: 'Weight loss, debt freedom, relationships',
-        icon: <Trophy className="w-5 h-5 text-pink-600" />
+        description: 'What transformation did you achieve?',
+        icon: <Trophy className="w-5 h-5 text-pink-600" />,
+        allowCustom: true,
+        customPlaceholder: 'Your transformation (e.g., Lost 50 lbs, Paid off $30K debt, Helped family lose weight...)'
       },
       {
         value: 'creative_hobbies',
         label: 'Creative Hobbies',
-        description: 'Music, writing, art, crafts',
-        icon: <Star className="w-5 h-5 text-yellow-600" />
+        description: 'What do you create?',
+        icon: <Star className="w-5 h-5 text-yellow-600" />,
+        allowCustom: true,
+        customPlaceholder: 'Your creative skills (e.g., Watercolor painting, Guitar, Writing fiction...)'
       },
       {
         value: 'life_skills',
         label: 'Life Skills',
-        description: 'Organizing, parenting, cooking, budgeting',
-        icon: <Heart className="w-5 h-5 text-orange-600" />
+        description: 'What life skills do you excel at?',
+        icon: <Heart className="w-5 h-5 text-orange-600" />,
+        allowCustom: true,
+        customPlaceholder: 'Skills you\'ve mastered (e.g., Meal planning for family of 5, Home organization, Budgeting...)'
       },
       {
         value: 'academic_knowledge',
         label: 'Academic/Test Prep',
-        description: 'Subjects you excelled at or can teach',
-        icon: <Award className="w-5 h-5 text-red-600" />
+        description: 'What subjects or tests?',
+        icon: <Award className="w-5 h-5 text-red-600" />,
+        allowCustom: true,
+        customPlaceholder: 'Subjects/tests (e.g., SAT Math, Organic Chemistry, MCAT prep...)'
       },
       {
         value: 'niche_expertise',
         label: 'Unique/Niche Knowledge',
-        description: 'Specific interests you\'ve gone deep on',
+        description: 'Your specialized knowledge',
         icon: <Lightbulb className="w-5 h-5 text-indigo-600" />,
         allowCustom: true,
-        customRequired: true,  // Add this to make it required
-        customPlaceholder: 'Your area of expertise (e.g., cybersecurity, machine learning, woodworking...)'
+        customRequired: true,
+        customPlaceholder: 'Your area of expertise (e.g., Vintage watch repair, Cryptocurrency trading, Permaculture...)'
       }
     ],
     validation: {
       required: true,
       minSelections: 1
     },
-    helpText: "Pro tip: Professional skills monetize faster (business buyers, higher prices). Personal skills build stronger communities. Select all that apply.",
+    helpText: "Pro tip: Add specific details to each skill - this helps generate better product ideas tailored to your exact expertise.",
     showAIHelper: true
   },
 
@@ -354,9 +368,9 @@ const questions: QuestionData[] = [
     validation: {
       required: true,
       minLength: 30,
-      maxLength: 500
+      maxLength: 1500
     },
-    helpText: "Be specific! Include both work requests and personal favors. These are validated problems people already have.",
+    helpText: "Be specific! Include both work requests and personal favors. These are validated problems people already have. Minimum 30 characters in length.",
     examples: [
       "At work: Team asks for my project planning templates, boss wants me to train new hires on our CRM. Personally: Friends ask for workout routines, mom needs iPhone help",
       "Clients pay me for logo design, coworkers want my presentation templates. Friends ask how I grew my Instagram, sister wants budgeting advice",
@@ -909,6 +923,7 @@ export default function ProductIdeaGenerator() {
     }
   }, [answers.do_i_like_it, answers.can_i_help, answers.will_they_pay]);
 
+
   useEffect(() => {
     if (currentQuestion.smartSuggestion && !answers[currentQuestion.id]) {
       const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
@@ -951,39 +966,144 @@ export default function ProductIdeaGenerator() {
       generateAIResponse(currentQuestion.id, answer);
     }
   };
-  // Handle auto-generate button click
-const handleAutoGenerate = () => {
-  const currentAnswer = answers[currentQuestion.id];  // Get the current answer from state
-  if (currentAnswer && currentAnswer.length > 0) {
-    if (!confirm('This will replace your current answer. Continue?')) {
-      return;
-    }
-  }
-  
-  const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
-  if (suggestion) {
-    setAnswers(prev => ({
-      ...prev,
-      [currentQuestion.id]: suggestion
-    }));
-    // Trigger AI response for the generated content
-    if (currentQuestion.showAIHelper) {
-      generateAIResponse(currentQuestion.id, suggestion);
-    }
-  }
-};
+  // Add this state at the top with other states
+  const [isGeneratingOptimal, setIsGeneratingOptimal] = useState(false);
 
-// Handle improve answer button
-const handleImproveAnswer = (currentAnswer: string) => {
-  setIsGeneratingImprovement(true);
-  
-  // Simulate processing time
-  setTimeout(() => {
-    const improved = generateImprovedAnswer(currentQuestion.id, currentAnswer);
-    setImprovementSuggestion(improved);
-    setIsGeneratingImprovement(false);
-  }, 500);
-};
+  // Replace the handleAutoGenerate function
+  const handleAutoGenerate = async () => {
+    const currentAnswer = answers[currentQuestion.id];
+    if (currentAnswer && currentAnswer.length > 0) {
+      if (!confirm('This will replace your current answer with an AI-generated optimal answer. Continue?')) {
+        return;
+      }
+    }
+    
+    setIsGeneratingOptimal(true);
+    
+    try {
+      const user = auth.currentUser;
+      
+      // First try the Claude API for better quality
+      if (user) {
+        console.log('🤖 Generating optimal answer with Claude...');
+        const generateOptimalFunction = httpsCallable(functions, 'generateOptimalAnswer');
+        
+        const payload = {
+          userId: user.uid,
+          questionId: currentQuestion.id,
+          questionText: currentQuestion.question,
+          questionSubtext: currentQuestion.subtext,
+          previousAnswers: Object.keys(answers).reduce((acc, key) => {
+            acc[key] = answers[key];
+            return acc;
+          }, {} as any)
+        };
+        
+        const result = await generateOptimalFunction(payload);
+        const data = result.data as any;
+        
+        if (data.success && data.generatedAnswer) {
+          console.log('✨ Got optimal answer from Claude!');
+          setAnswers(prev => ({
+            ...prev,
+            [currentQuestion.id]: data.generatedAnswer
+          }));
+          
+          // Trigger AI response for the generated content
+          if (currentQuestion.showAIHelper) {
+            generateAIResponse(currentQuestion.id, data.generatedAnswer);
+          }
+          
+          setIsGeneratingOptimal(false);
+          return;
+        }
+      }
+      
+      // Fallback to local generation
+      console.log('📝 Using local generation...');
+      const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
+      if (suggestion) {
+        setAnswers(prev => ({
+          ...prev,
+          [currentQuestion.id]: suggestion
+        }));
+        // Trigger AI response for the generated content
+        if (currentQuestion.showAIHelper) {
+          generateAIResponse(currentQuestion.id, suggestion);
+        }
+      }
+    } catch (error) {
+      console.error('Error generating optimal answer:', error);
+      // Fallback to local generation
+      const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
+      if (suggestion) {
+        setAnswers(prev => ({
+          ...prev,
+          [currentQuestion.id]: suggestion
+        }));
+      }
+    } finally {
+      setIsGeneratingOptimal(false);
+    }
+  };
+
+ const handleImproveAnswer = async (currentAnswer: string) => {
+    console.log('🚀 Starting improvement process...');
+    setIsGeneratingImprovement(true);
+    
+    try {
+      const user = auth.currentUser;
+      
+      if (!user) {
+        console.log('❌ No user, using local fallback');
+        const improved = generateImprovedAnswer(currentQuestion.id, currentAnswer);
+        setImprovementSuggestion(improved);
+        setIsGeneratingImprovement(false);
+        return;
+      }
+
+      console.log('📡 Calling Firebase Function...');
+      const improveAnswerFunction = httpsCallable(functions, 'improveAnswer');
+      
+      // FIXED: Send the parameters the function expects
+      const payload = {
+        userId: user.uid,  // Add userId
+        questionId: currentQuestion.id,
+        originalAnswer: currentAnswer,  // Changed from currentAnswer
+        questionText: currentQuestion.question,  // Add questionText
+        previousAnswers: Object.keys(answers).slice(0, 5).reduce((acc, key) => {
+          acc[key] = answers[key];
+          return acc;
+        }, {} as any)
+      };
+      
+      console.log('📦 Sending payload:', payload);
+      
+      const result = await improveAnswerFunction(payload);
+      console.log('✅ Function response:', result);
+      
+      const data = result.data as any;
+      
+      if (data.success && data.improvedAnswer) {
+        console.log('🎉 Got improved answer from Claude!');
+        setImprovementSuggestion(data.improvedAnswer);
+      } else {
+        console.log('⚠️ Unexpected response format:', data);
+        throw new Error('Unexpected response format');
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Full error:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      
+      // Fallback to local improvement
+      const improved = generateImprovedAnswer(currentQuestion.id, currentAnswer);
+      setImprovementSuggestion(improved);
+    } finally {
+      setIsGeneratingImprovement(false);
+    }
+  };
 
 // Handle accepting improvement
 const handleAcceptImprovement = () => {
@@ -1458,26 +1578,28 @@ const handleRejectImprovement = () => {
             {/* Question Card */}
             <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 p-8 md:p-12 mb-6">
               <QuestionStep
-                question={{
-                  ...currentQuestion,
-                  examples: currentQuestion.id === 'actual_requests' 
-                    ? generateContextualExamples('actual_requests')
-                    : currentQuestion.examples
-                }}
-                answer={answers[currentQuestion.id]}
-                onAnswerChange={handleAnswerChange}
-                onNext={handleNext}
-                onBack={handleBack}
-                onAutoGenerate={handleAutoGenerate}
-                onImproveAnswer={handleImproveAnswer}
-                improvementSuggestion={currentQuestionIndex === questions.findIndex(q => q.id === currentQuestion.id) ? improvementSuggestion : ''}
-                onAcceptImprovement={handleAcceptImprovement}
-                onRejectImprovement={handleRejectImprovement}
-                isFirstQuestion={currentQuestionIndex === 0}
-                isLastQuestion={currentQuestionIndex === questions.length - 1}
-                aiResponse={aiResponses[currentQuestion.id]}
-                isProcessingAI={isProcessingAI}
-              />
+              question={{
+                ...currentQuestion,
+                examples: currentQuestion.id === 'actual_requests' 
+                  ? generateContextualExamples('actual_requests')
+                  : currentQuestion.examples
+              }}
+              answer={answers[currentQuestion.id]}
+              onAnswerChange={handleAnswerChange}
+              onNext={handleNext}
+              onBack={handleBack}
+              onAutoGenerate={handleAutoGenerate}
+              onImproveAnswer={handleImproveAnswer}
+              improvementSuggestion={currentQuestionIndex === questions.findIndex(q => q.id === currentQuestion.id) ? improvementSuggestion : ''}
+              onAcceptImprovement={handleAcceptImprovement}
+              onRejectImprovement={handleRejectImprovement}
+              isFirstQuestion={currentQuestionIndex === 0}
+              isLastQuestion={currentQuestionIndex === questions.length - 1}
+              aiResponse={aiResponses[currentQuestion.id]}
+              isProcessingAI={isProcessingAI}
+              isGeneratingOptimal={isGeneratingOptimal} 
+              isGeneratingImprovement={isGeneratingImprovement} 
+            />
             </div>
 
             {/* Skip Option */}

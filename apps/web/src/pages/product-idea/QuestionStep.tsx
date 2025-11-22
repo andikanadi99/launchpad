@@ -38,7 +38,7 @@ export interface QuestionData {
 
 interface QuestionStepProps {
   question: QuestionData;
-  answer: any; // Can be string, string[], or object depending on type
+  answer: any;
   onAnswerChange: (answer: any) => void;
   onNext: () => void;
   onBack: () => void;
@@ -46,11 +46,13 @@ interface QuestionStepProps {
   isLastQuestion: boolean;
   aiResponse?: string;
   isProcessingAI?: boolean;
-  onAutoGenerate?: () => void; 
-  onImproveAnswer?: (currentAnswer: string) => void; 
-  improvementSuggestion?: string; 
+  onAutoGenerate?: () => void;
+  onImproveAnswer?: (currentAnswer: string) => void;
+  improvementSuggestion?: string;
   onAcceptImprovement?: () => void;
-  onRejectImprovement?: () => void; 
+  onRejectImprovement?: () => void;
+  isGeneratingOptimal?: boolean;
+  isGeneratingImprovement?: boolean; 
 }
 
 const QuestionStep: React.FC<QuestionStepProps> = ({
@@ -67,7 +69,9 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
   onImproveAnswer,            
   improvementSuggestion,       
   onAcceptImprovement,         
-  onRejectImprovement,         
+  onRejectImprovement,  
+  isGeneratingOptimal = false,      
+  isGeneratingImprovement = false,
 }) => {
 
   const [error, setError] = useState<string>('');
@@ -227,6 +231,56 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
     );
   };
 
+    // Generate appropriate warning message based on validation state
+    const getValidationWarning = (): string => {
+    if (!question.validation?.required) return '';
+    
+    // Empty answer
+    if (!answer || (Array.isArray(answer) && answer.length === 0) || answer === '') {
+        return 'Answer is required for this step.';
+    }
+    
+    // Textarea minimum length
+    if (question.type === 'textarea' && question.validation?.minLength) {
+        const currentLength = (answer || '').length;
+        const minLength = question.validation.minLength;
+        if (currentLength < minLength) {
+        return `Answer needs to be at least ${minLength} characters (currently ${currentLength})`;
+        }
+    }
+    
+    // Text minimum length
+    if (question.type === 'text' && question.validation?.minLength) {
+        const currentLength = (answer || '').length;
+        const minLength = question.validation.minLength;
+        if (currentLength < minLength) {
+        return `Minimum ${minLength} characters required (currently ${currentLength})`;
+        }
+    }
+    
+    // Checkbox - required custom inputs
+    if (question.type === 'checkbox' && Array.isArray(answer)) {
+        for (const selection of answer) {
+        if (typeof selection === 'object' && selection.value) {
+            const option = question.options?.find(opt => opt.value === selection.value);
+            if (option?.customRequired && (!selection.custom || selection.custom.trim() === '')) {
+            return `Please specify details for "${option.label}"`;
+            }
+        }
+        }
+    }
+    
+    // Checkbox - minimum selections
+    if (question.type === 'checkbox' && question.validation?.minSelections) {
+        const selections = answer as string[];
+        if (selections.length < question.validation.minSelections) {
+        return `Please select at least ${question.validation.minSelections} option${question.validation.minSelections > 1 ? 's' : ''}`;
+        }
+    }
+    
+    return 'Please complete this field to continue';
+    };
+
   // Render different input types
   const renderInput = () => {
     switch (question.type) {
@@ -252,32 +306,58 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                 <div className="space-y-3">
                 {/* Generate/Improve Buttons */}
                 <div className="flex gap-2">
-                    {question.showAutoGenerate && (!answer || answer === '' || answer.length === 0) && (
+                    {question.showAutoGenerate && (!answer || answer === '' || answer.length <= 10) && (
                     <button
                         type="button"
                         onClick={() => {
                         console.log('Generate button clicked!');
                         if (onAutoGenerate) {
                             onAutoGenerate();
-                        } else {
-                            console.log('onAutoGenerate function is not defined');
                         }
                         }}
-                        className="flex items-center gap-2 text-sm font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 bg-purple-50 dark:bg-purple-900/20 px-3 py-1.5 rounded-lg border border-purple-200 dark:border-purple-800 hover:border-purple-300 dark:hover:border-purple-700 transition-all"
+                        disabled={isGeneratingOptimal}
+                        className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-all ${
+                        isGeneratingOptimal 
+                            ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-400 cursor-not-allowed'
+                            : 'text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 hover:border-purple-300 dark:hover:border-purple-700'
+                        }`}
                     >
-                        <Wand2 className="w-4 h-4" />
-                        Generate optimal answer
+                        {isGeneratingOptimal ? (
+                        <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-600 border-t-transparent" />
+                            AI is thinking...
+                        </>
+                        ) : (
+                        <>
+                            <Wand2 className="w-4 h-4" />
+                            Suggest an Answer
+                        </>
+                        )}
                     </button>
                     )}
                     {answer && answer.length > 10 && !improvementSuggestion && (
-                    <button
-                        type="button"
-                        onClick={() => onImproveAnswer?.(answer)}
-                        className="flex items-center gap-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all"
-                    >
-                        <Sparkles className="w-4 h-4" />
-                        Improve my answer
-                    </button>
+                        <button
+                            type="button"
+                            onClick={() => onImproveAnswer?.(answer)}
+                            disabled={isGeneratingImprovement}
+                            className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-all ${
+                            isGeneratingImprovement
+                                ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-400 cursor-not-allowed'
+                                : 'text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 hover:border-indigo-300 dark:hover:border-indigo-700'
+                            }`}
+                        >
+                            {isGeneratingImprovement ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent" />
+                                    AI is thinking...
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles className="w-4 h-4" />
+                                    Improve my answer
+                                </>
+                            )}
+                        </button>
                     )}
                 </div>
 
@@ -316,7 +396,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                 {/* Tip for empty field */}
                 {question.showAutoGenerate && (!answer || answer === '' || answer.length === 0) && (
                     <p className="text-xs text-neutral-500 dark:text-neutral-400 italic">
-                    💡 Tip: Click "Generate optimal answer" to get a suggestion based on your previous answers
+                    💡 Tip: Click "Suggest an Answer" to get a suggestion based on your previous answers.
                     </p>
                 )}
 
@@ -600,35 +680,46 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
       )}
 
       {/* Navigation Buttons */}
-      <div className="flex gap-3 justify-between pt-4">
-        <button
-          onClick={onBack}
-          disabled={isFirstQuestion}
-          className={`
-            px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2
-            ${
-              isFirstQuestion
-                ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'
-                : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-white hover:bg-neutral-300 dark:hover:bg-neutral-700'
-            }
-          `}
-        >
-          ← Back
-        </button>
-        
-        <button
-            onClick={handleNext}
-            disabled={isNextDisabled()}
-            className={`px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2
-                ${isNextDisabled()
-                ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-50'
-                : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700'
-                }`}
+        <div className="space-y-2">
+        <div className="flex gap-3 justify-between pt-4">
+            <button
+            onClick={onBack}
+            disabled={isFirstQuestion}
+            className={`
+                px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2
+                ${
+                isFirstQuestion
+                    ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'
+                    : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-white hover:bg-neutral-300 dark:hover:bg-neutral-700'
+                }
+            `}
             >
-            {isLastQuestion ? 'See Results' : 'Next'}
-            <ChevronRight className="w-4 h-4" />
+            ← Back
             </button>
-      </div>
+            
+            <button
+                onClick={handleNext}
+                disabled={isNextDisabled()}
+                className={`px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2
+                    ${isNextDisabled()
+                    ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-50'
+                    : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700'
+                    }`}
+                >
+                {isLastQuestion ? 'See Results' : 'Next'}
+                <ChevronRight className="w-4 h-4" />
+                </button>
+        </div>
+        
+        {/* Validation Warning Message */}
+        {isNextDisabled() && (
+            <div className="flex items-center justify-end gap-2 text-amber-600 dark:text-amber-400 text-sm">
+            <AlertCircle className="w-4 h-4" />
+            <span>{getValidationWarning()}</span>
+            </div>
+        )}
+        </div>
+      
     </div>
   );
 };
