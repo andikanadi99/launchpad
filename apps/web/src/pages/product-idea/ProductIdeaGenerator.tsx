@@ -106,30 +106,94 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
       }
       // Extract key skills
       const skillLabels: string[] = [];
+      const customSkills: string[] = [];
+      
       userSkills.forEach((skill: any) => {
         const value = typeof skill === 'object' ? skill.value : skill;
         const custom = typeof skill === 'object' ? skill.custom : null;
         
-        if (value === 'professional_current') skillLabels.push('current job expertise');
-        if (value === 'professional_past') skillLabels.push('past work experience');
-        if (value === 'technical_tools') skillLabels.push('software and tools training');
-        if (value === 'personal_transformation') skillLabels.push('transformation coaching');
-        if (value === 'creative_hobbies') skillLabels.push('creative skills teaching');
-        if (value === 'life_skills') skillLabels.push('life skills consulting');
-        if (value === 'academic_knowledge') skillLabels.push('tutoring and test prep');
-        if (value === 'niche_expertise' && custom) skillLabels.push(custom.toLowerCase());
+        if (value === 'professional_current' && custom) {
+          skillLabels.push(`${custom.toLowerCase()} consulting`);
+        } else if (value === 'technical_tools' && custom) {
+          skillLabels.push(`${custom.toLowerCase()} training`);
+        } else if (value === 'personal_transformation' && custom) {
+          skillLabels.push(`${custom.toLowerCase()} coaching`);
+        } else if (value === 'niche_expertise' && custom) {
+          skillLabels.push(`${custom.toLowerCase()} consulting`);
+        } else if (value === 'academic_knowledge' && custom) {
+          skillLabels.push(`${custom.toLowerCase()} tutoring`);
+        }
       });
       
       // Extract key phrases from requests
       const requestKeywords = userRequests.toLowerCase().match(/(?:help with|ask for|want|need|asks?)\s+([^,.]+)/g) || [];
       const specificRequests = requestKeywords.slice(0, 2).map(r => r.replace(/(?:help with|ask for|want|need|asks?)\s+/, '').trim());
       
-      // Build suggestion
+      // Build a simple, direct answer
       if (skillLabels.length > 0 && specificRequests.length > 0) {
-        return `I could charge $50/hour for ${specificRequests[0]}, leveraging my ${skillLabels[0]}. Based on what people already ask me for, I could also offer ${specificRequests[1] || 'consulting services'} and training sessions.`;
+        return `I could charge $50/hour for ${specificRequests[0]} based on my experience with ${skillLabels[0]}. I could also offer ${specificRequests[1] || 'consulting services'} and training sessions at similar rates.`;
       } else if (skillLabels.length > 0) {
-        return `I could charge $50/hour for ${skillLabels[0]}, providing consulting and implementation support to help clients achieve quick wins.`;
+        return `I could charge $50/hour for ${skillLabels[0]}, offering consulting sessions, training, and implementation support.`;
       }
+      return '';
+      
+    case 'target_who':
+      // Generate smart suggestion based on who's been asking for help
+      const whoRequests = answers.actual_requests || '';
+      const whoSkills = answers.craft_skills || [];
+      
+      if (!whoRequests) return '';
+      
+      // Analyze the requests to identify WHO is asking
+      const suggestions: string[] = [];
+      const requestsLower = whoRequests.toLowerCase();
+      
+      // Check for professional context
+      if (requestsLower.includes('colleague') || requestsLower.includes('boss') || 
+          requestsLower.includes('work') || requestsLower.includes('team')) {
+        suggestions.push('professionals');
+      }
+      
+      // Check for business context
+      if (requestsLower.includes('client') || requestsLower.includes('founder') || 
+          requestsLower.includes('business') || requestsLower.includes('startup')) {
+        suggestions.push('business_owners');
+      }
+      
+      // Check for creative context
+      if (requestsLower.includes('youtube') || requestsLower.includes('content') || 
+          requestsLower.includes('instagram') || requestsLower.includes('blog')) {
+        suggestions.push('creators');
+      }
+      
+      // Check for student context
+      if (requestsLower.includes('student') || requestsLower.includes('learn') || 
+          requestsLower.includes('course') || requestsLower.includes('study')) {
+        suggestions.push('students');
+      }
+      
+      // Check for parent context
+      if (requestsLower.includes('parent') || requestsLower.includes('mom') || 
+          requestsLower.includes('dad') || requestsLower.includes('kid')) {
+        suggestions.push('parents');
+      }
+      
+      // Check skills for additional context
+      whoSkills.forEach((skill: any) => {
+        const value = typeof skill === 'object' ? skill.value : skill;
+        if (value === 'professional_current' || value === 'professional_past') {
+          if (!suggestions.includes('professionals')) suggestions.push('professionals');
+        }
+        if (value === 'academic_knowledge') {
+          if (!suggestions.includes('students')) suggestions.push('students');
+        }
+      });
+      
+      // Return formatted suggestion
+      if (suggestions.length > 0) {
+        return `Based on your answers, consider targeting: ${suggestions.slice(0, 2).join(' or ')}. These are people already in your network asking for help.`;
+      }
+      
       return '';
       
     case 'dream_outcome':
@@ -236,16 +300,34 @@ Personally: ${improved.slice(Math.ceil(improved.length/2)).join(', ')}.
 Key insight: These are REAL problems people already pay to solve - perfect for productization.`;
 
     case 'confidence_test':
-      // Add Hormozi's value equation perspective
-      return `${currentAnswer}
+      // Simply expand on their answer with additional service options
+      const services = currentAnswer.toLowerCase();
+      const additions = [];
+      
+      // Add relevant service expansions based on what they mentioned
+      if (services.includes('coaching') || services.includes('fitness') || services.includes('training')) {
+        additions.push('personalized program design, form correction sessions, accountability check-ins');
+      }
+      if (services.includes('development') || services.includes('code') || services.includes('app')) {
+        additions.push('code reviews, debugging sessions, technical consultations');
+      }
+      if (services.includes('design') || services.includes('creative')) {
+        additions.push('design consultations, creative direction, portfolio reviews');
+      }
+      if (services.includes('writing') || services.includes('content')) {
+        additions.push('editing services, content strategy, writing workshops');
+      }
+      if (services.includes('business') || services.includes('consulting')) {
+        additions.push('strategy sessions, process optimization, implementation support');
+      }
+      
+      if (additions.length > 0) {
+        return `${currentAnswer}\n\nAdditional services at the $50/hour rate could include: ${additions[0]}.`;
+      }
+      
+      // Default expansion if no keywords matched
+      return `${currentAnswer}\n\nRelated services could include one-on-one consultations, group workshops, or package deals for ongoing support.`;
 
-Applying Hormozi's framework:
-- Dream Outcome: Clear transformation I deliver
-- Perceived Likelihood: Proven track record with similar clients
-- Time Delay: Results within first session
-- Effort & Sacrifice: Minimal - I do the heavy lifting
-
-This positions me for $50-150/hour consulting or $297+ for packaged solutions.`;
 
     case 'target_outcome':
       // Make it more specific and measurable
@@ -385,15 +467,15 @@ const questions: QuestionData[] = [
     question: "The Confidence Test: What could you charge $50/hour for TODAY?",
     subtext: "Don't overthink - what would people realistically pay you for right now?",
     type: 'textarea',
-    placeholder: "I'll suggest something based on your previous answers...",
+    placeholder: "Example: I could charge $50/hour for Excel consulting, teaching people how to build automated spreadsheets and financial models...",
     validation: {
       required: true,
       minLength: 20,
-      maxLength: 300
+      maxLength: 1500
     },
     helpText: "If you're unsure, think about what you do at work that others struggle with, or personal transformations you've achieved.",
     showAIHelper: true,
-    smartSuggestion: true
+    showAutoGenerate: true
   },
 
   // ========================================
@@ -401,82 +483,99 @@ const questions: QuestionData[] = [
   // ========================================
   {
     id: 'approach_choice',
-    question: "Choose your approach for the next 6 weeks",
-    subtext: "Both work - it's about what fits your style",
+    question: "Choose your product validation approach",
+    subtext: "Both paths work - pick what matches your personality and goals",
     type: 'radio',
     options: [
       {
         value: 'architect',
         label: 'The Architect',
-        description: 'One niche for 6 weeks. Compound efforts, more likely to hit $1K, efficient path to income.',
+        description: 'Focus deeply on ONE niche. Build expertise, compound results, maximize income potential. Best if you want predictable progress.',
         icon: <Target className="w-5 h-5 text-purple-600" />
       },
       {
         value: 'archaeologist',
         label: 'The Archaeologist',
-        description: 'Experiment with 2-3 niches. More fun, lower pressure, good for learning.',
+        description: 'Test 2-3 different niches simultaneously. More variety, faster learning, discover unexpected opportunities. Best if you like exploring.',
         icon: <Lightbulb className="w-5 h-5 text-blue-600" />
       }
     ],
     validation: {
       required: true
     },
-    helpText: "Architects often make money faster. Archaeologists have more fun exploring. You can always switch approaches after 6 weeks."
+    helpText: "💡 Pro tip: Commit to your choice for at least 4-6 weeks to see real results. Architects typically reach $1K faster, while Archaeologists often discover more scalable opportunities. You can always adjust your approach based on what you learn."
   },
 
   {
     id: 'target_who',
-    question: "WHO do you want to help? (Your 'X' Person)",
-    subtext: "Be specific - 'busy moms' is better than 'parents'",
+    question: "WHO do you want to help?",
+    subtext: "Start with people you already know - your network, community, or colleagues who face problems you can solve",
     type: 'checkbox',
     options: [
       {
         value: 'business_owners',
         label: 'Business Owners',
-        description: 'Entrepreneurs, founders, SMB owners',
-        icon: <Briefcase className="w-5 h-5 text-purple-600" />
+        description: 'Specify the type/size',
+        icon: <Briefcase className="w-5 h-5 text-purple-600" />,
+        allowCustom: true,
+        customPlaceholder: 'e.g., SaaS founders, local restaurant owners, e-commerce stores under $1M...'
       },
       {
         value: 'professionals',
         label: 'Corporate Professionals',
-        description: 'Managers, executives, employees',
-        icon: <Users className="w-5 h-5 text-blue-600" />
+        description: 'Specify role/industry',
+        icon: <Users className="w-5 h-5 text-blue-600" />,
+        allowCustom: true,
+        customPlaceholder: 'e.g., HR managers in tech, junior developers, sales directors...'
       },
       {
         value: 'freelancers',
         label: 'Freelancers/Consultants',
-        description: 'Independent workers, agencies',
-        icon: <Zap className="w-5 h-5 text-green-600" />
+        description: 'Specify their field',
+        icon: <Zap className="w-5 h-5 text-green-600" />,
+        allowCustom: true,
+        customPlaceholder: 'e.g., graphic designers, copywriters, marketing consultants...'
       },
       {
         value: 'creators',
         label: 'Content Creators',
-        description: 'YouTubers, bloggers, influencers',
-        icon: <Star className="w-5 h-5 text-pink-600" />
+        description: 'Specify platform/niche',
+        icon: <Star className="w-5 h-5 text-pink-600" />,
+        allowCustom: true,
+        customPlaceholder: 'e.g., YouTube fitness channels, LinkedIn thought leaders, TikTok educators...'
       },
       {
         value: 'students',
         label: 'Students/Learners',
-        description: 'College, bootcamp, self-learners',
-        icon: <Award className="w-5 h-5 text-yellow-600" />
+        description: 'Specify level/field',
+        icon: <Award className="w-5 h-5 text-yellow-600" />,
+        allowCustom: true,
+        customPlaceholder: 'e.g., computer science majors, bootcamp students, professionals learning to code...'
       },
       {
         value: 'parents',
         label: 'Parents',
-        description: 'Moms, dads, caregivers',
-        icon: <Heart className="w-5 h-5 text-red-600" />
+        description: 'Specify demographic',
+        icon: <Heart className="w-5 h-5 text-red-600" />,
+        allowCustom: true,
+        customPlaceholder: 'e.g., working moms with toddlers, single dads, parents of teens with ADHD...'
       },
       {
         value: 'hobbyists',
         label: 'Hobbyists',
-        description: 'People pursuing personal interests',
-        icon: <Trophy className="w-5 h-5 text-orange-600" />
+        description: 'Specify the hobby',
+        icon: <Trophy className="w-5 h-5 text-orange-600" />,
+        allowCustom: true,
+        customPlaceholder: 'e.g., weekend woodworkers, urban gardeners, vintage car restorers...'
       },
       {
         value: 'other',
         label: 'Other specific group',
-        description: 'Click to specify your target audience',
-        allowCustom: true
+        description: 'Define your unique audience',
+        icon: <Lightbulb className="w-5 h-5 text-indigo-600" />,
+        allowCustom: true,
+        customRequired: true,
+        customPlaceholder: 'e.g., Retirees planning RV travel, Military spouses, Digital nomads in Asia...'
       }
     ],
     validation: {
@@ -484,7 +583,9 @@ const questions: QuestionData[] = [
       minSelections: 1,
       maxSelections: 2
     },
-    helpText: "Pick 1-2 groups max. If selecting 'Other', please specify (e.g., 'Retirees planning travel', 'New graduates', 'Pet owners')."
+    helpText: "💡 Think about: Who's in your phone contacts? Your LinkedIn network? Facebook groups you're in? Slack communities? Pick people you can actually reach out to TODAY for validation. Pre-selected options need your specific details!",
+    showAIHelper: true,
+    smartSuggestion: true
   },
 
   {
@@ -637,9 +738,9 @@ const questions: QuestionData[] = [
     },
     helpText: "Go deeper: If they achieve your outcome, what does that enable in their life?",
     examples: [
-      "Not just organized â†’ Finally have time for family instead of working weekends",
-      "Not just fit â†’ Walk into any room with confidence and energy",
-      "Not just more sales â†’ Build a business that runs without them"
+      "Not just organized Ã¢â€ â€™ Finally have time for family instead of working weekends",
+      "Not just fit Ã¢â€ â€™ Walk into any room with confidence and energy",
+      "Not just more sales Ã¢â€ â€™ Build a business that runs without them"
     ],
     showAIHelper: true,
     smartSuggestion: true
@@ -813,6 +914,7 @@ export default function ProductIdeaGenerator() {
   const [nicheScore, setNicheScore] = useState<{ score: number; feedback: string }>({ score: 0, feedback: '' });
   const [improvementSuggestion, setImprovementSuggestion] = useState<string>('');
   const [isGeneratingImprovement, setIsGeneratingImprovement] = useState(false);
+  const [hasPreselected, setHasPreselected] = useState<{[key: string]: boolean}>({});
 
   const generateContextualExamples = (questionId: string): string[] => {
     if (questionId === 'actual_requests' && answers.craft_skills) {
@@ -912,11 +1014,11 @@ export default function ProductIdeaGenerator() {
       
       // Generate feedback
       if (score >= 3) {
-        feedback = "ðŸŸ¢ GREEN LIGHT! This niche has strong potential. Full speed ahead!";
+        feedback = "Ã°Å¸Å¸Â¢ GREEN LIGHT! This niche has strong potential. Full speed ahead!";
       } else if (score >= 2) {
-        feedback = "ðŸŸ¡ YELLOW LIGHT: Proceed with caution. Some challenges but workable for 6 weeks.";
+        feedback = "Ã°Å¸Å¸Â¡ YELLOW LIGHT: Proceed with caution. Some challenges but workable for 6 weeks.";
       } else {
-        feedback = "ðŸ”´ RED LIGHT: High risk niche. Consider pivoting to something with better alignment.";
+        feedback = "Ã°Å¸â€Â´ RED LIGHT: High risk niche. Consider pivoting to something with better alignment.";
       }
       
       setNicheScore({ score, feedback });
@@ -925,18 +1027,136 @@ export default function ProductIdeaGenerator() {
 
 
   useEffect(() => {
-    if (currentQuestion.smartSuggestion && !answers[currentQuestion.id]) {
-      const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
+    // Debug to confirm useEffect is running
+    console.log('📍 useEffect running, currentQuestionIndex:', currentQuestionIndex);
+    console.log('📍 Current question:', questions[currentQuestionIndex]?.id);
+    
+    // Clear smart suggestion first when changing questions
+    setShowSmartSuggestion(null);
+    
+    const currentQ = questions[currentQuestionIndex];
+    
+    // Special handling for target_who - pre-select based on analysis
+    if (currentQ.id === 'target_who' && !hasPreselected['target_who']) {
+      // Check if answer is truly empty (undefined, null, or empty array)
+      const currentAnswer = answers.target_who;
+      const hasAnswer = currentAnswer && 
+                       (!Array.isArray(currentAnswer) || currentAnswer.length > 0);
+      
+      console.log('🎯 Target WHO question reached. Has answer?', hasAnswer);
+      console.log('🎯 Current answer:', currentAnswer);
+      
+      if (!hasAnswer) {
+        console.log('🎯 Analyzing for target_who pre-selection...');
+        const whoRequests = answers.actual_requests || '';
+        const whoSkills = answers.craft_skills || [];
+        
+        console.log('Requests to analyze:', whoRequests);
+        
+        if (whoRequests) {
+          const preSelected: any[] = [];
+          const requestsLower = whoRequests.toLowerCase();
+          
+          // Analyze requests to identify WHO is asking
+          if (requestsLower.includes('colleague') || requestsLower.includes('boss') || 
+              requestsLower.includes('work') || requestsLower.includes('team') ||
+              requestsLower.includes('coworker') || requestsLower.includes('employee') ||
+              requestsLower.includes('manager') || requestsLower.includes('office')) {
+            preSelected.push({ 
+              value: 'professionals', 
+              custom: 'Colleagues from my current workplace who need help with similar challenges' 
+            });
+            console.log('✅ Detected professionals');
+          }
+          
+          if (requestsLower.includes('client') || requestsLower.includes('founder') || 
+              requestsLower.includes('business') || requestsLower.includes('startup') ||
+              requestsLower.includes('entrepreneur') || requestsLower.includes('owner') ||
+              requestsLower.includes('company') || requestsLower.includes('ceo')) {
+            preSelected.push({ 
+              value: 'business_owners', 
+              custom: 'Small business owners in my network' 
+            });
+            console.log('✅ Detected business owners');
+          }
+          
+          if (requestsLower.includes('student') || requestsLower.includes('learn') ||
+              requestsLower.includes('study') || requestsLower.includes('class') ||
+              requestsLower.includes('course') || requestsLower.includes('school')) {
+            preSelected.push({
+              value: 'students',
+              custom: 'Students or people learning new skills'
+            });
+            console.log('✅ Detected students');
+          }
+          
+          if (requestsLower.includes('friend') || requestsLower.includes('family') ||
+              requestsLower.includes('sister') || requestsLower.includes('brother') ||
+              requestsLower.includes('neighbor') || requestsLower.includes('people')) {
+            // Determine most likely category based on context
+            if (requestsLower.includes('parent') || requestsLower.includes('mom') || 
+                requestsLower.includes('dad') || requestsLower.includes('kid') ||
+                requestsLower.includes('child')) {
+              preSelected.push({ 
+                value: 'parents', 
+                custom: 'Parents in my social circle' 
+              });
+              console.log('✅ Detected parents');
+            } else if (!preSelected.find(p => p.value === 'professionals')) {
+              // Generic friends/family - try to be more specific
+              preSelected.push({
+                value: 'hobbyists',
+                custom: 'Friends and family members interested in my skills'
+              });
+              console.log('✅ Detected hobbyists/general');
+            }
+          }
+          
+          console.log('Total pre-selected:', preSelected.length);
+          
+          if (preSelected.length > 0) {
+            // Pre-fill the answer
+            console.log('Setting pre-selected answers:', preSelected);
+            setHasPreselected(prev => ({ ...prev, target_who: true })); // Mark that we've preselected
+            setAnswers(prev => ({
+              ...prev,
+              target_who: preSelected.slice(0, 2) // Max 2 selections
+            }));
+            
+            // Show notification about pre-selection
+            setShowSmartSuggestion(
+              `✅ We've pre-selected ${preSelected.length} group${preSelected.length > 1 ? 's' : ''} based on who's already asking you for help. Please review and add specific details about your exact target audience in each field - the more specific, the better your product will be!`
+            );
+          } else {
+            console.log('⚠️ No matches found for pre-selection');
+            setHasPreselected(prev => ({ ...prev, target_who: true })); // Still mark as attempted
+            // Still show a helpful message
+            setShowSmartSuggestion(
+              `💡 Based on your skills and requests, think about who in your network needs this help most. Are they professionals, business owners, parents, or another specific group?`
+            );
+          }
+        } else {
+          console.log('⚠️ No actual_requests found to analyze');
+          setHasPreselected(prev => ({ ...prev, target_who: true })); // Mark as attempted
+        }
+      } else {
+        console.log('Already has answer, skipping pre-selection');
+        setHasPreselected(prev => ({ ...prev, target_who: true })); // Mark as checked
+      }
+    }
+    // Regular smart suggestion for other questions
+    else if (currentQ.smartSuggestion && !answers[currentQ.id]) {
+      const suggestion = generateSmartSuggestion(currentQ.id, answers);
       if (suggestion) {
         setShowSmartSuggestion(suggestion);
         // Pre-fill the answer with the suggestion
         setAnswers(prev => ({
           ...prev,
-          [currentQuestion.id]: suggestion
+          [currentQ.id]: suggestion
         }));
       }
     }
-  }, [currentQuestionIndex, currentQuestion]);
+  }, [currentQuestionIndex, hasPreselected]); // Add hasPreselected to dependencies
 
   // Handle answer changes
   const handleAnswerChange = (answer: any) => {
@@ -985,7 +1205,7 @@ export default function ProductIdeaGenerator() {
       
       // First try the Claude API for better quality
       if (user) {
-        console.log('🤖 Generating optimal answer with Claude...');
+        console.log('ðŸ¤– Generating optimal answer with Claude...');
         const generateOptimalFunction = httpsCallable(functions, 'generateOptimalAnswer');
         
         const payload = {
@@ -1003,7 +1223,7 @@ export default function ProductIdeaGenerator() {
         const data = result.data as any;
         
         if (data.success && data.generatedAnswer) {
-          console.log('✨ Got optimal answer from Claude!');
+          console.log('âœ¨ Got optimal answer from Claude!');
           setAnswers(prev => ({
             ...prev,
             [currentQuestion.id]: data.generatedAnswer
@@ -1020,7 +1240,7 @@ export default function ProductIdeaGenerator() {
       }
       
       // Fallback to local generation
-      console.log('📝 Using local generation...');
+      console.log('ðŸ“ Using local generation...');
       const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
       if (suggestion) {
         setAnswers(prev => ({
@@ -1048,21 +1268,21 @@ export default function ProductIdeaGenerator() {
   };
 
  const handleImproveAnswer = async (currentAnswer: string) => {
-    console.log('🚀 Starting improvement process...');
+    console.log('ðŸš€ Starting improvement process...');
     setIsGeneratingImprovement(true);
     
     try {
       const user = auth.currentUser;
       
       if (!user) {
-        console.log('❌ No user, using local fallback');
+        console.log('âŒ No user, using local fallback');
         const improved = generateImprovedAnswer(currentQuestion.id, currentAnswer);
         setImprovementSuggestion(improved);
         setIsGeneratingImprovement(false);
         return;
       }
 
-      console.log('📡 Calling Firebase Function...');
+      console.log('ðŸ“¡ Calling Firebase Function...');
       const improveAnswerFunction = httpsCallable(functions, 'improveAnswer');
       
       // FIXED: Send the parameters the function expects
@@ -1077,23 +1297,23 @@ export default function ProductIdeaGenerator() {
         }, {} as any)
       };
       
-      console.log('📦 Sending payload:', payload);
+      console.log('ðŸ“¦ Sending payload:', payload);
       
       const result = await improveAnswerFunction(payload);
-      console.log('✅ Function response:', result);
+      console.log('âœ… Function response:', result);
       
       const data = result.data as any;
       
       if (data.success && data.improvedAnswer) {
-        console.log('🎉 Got improved answer from Claude!');
+        console.log('ðŸŽ‰ Got improved answer from Claude!');
         setImprovementSuggestion(data.improvedAnswer);
       } else {
-        console.log('⚠️ Unexpected response format:', data);
+        console.log('âš ï¸ Unexpected response format:', data);
         throw new Error('Unexpected response format');
       }
       
     } catch (error: any) {
-      console.error('❌ Full error:', error);
+      console.error('âŒ Full error:', error);
       console.error('Error code:', error.code);
       console.error('Error message:', error.message);
       
@@ -1207,6 +1427,10 @@ const handleRejectImprovement = () => {
 
   // Navigation
   const handleNext = () => {
+    // Clear smart suggestion when moving to next question
+    setShowSmartSuggestion(null);
+    setImprovementSuggestion('');
+    
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1218,6 +1442,10 @@ const handleRejectImprovement = () => {
   };
 
   const handleBack = () => {
+    // Clear smart suggestion when moving to previous question
+    setShowSmartSuggestion(null);
+    setImprovementSuggestion('');
+    
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(prev => prev - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1226,6 +1454,9 @@ const handleRejectImprovement = () => {
 
   const handleProgressClick = (step: number) => {
     if (step <= currentQuestionIndex + 1) {
+      // Clear smart suggestion when jumping to a different question
+      setShowSmartSuggestion(null);
+      setImprovementSuggestion('');
       setCurrentQuestionIndex(step - 1);
     }
   };
@@ -1460,7 +1691,7 @@ const handleRejectImprovement = () => {
                         onClick={() => selectProductIdea(idea)}
                         className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-indigo-700 transition-all text-sm"
                       >
-                        Build This Product â†’
+                        Build This Product Ã¢â€ â€™
                       </button>
                     </div>
 
@@ -1565,10 +1796,23 @@ const handleRejectImprovement = () => {
                   <Sparkles className="w-5 h-5 text-purple-600 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
-                      We've pre-filled this based on your previous answers!
+                      {currentQuestion.id === 'target_who' 
+                        ? "📊 Pre-selected based on your previous answers - Please validate!"
+                        : currentQuestion.id === 'confidence_test'
+                        ? "💡 We've calculated what you could charge based on your skills"
+                        : "We've pre-filled this based on your previous answers!"}
                     </p>
                     <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
-                      Feel free to edit or keep as is - this suggestion follows proven frameworks for success.
+                      {currentQuestion.id === 'target_who'
+                        ? (
+                          <span>
+                            {showSmartSuggestion}<br/>
+                            <span className="font-semibold mt-1 block">
+                              ⚠️ Action Required: Add specific details in each text field (e.g., "HR managers at Series A startups" instead of just "professionals")
+                            </span>
+                          </span>
+                        )
+                        : "Feel free to edit or keep as is - this suggestion follows proven frameworks for success."}
                     </p>
                   </div>
                 </div>
@@ -1608,7 +1852,7 @@ const handleRejectImprovement = () => {
                 onClick={() => navigate('/products/sales')}
                 className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
               >
-                Skip and go directly to sales page builder â†’
+                Skip and go directly to sales page builder Ã¢â€ â€™
               </button>
             </div>
           </div>
