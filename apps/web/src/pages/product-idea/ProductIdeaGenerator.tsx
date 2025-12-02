@@ -106,8 +106,7 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
       }
       // Extract key skills
       const skillLabels: string[] = [];
-      const customSkills: string[] = [];
-      
+
       userSkills.forEach((skill: any) => {
         const value = typeof skill === 'object' ? skill.value : skill;
         const custom = typeof skill === 'object' ? skill.custom : null;
@@ -450,7 +449,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true,
       minLength: 30,
-      maxLength: 1500
+      maxLength: 2500
     },
     helpText: "Be specific! Include both work requests and personal favors. These are validated problems people already have. Minimum 30 characters in length.",
     examples: [
@@ -471,7 +470,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true,
       minLength: 20,
-      maxLength: 1500
+      maxLength: 2500
     },
     helpText: "If you're unsure, think about what you do at work that others struggle with, or personal transformations you've achieved.",
     showAIHelper: true,
@@ -581,7 +580,6 @@ const questions: QuestionData[] = [
     validation: {
       required: true,
       minSelections: 1,
-      maxSelections: 2
     },
     helpText: "💡 Think about: Who's in your phone contacts? Your LinkedIn network? Facebook groups you're in? Slack communities? Pick people you can actually reach out to TODAY for validation. Pre-selected options need your specific details!",
     showAIHelper: true,
@@ -597,7 +595,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true,
       minLength: 15,
-      maxLength: 200
+      maxLength: 2500
     },
     helpText: "Make it specific and achievable. 'Be happier' is vague. 'Wake up energized without coffee' is specific.",
     examples: [
@@ -607,7 +605,8 @@ const questions: QuestionData[] = [
       "Launch their Etsy shop and make first $1,000",
       "Meal prep for the whole week in under 2 hours"
     ],
-    showAIHelper: true
+    showAIHelper: true,
+    showAutoGenerate: true
   },
 
   {
@@ -619,7 +618,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true,
       minLength: 20,
-      maxLength: 150
+      maxLength: 2500
     },
     helpText: "This is your north star for the next 6 weeks. Keep it simple and clear.",
     showAIHelper: true
@@ -734,7 +733,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true,
       minLength: 30,
-      maxLength: 300
+      maxLength: 2500
     },
     helpText: "Go deeper: If they achieve your outcome, what does that enable in their life?",
     examples: [
@@ -809,7 +808,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true,
       minLength: 30,
-      maxLength: 400
+      maxLength: 2500
     },
     helpText: "The faster they see results, the more they'll pay. Think: What's the smallest valuable outcome?",
     examples: [
@@ -893,7 +892,7 @@ const questions: QuestionData[] = [
   validation: {
     required: true,
     minLength: 50,
-    maxLength: 600
+    maxLength: 2500
   },
   helpText: "Each bonus should solve a specific objection or fear. Assign a value to each!",
   showAIHelper: true,
@@ -913,6 +912,7 @@ export default function ProductIdeaGenerator() {
   const [generatedIdeas, setGeneratedIdeas] = useState<GeneratedIdea[]>([]);
   const [nicheScore, setNicheScore] = useState<{ score: number; feedback: string }>({ score: 0, feedback: '' });
   const [improvementSuggestion, setImprovementSuggestion] = useState<string>('');
+  const [suggestionPreview, setSuggestionPreview] = useState<string>('');
   const [isGeneratingImprovement, setIsGeneratingImprovement] = useState(false);
   const [hasPreselected, setHasPreselected] = useState<{[key: string]: boolean}>({});
 
@@ -1191,13 +1191,6 @@ export default function ProductIdeaGenerator() {
 
   // Replace the handleAutoGenerate function
   const handleAutoGenerate = async () => {
-    const currentAnswer = answers[currentQuestion.id];
-    if (currentAnswer && currentAnswer.length > 0) {
-      if (!confirm('This will replace your current answer with an AI-generated optimal answer. Continue?')) {
-        return;
-      }
-    }
-    
     setIsGeneratingOptimal(true);
     
     try {
@@ -1205,7 +1198,7 @@ export default function ProductIdeaGenerator() {
       
       // First try the Claude API for better quality
       if (user) {
-        console.log('ðŸ¤– Generating optimal answer with Claude...');
+        console.log('🤖 Generating optimal answer with Claude...');
         const generateOptimalFunction = httpsCallable(functions, 'generateOptimalAnswer');
         
         const payload = {
@@ -1223,48 +1216,52 @@ export default function ProductIdeaGenerator() {
         const data = result.data as any;
         
         if (data.success && data.generatedAnswer) {
-          console.log('âœ¨ Got optimal answer from Claude!');
-          setAnswers(prev => ({
-            ...prev,
-            [currentQuestion.id]: data.generatedAnswer
-          }));
-          
-          // Trigger AI response for the generated content
-          if (currentQuestion.showAIHelper) {
-            generateAIResponse(currentQuestion.id, data.generatedAnswer);
-          }
-          
+          console.log('✨ Got optimal answer from Claude!');
+          // Set preview instead of directly changing answer
+          setSuggestionPreview(data.generatedAnswer);
           setIsGeneratingOptimal(false);
           return;
         }
       }
       
       // Fallback to local generation
-      console.log('ðŸ“ Using local generation...');
+      console.log('📝 Using local generation...');
       const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
       if (suggestion) {
-        setAnswers(prev => ({
-          ...prev,
-          [currentQuestion.id]: suggestion
-        }));
-        // Trigger AI response for the generated content
-        if (currentQuestion.showAIHelper) {
-          generateAIResponse(currentQuestion.id, suggestion);
-        }
+        // Set preview instead of directly changing answer
+        setSuggestionPreview(suggestion);
       }
     } catch (error) {
       console.error('Error generating optimal answer:', error);
       // Fallback to local generation
       const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
       if (suggestion) {
-        setAnswers(prev => ({
-          ...prev,
-          [currentQuestion.id]: suggestion
-        }));
+        setSuggestionPreview(suggestion);
       }
     } finally {
       setIsGeneratingOptimal(false);
     }
+  };
+
+  // Handle accepting suggestion
+  const handleAcceptSuggestion = () => {
+    if (suggestionPreview) {
+      setAnswers(prev => ({
+        ...prev,
+        [currentQuestion.id]: suggestionPreview
+      }));
+      setSuggestionPreview('');
+      
+      // Trigger AI response for the accepted content
+      if (currentQuestion.showAIHelper) {
+        generateAIResponse(currentQuestion.id, suggestionPreview);
+      }
+    }
+  };
+
+  // Handle rejecting suggestion
+  const handleRejectSuggestion = () => {
+    setSuggestionPreview('');
   };
 
  const handleImproveAnswer = async (currentAnswer: string) => {
@@ -1430,6 +1427,7 @@ const handleRejectImprovement = () => {
     // Clear smart suggestion when moving to next question
     setShowSmartSuggestion(null);
     setImprovementSuggestion('');
+    setSuggestionPreview('');
     
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
@@ -1445,6 +1443,7 @@ const handleRejectImprovement = () => {
     // Clear smart suggestion when moving to previous question
     setShowSmartSuggestion(null);
     setImprovementSuggestion('');
+    setSuggestionPreview('');
     
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(prev => prev - 1);
@@ -1452,11 +1451,12 @@ const handleRejectImprovement = () => {
     }
   };
 
-  const handleProgressClick = (step: number) => {
+ const handleProgressClick = (step: number) => {
     if (step <= currentQuestionIndex + 1) {
       // Clear smart suggestion when jumping to a different question
       setShowSmartSuggestion(null);
       setImprovementSuggestion('');
+      setSuggestionPreview('');
       setCurrentQuestionIndex(step - 1);
     }
   };
@@ -1735,7 +1735,7 @@ const handleRejectImprovement = () => {
     <div className="max-w-7xl mx-auto px-4">
       <div className="flex gap-8"> 
         {/* Left Sidebar - Progress Summary (Desktop Only) */}
-        <div className="hidden lg:block  flex-shrink-0">
+        <div className="hidden lg:block flex-shrink-0 relative z-10" style={{marginTop:'13.9rem'}}>
           <ProgressSummary
             answers={answers}
             currentPhase={currentPhase}
@@ -1833,6 +1833,9 @@ const handleRejectImprovement = () => {
               onNext={handleNext}
               onBack={handleBack}
               onAutoGenerate={handleAutoGenerate}
+              suggestionPreview={suggestionPreview}
+              onAcceptSuggestion={handleAcceptSuggestion}
+              onRejectSuggestion={handleRejectSuggestion}
               onImproveAnswer={handleImproveAnswer}
               improvementSuggestion={currentQuestionIndex === questions.findIndex(q => q.id === currentQuestion.id) ? improvementSuggestion : ''}
               onAcceptImprovement={handleAcceptImprovement}

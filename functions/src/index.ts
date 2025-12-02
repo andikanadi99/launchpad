@@ -279,24 +279,41 @@ export const improveAnswer = onRequest(
       let systemPrompt = `You are improving an entrepreneur's answer to make it more specific and actionable.
 
 Core principles:
-- Add specific details where vague
+- Improve clarity and structure of what they already wrote
+- NEVER add specific numbers, frequencies, or data they didn't provide
 - Keep the original voice and tone
-- Make it actionable
-- Keep it simple and conversational`;
+- Make it more readable and clear
+- DO NOT invent details
+
+FORMATTING RULES:
+- NEVER use asterisks (*) for any formatting
+- NEVER use ** for bold or emphasis
+- Use colons for section headers like "At work:" or "Cybersecurity consulting:"
+- Use simple line breaks to separate sections
+- Write everything in plain text`;
 
       let improvePrompt = `Original Answer: ${originalAnswer}
 
-Make this answer more specific and valuable by:
-1. Adding concrete details (numbers, timeframes)
-2. Keeping it simple and conversational
-3. Maintaining their voice
+Improve this answer by:
+1. Making their existing points clearer
+2. Better organizing what they already said
+3. Using more professional wording
 
 DO NOT:
-- Add excessive formatting or asterisks
-- Make assumptions about their exact situation
+- Use asterisks (*) or any markdown formatting
+- Add specific numbers (like "2-3 times a week" or "6 people") they didn't mention
+- Invent new examples or scenarios
+- Make assumptions about frequencies or quantities
 - Use dramatic language
 - Make it longer than necessary
 - Add income calculations or monthly goals
+
+FORMATTING:
+- Use simple section headers with colons like "Web Development Services:" 
+- Separate sections with line breaks
+- NO asterisks, NO bold, NO markdown
+
+ONLY improve what they already wrote. If they were vague about numbers, keep it vague.
 
 Keep improvements natural and under 250 words.`;
 
@@ -304,28 +321,50 @@ Keep improvements natural and under 250 words.`;
       if (questionId === 'actual_requests') {
         improvePrompt += `
 
-Simply make their list more specific:
-- Instead of "help with code" → "review React components"
-- Instead of "fitness advice" → "meal prep strategies"
-- Add frequency if relevant (weekly, monthly)
-Keep it conversational. Don't add analysis or strategy.`;
+Focus on:
+- Clarifying the types of help they mentioned
+- Grouping related requests together
+- Using clearer language
+
+Format sections like:
+At work:
+[their work-related requests]
+
+Personal:
+[their personal requests]
+
+Do NOT add specific numbers or timeframes they didn't provide.
+If they said "often" keep it as "often", don't change to "3 times a week".`;
+
       } else if (questionId === 'confidence_test') {
         improvePrompt += `
 
 Strengthen their confidence with:
-- Specific dollar amount ($50/hour or more)
-- Clear service description
-- What they could offer (consulting, training, implementation)
-- 2-3 specific services they could provide
+- Clearer service descriptions
+- Better organized list of what they could offer
+- More professional wording
 
-Keep it confident and specific. Focus on the services, not income calculations.`;
+Format like:
+Primary service:
+[their main offering at $50/hour]
+
+Additional services:
+[other services they mentioned]
+
+Do NOT add:
+- Specific client numbers
+- Income calculations
+- New services they didn't mention
+Focus only on making their existing services clearer.`;
+
       } else if (questionId === 'target_outcome') {
         improvePrompt += `
 
-Make the outcome more measurable:
-- Add timeframes (30 days, 3 months)
-- Include specific metrics
-- Keep it achievable`;
+Make the outcome clearer by:
+- Using more precise language
+- Making it more concrete
+Do NOT add specific metrics or timeframes they didn't include.
+Use plain text, no special formatting.`;
       }
 
       const message = await anthropic.messages.create({
@@ -376,7 +415,6 @@ Make the outcome more measurable:
     }
   }
 );
-
 /* 
     Purpose: Generates optimal answers using Claude AI for the Product Idea Generator
 */
@@ -437,18 +475,21 @@ Write simple, conversational answers that:
 - Use specific examples from their background
 - Sound authentic, like they wrote it themselves
 - Stay concise and factual
-- Focus on what actually happens, not analysis
+- Include [bracketed placeholders] where they should add their own numbers
 
-FORMATTING RULES:
-- Never use asterisks (*) for formatting
-- Never use bold or markdown formatting
-- Use simple labels like "At work:" or numbered lists
+CRITICAL FORMATTING RULES:
+- NEVER use asterisks (*) for any formatting whatsoever
+- NEVER use ** for bold or emphasis
+- NO markdown formatting at all
+- Use simple labels with colons like "At work:" or "Service offerings:"
+- Use numbered lists (1. 2. 3.) or simple line breaks
 - Write in plain text only
+- Use [X] or [specific detail] as placeholders for numbers/frequencies
 
 Avoid:
-- Any special formatting symbols
+- ANY asterisks or special formatting symbols
 - Overly dramatic language
-- Too many assumptions
+- Making up specific numbers or frequencies
 - Complex explanations
 - Income calculations or monthly goals`;
 
@@ -458,86 +499,91 @@ ${questionSubtext ? `Additional context: ${questionSubtext}` : ''}
 User's background and skills:
 ${JSON.stringify(previousAnswers, null, 2)}
 
-Generate a simple, authentic answer based on their actual experience.`;
+Generate a simple, authentic answer template based on their experience.
+Use [bracketed placeholders] for specific numbers they should fill in.
+NO asterisks, NO markdown formatting, plain text only.`;
 
       // Special handling for specific questions
       if (questionId === 'actual_requests') {
         userPrompt += `
 
-Write a simple list of what people actually ask them for help with.
+Write a template showing what people might ask them for help with.
 
-At work: What do colleagues or bosses ask you to do?
+Format like this (plain text, no asterisks):
 
-From friends/family: What help do they seek from you?
+At work:
+Colleagues ask me [frequency] to help with [specific task]. I've helped [X number of] people with [area].
 
-Online: What questions do you get asked?
+Personal requests:
+Friends ask for help with [relevant skill area] about [frequency].
 
-Keep it conversational and specific. Write in first person.
-Just list what happens - no analysis or conclusions needed.
-NO formatting symbols or asterisks.`;
+Online:
+I get questions about [topic] from [where].
+
+Use colons for sections, NO asterisks, NO bold formatting.
+Keep it conversational and first-person.`;
 
       } else if (questionId === 'confidence_test') {
         userPrompt += `
 
-Write a simple, direct answer about what they could charge $50/hour for TODAY.
+Write a simple template they can customize:
 
-Include:
-1. Primary service they could offer at $50/hour
-2. 2-3 additional related services at similar rates
-3. Brief mention of why they're qualified (their experience/skills)
+"I could charge $50/hour for [specific service based on their actual skills]. I could also offer [related service 1], [related service 2], and [related service 3] at similar rates."
 
-Format example (plain text):
-"I could charge $50/hour for [specific service] based on my [relevant experience]. I could also offer [service 2], [service 3], and [service 4] at similar rates."
-
-Keep it simple and direct. 50-100 words max. NO income calculations, NO monthly goals, NO "quick math". Just the services and hourly rate.`;
+Base the services on their actual skills and experience, but keep it short (50-100 words).
+NO asterisks, NO formatting, just plain text.
+NO income calculations, NO monthly goals. Just the services.`;
 
       } else if (questionId === 'value_stack') {
         userPrompt += `
 
-List 5-7 simple bonuses they could offer. Format as numbered list (plain text):
+List 5-7 simple bonuses they could offer based on their skills.
 
-1. [Bonus name] - [What it does] ($[value])
-2. [Bonus name] - [What it does] ($[value])
-3. [Bonus name] - [What it does] ($[value])
+Format as plain numbered list:
+1. [Specific bonus based on their skills] - [What it does] ($[value])
+2. [Another bonus] - [Description] ($[value])
+3. [Another bonus] - [Description] ($[value])
 
-Keep each bonus to one line. Make values realistic ($97-$497 range).
-No asterisks, no bold, just plain numbered list.`;
+NO asterisks, NO bold, just plain numbered list.
+Use their actual skills to suggest relevant bonuses.
+Keep each to one line. Make values realistic ($97-$497 range).`;
 
       } else if (questionId === 'dream_outcome') {
         userPrompt += `
 
-Write 2-3 sentences about what their customers REALLY want beyond the surface.
+Write 2-3 sentences about what their customers want beyond the surface.
 
-Simple format (plain text, no formatting):
+Plain text format (no asterisks or formatting):
 "They don't just want [surface result]. They want [deeper desire]. Ultimately, they dream of [end state]."
 
-Keep it human and relatable, not overly philosophical. NO special formatting.`;
+Base this on their target audience and outcome. Keep it relatable.`;
 
       } else if (questionId === 'speed_to_value') {
         userPrompt += `
 
-Create a simple timeline showing quick wins (plain text format):
+Create a simple timeline template (plain text, no formatting):
 
-Day 1: [First small result]
-Week 1: [Visible progress]
+Day 1: [First small result they could deliver]
+Week 1: [Visible progress based on their service]
 Day 30: [Major outcome]
 
-One line each, specific but not overly detailed. NO asterisks or special formatting.`;
+Base milestones on their actual skills/services. One line each.
+NO asterisks or special formatting.`;
 
       } else if (questionId === 'mission_statement') {
         userPrompt += `
 
-Write a clear, simple mission statement:
-"I help [specific type of person] achieve [specific outcome]"
+Write a clear mission statement based on their answers:
+"I help [specific type of person from their target] achieve [specific outcome they mentioned]"
 
-One sentence, no jargon, based on their actual skills and target audience.
-Plain text only, no special formatting.`;
+One sentence, no jargon, plain text only.`;
 
       } else if (questionId === 'effort_reducers') {
         userPrompt += `
 
-Based on what they selected, explain briefly how these tools reduce effort for their customers.
-Keep it to 2-3 sentences max, conversational tone, plain text only.`;
+Based on what they selected, explain briefly how these tools reduce effort.
+Keep it to 2-3 sentences max, conversational tone, plain text only.
+NO asterisks or formatting.`;
       }
 
       const message = await anthropic.messages.create({

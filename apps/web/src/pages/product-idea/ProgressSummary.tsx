@@ -60,11 +60,11 @@ const TooltipText: React.FC<{
 
 const ProgressSummary: React.FC<ProgressSummaryProps> = ({ 
   answers, 
-  currentPhase,
-  questions 
+  currentPhase 
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isMobileExpanded, setIsMobileExpanded] = useState(false);
+  const [showAllTargets, setShowAllTargets] = useState(false);
 
   // Helper to get readable labels for skills
   const getSkillLabels = (skills: any[]) => {
@@ -92,29 +92,55 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
     });
   };
 
-  // Helper to get audience labels
-  const getAudienceLabels = (audience: any) => {
-    if (!audience) return '';
+  // Helper to format target audiences properly
+  const formatTargetAudiences = () => {
+    if (!answers.target_who) return null;
     
     const audienceMap: { [key: string]: string } = {
       'business_owners': 'Business Owners',
-      'professionals': 'Professionals',
-      'freelancers': 'Freelancers',
+      'professionals': 'Corporate Professionals',
+      'freelancers': 'Freelancers/Consultants',
       'creators': 'Content Creators',
-      'students': 'Students',
+      'students': 'Students/Learners',
       'parents': 'Parents',
-      'hobbyists': 'Hobbyists'
+      'hobbyists': 'Hobbyists',
+      'other': 'Other'
     };
     
-    if (Array.isArray(audience)) {
-      return audience.map(a => {
-        if (typeof a === 'object' && a.custom) return a.custom;
-        return audienceMap[a] || a;
-      }).join(' & ');
-    }
+    const targets = Array.isArray(answers.target_who) ? answers.target_who : [answers.target_who];
+    const displayTargets = showAllTargets ? targets : targets.slice(0, 2);
     
-    if (typeof audience === 'object' && audience.custom) return audience.custom;
-    return audienceMap[audience] || audience;
+    return (
+      <>
+        {displayTargets.map((target: any, index: number) => {
+          const targetValue = typeof target === 'object' ? target.value : target;
+          const targetCustom = typeof target === 'object' ? target.custom : '';
+          const label = audienceMap[targetValue] || targetValue;
+          
+          return (
+            <div key={index} className="mb-2 pl-6">
+              <div className="text-sm text-neutral-600 dark:text-neutral-400">
+                - <span className="font-medium">{label}</span>
+              </div>
+              {targetCustom && (
+                <div className="text-xs text-neutral-500 dark:text-neutral-500 pl-3 mt-1 italic">
+                  "{targetCustom}"
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {targets.length > 2 && (
+          <button
+            type="button"
+            onClick={() => setShowAllTargets(!showAllTargets)}
+            className="text-purple-500 hover:text-purple-600 text-xs font-medium pl-6"
+          >
+            {showAllTargets ? '(show less)' : `(+${targets.length - 2} more)`}
+          </button>
+        )}
+      </>
+    );
   };
 
   // Calculate validation score
@@ -145,7 +171,7 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
   
   return (
     <>
-      <style jsx>{`
+      <style >{`
         @keyframes fadeIn {
           from {
             opacity: 0;
@@ -159,31 +185,31 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
       `}</style>
       
       {/* Desktop Version - Sticky Sidebar */}
-      <div className="hidden lg:block sticky top-6 w-72 flex-shrink-0">
-        <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden shadow-sm">
-        {/* Header */}
-          <button
+    <div className="hidden lg:block sticky top-6 w-72 flex-shrink-0" style={{paddingTop:'5rem'}}>
+        <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col max-h-[70vh]">
+        {/* Header - Now sticky within container */}
+            <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="w-full px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 flex items-center justify-between hover:from-purple-100 hover:to-indigo-100 dark:hover:from-purple-900/30 dark:hover:to-indigo-900/30 transition-colors"
-          >
+            className="flex-shrink-0 w-full px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 flex items-center justify-between hover:from-purple-100 hover:to-indigo-100 dark:hover:from-purple-900/30 dark:hover:to-indigo-900/30 transition-colors border-b border-neutral-200 dark:border-neutral-800"
+            >
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center">
                 <Star className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-semibold text-neutral-900 dark:text-white">
+                </div>
+                <span className="font-semibold text-neutral-900 dark:text-white">
                 Your Progress So Far
-              </span>
+                </span>
             </div>
             {isExpanded ? (
-              <ChevronUp className="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
+                <ChevronUp className="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
             ) : (
-              <ChevronDown className="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
+                <ChevronDown className="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
             )}
-          </button>
+            </button>
 
-          {/* Content */}
-          {isExpanded && (
-            <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+            {/* Content - Now scrollable separately */}
+            {isExpanded && (
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
               {/* Phase 1: Skills */}
               {answers.craft_skills && (
                 <div className="space-y-2">
@@ -227,27 +253,42 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                 </div>
               )}
 
-              {/* Phase 2: Niche */}
+              {/* Phase 2: Niche - IMPROVED SECTION */}
               {currentPhase >= 2 && answers.approach_choice && (
                 <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
                   <h3 className="font-semibold text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
                     <Target className="w-4 h-4 text-purple-500" />
                     Your Focus
                   </h3>
-                  <div className="space-y-1 text-sm text-neutral-600 dark:text-neutral-400 pl-6">
-                    <div>- Approach: <span className="font-medium">{answers.approach_choice === 'architect' ? 'Architect (one niche)' : 'Archaeologist (explore)'}</span></div>
-                    {answers.target_who && (
-                      <div>- Target: <span className="font-medium">{getAudienceLabels(answers.target_who)}</span></div>
-                    )}
-                    {answers.target_outcome && (
-                      <div>- Outcome: <TooltipText 
+                  
+                  {/* Approach */}
+                  <div className="text-sm text-neutral-600 dark:text-neutral-400 pl-6">
+                    - Approach: <span className="font-medium">
+                      {answers.approach_choice === 'architect' ? 'Architect (one niche)' : 'Archaeologist (explore)'}
+                    </span>
+                  </div>
+                  
+                  {/* Target Audiences - Now properly formatted */}
+                  {answers.target_who && (
+                    <div>
+                      <div className="text-sm font-medium text-neutral-700 dark:text-neutral-300 pl-6 mb-1">
+                        - Target Audiences:
+                      </div>
+                      {formatTargetAudiences()}
+                    </div>
+                  )}
+                  
+                  {/* Outcome */}
+                  {answers.target_outcome && (
+                    <div className="text-sm text-neutral-600 dark:text-neutral-400 pl-6 mt-2">
+                      - Outcome: <TooltipText 
                         fullText={answers.target_outcome} 
                         maxLength={50} 
-                        className="font-medium"
+                        className="font-medium italic"
                         prefix='"' 
-                      /></div>
-                    )}
-                  </div>
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
