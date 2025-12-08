@@ -163,9 +163,9 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
 
   // Don't show if no data yet
   const hasPhase1Data = answers.craft_skills && answers.craft_skills.length > 0;
-  const hasPhase2Data = answers.approach_choice || answers.target_who || answers.target_outcome || answers.mission_statement;
+  const hasPhase2Data = answers.target_who || answers.target_outcome || answers.primary_target || answers.starting_product || answers.mission_statement;
   const hasPhase3Data = answers.do_i_like_it || answers.can_i_help || answers.will_they_pay;
-  const hasPhase4Data = answers.dream_outcome || answers.speed_to_value || answers.value_stack || answers.guarantees || answers.naming_brainstorm;
+  const hasPhase4Data = answers.dream_outcome;
 
   if (!hasPhase1Data && !hasPhase2Data && !hasPhase3Data && !hasPhase4Data) return null;
   
@@ -253,22 +253,15 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                 </div>
               )}
 
-              {/* Phase 2: Niche - IMPROVED SECTION */}
-              {currentPhase >= 2 && answers.approach_choice && (
+              {/* Phase 2: Niche Definition */}
+              {currentPhase >= 2 && (answers.target_who || answers.target_outcome || answers.primary_target || answers.starting_product) && (
                 <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
                   <h3 className="font-semibold text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
                     <Target className="w-4 h-4 text-purple-500" />
                     Your Focus
                   </h3>
                   
-                  {/* Approach */}
-                  <div className="text-sm text-neutral-600 dark:text-neutral-400 pl-6">
-                    - Approach: <span className="font-medium">
-                      {answers.approach_choice === 'architect' ? 'Architect (one niche)' : 'Archaeologist (explore)'}
-                    </span>
-                  </div>
-                  
-                  {/* Target Audiences - Now properly formatted */}
+                  {/* Target Audiences */}
                   {answers.target_who && (
                     <div>
                       <div className="text-sm font-medium text-neutral-700 dark:text-neutral-300 pl-6 mb-1">
@@ -287,6 +280,28 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                         className="font-medium italic"
                         prefix='"' 
                       />
+                    </div>
+                  )}
+                  
+                  {/* Primary Target */}
+                  {answers.primary_target && (
+                    <div className="text-sm text-neutral-600 dark:text-neutral-400 pl-6">
+                      - Primary Focus: <span className="font-medium">
+                        {answers.primary_target.split('_')[0].charAt(0).toUpperCase() + answers.primary_target.split('_')[0].slice(1)}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Starting Product */}
+                  {answers.starting_product && (
+                    <div className="text-sm text-neutral-600 dark:text-neutral-400 pl-6">
+                      - Product Type: <span className="font-medium">
+                        {answers.starting_product === 'low_ticket' ? 'Quick Win ($27-97)' :
+                         answers.starting_product === 'mid_ticket' ? 'Core Transformation ($197-497)' :
+                         answers.starting_product === 'high_ticket' ? 'Premium Service ($997+)' :
+                         answers.starting_product === 'membership' ? 'Membership ($29-99/mo)' :
+                         answers.starting_product}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -315,31 +330,31 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-600 dark:text-neutral-400">Like it:</span>
                       {answers.do_i_like_it === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Yes</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">Yes</span>
                       ) : answers.do_i_like_it === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">🟡 Maybe</span>
+                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">Maybe</span>
                       ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">❌ No</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">No</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-600 dark:text-neutral-400">Can help:</span>
                       {answers.can_i_help === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Yes</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">Yes</span>
                       ) : answers.can_i_help === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">🟡 Maybe</span>
+                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">Maybe</span>
                       ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">❌ No</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">No</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-600 dark:text-neutral-400">Will pay:</span>
                       {answers.will_they_pay === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Yes</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">Yes</span>
                       ) : answers.will_they_pay === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">🟡 Maybe</span>
+                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">Maybe</span>
                       ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">❌ No</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">No</span>
                       )}
                     </div>
                   </div>
@@ -348,9 +363,9 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     validationScore >= 2 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
                     'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
                   }`}>
-                    {validationScore >= 3 ? '🟢 Green Light' : 
-                     validationScore >= 2 ? '🟡 Yellow Light' : 
-                     '🔴 Red Light'}
+                    {validationScore >= 3 ? 'Green Light' : 
+                     validationScore >= 2 ? 'Yellow Light' : 
+                     'Red Light'}
                   </div>
                 </div>
               )}

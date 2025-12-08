@@ -135,6 +135,10 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
         setError(`Please select at least ${minSelections} option${minSelections > 1 ? 's' : ''}`);
         return false;
       }
+      if (maxSelections && selections.length > maxSelections) {
+        setError(`Please select at most ${maxSelections} option${maxSelections > 1 ? 's' : ''}`);
+        return false;
+      }
     }
     if (question.type === 'checkbox' && question.options) {
         const selections = answer as any[];
@@ -337,7 +341,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                         )}
                     </button>
                     )}
-                    {answer && answer.length > 10 && !improvementSuggestion && (
+                    {answer && answer.length > 10 && !improvementSuggestion && !suggestionPreview && (
                         <button
                             type="button"
                             onClick={() => onImproveAnswer?.(answer)}
@@ -363,7 +367,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                     )}
                 </div>
 
-                {/* Improvement Preview */}
+                {/* Suggestion Preview (before/after) */}
                 {suggestionPreview && (
                     <div className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
                     <div className="space-y-3">
@@ -415,10 +419,62 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                     </div>
                 )}
 
+                {/* Improvement Preview (before/after) */}
+                {improvementSuggestion && (
+                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg p-4 border border-indigo-200 dark:border-indigo-800">
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-indigo-900 dark:text-indigo-100">
+                            <Sparkles className="w-4 h-4 inline mr-1" />
+                            AI Improvement:
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                            type="button"
+                            onClick={onAcceptImprovement}
+                            className="text-xs px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors"
+                            >
+                            Accept
+                            </button>
+                            <button
+                            type="button"
+                            onClick={onRejectImprovement}
+                            className="text-xs px-2 py-1 bg-neutral-500 hover:bg-neutral-600 text-white rounded-md transition-colors"
+                            >
+                            Dismiss
+                            </button>
+                        </div>
+                        </div>
+                        
+                        {/* Show current answer */}
+                        {answer && answer.length > 0 && (
+                        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-md p-3 border border-amber-200 dark:border-amber-800">
+                            <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-1">
+                            📝 Your current answer:
+                            </p>
+                            <p className="text-sm text-amber-800 dark:text-amber-200 whitespace-pre-wrap">
+                            {answer.length > 200 ? answer.substring(0, 200) + '...' : answer}
+                            </p>
+                        </div>
+                        )}
+                        
+                        {/* Show improved answer */}
+                        <div className="bg-green-50 dark:bg-green-900/20 rounded-md p-3 border border-green-200 dark:border-green-800">
+                        <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">
+                            ✨ Improved answer:
+                        </p>
+                        <p className="text-sm text-green-800 dark:text-green-200 whitespace-pre-wrap">
+                            {improvementSuggestion}
+                        </p>
+                        </div>
+                    </div>
+                    </div>
+                )}
+
                 {/* Tip for empty field */}
                 {question.showAutoGenerate && (!answer || answer === '' || answer.length === 0) && (
                     <p className="text-xs text-neutral-500 dark:text-neutral-400 italic">
-                    💡 Tip: Click "Suggest an Answer" to get a suggestion based on your previous answers.
+                    Tip: Click "Suggest an Answer" to get a suggestion based on your previous answers.
                     </p>
                 )}
 
@@ -517,88 +573,75 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
 
       case 'checkbox':
         return (
-            <div className="space-y-4">
+          <div className="space-y-3">
             {question.options?.map((option) => {
-                const isChecked = isOptionChecked(option.value);
-                const hasCustomInput = option.allowCustom;
-                
-                return (
-                <div key={option.value} className="space-y-2">
-                    {/* Checkbox Option */}
-                    <label
+              const isChecked = isOptionChecked(option.value);
+              const hasCustomInput = option.allowCustom;
+              
+              return (
+                <div key={option.value}>
+                  <label
                     className={`
-                        block p-4 rounded-lg border-2 cursor-pointer transition-all
-                        ${
+                      block p-4 rounded-lg border-2 cursor-pointer transition-all
+                      ${
                         isChecked
-                            ? 'border-purple-500 dark:border-purple-400 bg-purple-50 dark:bg-purple-900/20'
-                            : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600'
-                        }
+                          ? 'border-purple-500 dark:border-purple-400 bg-purple-50 dark:bg-purple-900/20'
+                          : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600'
+                      }
                     `}
-                    >
+                  >
                     <div className="flex items-start gap-3">
-                        <input
+                      <input
                         type="checkbox"
                         value={option.value}
                         checked={isChecked}
                         onChange={(e) => handleCheckboxChange(option.value, e.target.checked, hasCustomInput || false)}
                         className="mt-1 text-purple-600 focus:ring-purple-500 rounded"
-                        />
-                        <div className="flex-1">
+                      />
+                      <div className="flex-1">
                         <div className="flex items-center gap-2">
-                            {option.icon}
-                            <span className="font-medium text-neutral-900 dark:text-white">
+                          {option.icon}
+                          <span className="font-medium text-neutral-900 dark:text-white">
                             {option.label}
-                            </span>
+                          </span>
                         </div>
                         {option.description && (
-                            <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
+                          <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
                             {option.description}
-                            </p>
+                          </p>
                         )}
-                        </div>
+                      </div>
                     </div>
-                    </label>
-                    
-                    {/* Custom Input Field - Now using textarea for vertical expansion */}
-                    {hasCustomInput && isChecked && (
-                    <div className="w-full">
-                        <textarea
+                  </label>
+                  
+                  {/* Custom input field for 'other' option */}
+                  {hasCustomInput && isChecked && (
+                    <div className="mt-2 ml-11">
+                      <textarea
                         value={customInputs[option.value] || ''}
                         onChange={(e) => {
-                            handleCustomInputChange(option.value, e.target.value);
-                            // Auto-resize the textarea
-                            e.target.style.height = 'auto';
-                            e.target.style.height = e.target.scrollHeight + 'px';
+                          handleCustomInputChange(option.value, e.target.value);
+                          // Auto-resize textarea
+                          e.target.style.height = 'auto';
+                          e.target.style.height = e.target.scrollHeight + 'px';
                         }}
-                        onInput={(e) => {
-                            // Also resize on input
-                            const target = e.target as HTMLTextAreaElement;
-                            target.style.height = 'auto';
-                            target.style.height = target.scrollHeight + 'px';
+                        ref={(el) => {
+                          if (el && customInputs[option.value]) {
+                            // Auto-resize on mount
+                            el.style.height = 'auto';
+                            el.style.height = el.scrollHeight + 'px';
+                          }
                         }}
-                        placeholder={
-                            option.customPlaceholder || 
-                            (option.value === 'professional_current' 
-                                ? "Your job title (e.g., Software Engineer, Marketing Manager...)" 
-                                : option.value === 'professional_past'
-                                ? "Previous role (e.g., Data Analyst, Product Manager...)"
-                                : "Please specify...")
-                        }
                         rows={1}
-                        className="w-full px-4 py-3 rounded-lg border-2 border-purple-300 dark:border-purple-600 bg-purple-50/50 dark:bg-purple-900/10 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 placeholder-neutral-500 dark:placeholder-neutral-400 transition-all resize-none overflow-hidden"
-                        style={{ minHeight: '48px' }}
-                        />
-                        {option.customRequired && (
-                        <p className="text-xs text-purple-600 dark:text-purple-400 mt-1 ml-1">
-                            * Required detail for this selection
-                        </p>
-                        )}
+                        placeholder={option.customPlaceholder || "Please specify..."}
+                        className="w-full px-3 py-2 rounded-md border border-purple-300 dark:border-purple-600 bg-white dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 placeholder-neutral-400 dark:placeholder-neutral-500 resize-none overflow-hidden"
+                      />
                     </div>
-                    )}
+                  )}
                 </div>
-                );
+              );
             })}
-            </div>
+          </div>
         );
 
       default:
@@ -734,7 +777,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                 }
             `}
             >
-            ← Back
+            Back
             </button>
             
             <button

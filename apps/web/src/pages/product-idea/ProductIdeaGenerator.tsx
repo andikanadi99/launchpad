@@ -1,5 +1,5 @@
 // src/pages/product-idea/ProductIdeaGenerator.tsx
-// Complete redesign with Million Dollar Weekend + Hormozi's $100M Offers framework
+// Product Idea Discovery Framework
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -65,7 +65,7 @@ interface GeneratedIdea {
 const generateSmartSuggestion = (questionId: string, answers: Answers): string => {
   switch(questionId) {
     case 'actual_requests':
-      // Generate based on skills following Million Dollar Weekend validation principle
+      // Generate based on skills following validation principles
       const skills = answers.craft_skills || [];
       if (!skills.length) return '';
       
@@ -75,7 +75,7 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
         const value = typeof skill === 'object' ? skill.value : skill;
         const custom = typeof skill === 'object' ? skill.custom : null;
         
-        // Noah Kagan's principle: Real problems = real requests
+        // Key principle: Real problems = real requests
         if (value === 'professional_current' && custom) {
           requests.push(`At work: Colleagues constantly ask me to review their ${custom.toLowerCase()} work, train new team members on our processes, and solve complex technical problems they're stuck on`);
         }
@@ -90,7 +90,7 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
         }
       });
       
-      // Add universal requests (Hormozi's "everyone has these problems")
+      // Add universal requests (everyone has these problems)
       requests.push(`Personal favors: Family needs tech help, friends want career advice, people ask how to get started in my field`);
       
       return requests.slice(0, 2).join('. ');
@@ -225,55 +225,6 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
       }
       return '';
       
-    case 'value_stack':
-      // Generate based on all previous answers
-      const stackSkills = answers.craft_skills || [];
-      const targetOutcome = answers.target_outcome || '';
-
-      if (!stackSkills.length) {
-        return '';
-      }
-      const bonuses: string[] = [];
-      
-      // Add skill-specific bonuses
-      if (stackSkills.some((s: any) => {
-        const val = typeof s === 'object' ? s.value : s;
-        return val === 'technical_tools' || val === 'professional_current';
-      })) {
-        bonuses.push('Templates and frameworks library (Value: $497)');
-        bonuses.push('Pre-built automation scripts and tools (Value: $297)');
-      }
-      
-      if (stackSkills.some((s: any) => {
-        const val = typeof s === 'object' ? s.value : s;
-        return val === 'personal_transformation' || val === 'life_skills';
-      })) {
-        bonuses.push('Weekly group coaching calls for 3 months (Value: $997)');
-        bonuses.push('Private community access with daily support (Value: $497)');
-      }
-      
-      // Add outcome-specific bonuses
-      if (targetOutcome.toLowerCase().includes('save')) {
-        bonuses.push('Time-tracking optimization toolkit (Value: $197)');
-      }
-      if (targetOutcome.toLowerCase().includes('get') || targetOutcome.toLowerCase().includes('client')) {
-        bonuses.push('Client acquisition email templates (Value: $297)');
-      }
-      if (targetOutcome.toLowerCase().includes('launch')) {
-        bonuses.push('Launch week checklist and timeline (Value: $397)');
-      }
-      if (targetOutcome.toLowerCase().includes('automate')) {
-        bonuses.push('Automation blueprints and workflow diagrams (Value: $497)');
-      }
-      
-      // Add universal high-value bonuses
-      bonuses.push('30-day implementation roadmap with daily tasks (Value: $197)');
-      bonuses.push('"Emergency hotline" - 3 panic button calls (Value: $597)');
-      bonuses.push('Success metrics dashboard template (Value: $97)');
-      bonuses.push('Lifetime updates to all materials (Value: $297)');
-      
-      return bonuses.slice(0, 7).join('\n');
-      
     default:
       return '';
   }
@@ -282,7 +233,7 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
 const generateImprovedAnswer = (questionId: string, currentAnswer: string): string => {
   switch(questionId) {
     case 'actual_requests':
-      // Improve structure and specificity following Million Dollar Weekend principles
+      // Improve structure and specificity following validation principles
       const improved = currentAnswer
         .split(/[.,;]/)
         .filter(s => s.trim())
@@ -480,30 +431,6 @@ const questions: QuestionData[] = [
   // ========================================
   // PHASE 2: NICHE DEFINITION
   // ========================================
-  {
-    id: 'approach_choice',
-    question: "Choose your product validation approach",
-    subtext: "Both paths work - pick what matches your personality and goals",
-    type: 'radio',
-    options: [
-      {
-        value: 'architect',
-        label: 'The Architect',
-        description: 'Focus deeply on ONE niche. Build expertise, compound results, maximize income potential. Best if you want predictable progress.',
-        icon: <Target className="w-5 h-5 text-purple-600" />
-      },
-      {
-        value: 'archaeologist',
-        label: 'The Archaeologist',
-        description: 'Test 2-3 different niches simultaneously. More variety, faster learning, discover unexpected opportunities. Best if you like exploring.',
-        icon: <Lightbulb className="w-5 h-5 text-blue-600" />
-      }
-    ],
-    validation: {
-      required: true
-    },
-    helpText: "💡 Pro tip: Commit to your choice for at least 4-6 weeks to see real results. Architects typically reach $1K faster, while Archaeologists often discover more scalable opportunities. You can always adjust your approach based on what you learn."
-  },
 
   {
     id: 'target_who',
@@ -581,7 +508,7 @@ const questions: QuestionData[] = [
       required: true,
       minSelections: 1,
     },
-    helpText: "💡 Think about: Who's in your phone contacts? Your LinkedIn network? Facebook groups you're in? Slack communities? Pick people you can actually reach out to TODAY for validation. Pre-selected options need your specific details!",
+    helpText: " Think about: Who's in your phone contacts? Your LinkedIn network? Facebook groups you're in? Slack communities? Pick people you can actually reach out to TODAY for validation. Pre-selected options need your specific details!",
     showAIHelper: true,
     smartSuggestion: true
   },
@@ -610,18 +537,74 @@ const questions: QuestionData[] = [
   },
 
   {
+    id: 'primary_target',
+    question: "Who should you help FIRST?",
+    subtext: "Focus on ONE ideal customer group before expanding. Pick the audience with the most pain + money + accessibility.",
+    type: 'radio',
+    dynamicOptionsFrom: 'target_who', // Special flag - options generated from target_who answers
+    options: [], // Will be populated dynamically
+    validation: {
+      required: true
+    },
+    helpText: "💡 'Ideal Customer' criteria: (1) They have PAIN they'll pay to solve, (2) They have MONEY to spend, (3) You can REACH them easily. Pick the one that scores highest on all three.",
+    showAIHelper: true,
+    showAutoGenerate: true
+  },
+
+  {
+    id: 'starting_product',
+    question: "What's your FIRST product?",
+    subtext: "Start with ONE offer. Master it, then expand. Which fits your situation best?",
+    type: 'radio',
+    options: [
+      {
+        value: 'low_ticket',
+        label: 'Quick Win Product ($27-97)',
+        description: 'Templates, checklists, guides, mini-courses. Best for: Testing demand, building audience, low risk entry.',
+        icon: <Zap className="w-5 h-5 text-green-600" />
+      },
+      {
+        value: 'mid_ticket',
+        label: 'Core Transformation ($197-497)',
+        description: 'Full course, workshop, group program. Best for: Proven demand, ready to deliver real results.',
+        icon: <Package className="w-5 h-5 text-blue-600" />
+      },
+      {
+        value: 'high_ticket',
+        label: 'Premium Service ($997+)',
+        description: 'Coaching, consulting, done-with-you. Best for: High expertise, want fast revenue with fewer customers.',
+        icon: <Trophy className="w-5 h-5 text-purple-600" />
+      },
+      {
+        value: 'membership',
+        label: 'Community/Membership ($29-99/mo)',
+        description: 'Recurring access, ongoing support. Best for: Building long-term relationships, predictable revenue.',
+        icon: <Users className="w-5 h-5 text-pink-600" />
+      }
+    ],
+    validation: {
+      required: true
+    },
+    helpText: "💡 Pro tip: If you're new, start LOW-TICKET ($27-97) to validate demand fast with minimal friction. If you have proven results, MID-TICKET delivers real transformation. HIGH-TICKET works best when you have expertise and want fewer, higher-touch clients.",
+    showAIHelper: true,
+    showAutoGenerate: true
+  },
+
+  {
     id: 'mission_statement',
     question: "Your Mission Statement",
-    subtext: "Let's put it all together",
+    subtext: "Let's put it all together - this is your north star for your first launch",
     type: 'textarea',
-    placeholder: "I help [WHO] achieve [WHAT OUTCOME]",
+    placeholder: "Write your mission statement following the template above...",
     validation: {
       required: true,
       minLength: 20,
-      maxLength: 2500
+      maxLength: 500
     },
-    helpText: "This is your north star for the next 6 weeks. Keep it simple and clear.",
-    showAIHelper: true
+    helpText: "Keep it simple: WHO you help + WHAT outcome + HOW FAST + WITHOUT what obstacle. One or two sentences max.",
+    showAIHelper: true,
+    smartSuggestion: true,
+    showAutoGenerate: true
   },
 
   // ========================================
@@ -630,7 +613,7 @@ const questions: QuestionData[] = [
   {
     id: 'do_i_like_it',
     question: "Question 1 of 3: Do you LIKE this niche?",
-    subtext: "Would you enjoy talking about this for the next 6 weeks?",
+    subtext: "Would you enjoy talking about this for the next few weeks?",
     type: 'radio',
     options: [
       {
@@ -642,7 +625,7 @@ const questions: QuestionData[] = [
       {
         value: 'maybe',
         label: 'It\'s okay, not passionate but interested',
-        description: 'I can do this for 6 weeks',
+        description: 'I can sustain this for a while',
         icon: <Heart className="w-5 h-5 text-yellow-600" />
       },
       {
@@ -655,7 +638,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true
     },
-    helpText: "Be honest. You need at least 'okay' to sustain 6 weeks of content and products."
+    helpText: "Be honest. You need at least 'okay' to sustain your first launch with content and products."
   },
 
   {
@@ -722,14 +705,14 @@ const questions: QuestionData[] = [
   },
 
   // ========================================
-  // PHASE 4: HORMOZI'S VALUE MAXIMIZER
+  // PHASE 4: DEFINE THE DREAM
   // ========================================
   {
     id: 'dream_outcome',
     question: "The DREAM: What's the ultimate transformation they want?",
     subtext: "Think bigger than the immediate result - what does success really mean to them?",
     type: 'textarea',
-    placeholder: "I'll suggest a transformation based on your niche...",
+    placeholder: "Think bigger than the immediate result - what does achieving this outcome REALLY mean for their life?",
     validation: {
       required: true,
       minLength: 30,
@@ -737,167 +720,13 @@ const questions: QuestionData[] = [
     },
     helpText: "Go deeper: If they achieve your outcome, what does that enable in their life?",
     examples: [
-      "Not just organized Ã¢â€ â€™ Finally have time for family instead of working weekends",
-      "Not just fit Ã¢â€ â€™ Walk into any room with confidence and energy",
-      "Not just more sales Ã¢â€ â€™ Build a business that runs without them"
+      "Not just organized - Finally have time for family instead of working weekends",
+      "Not just fit - Walk into any room with confidence and energy",
+      "Not just more sales - Build a business that runs without them"
     ],
     showAIHelper: true,
-    smartSuggestion: true
-  },
-
-  {
-    id: 'proof_elements',
-    question: "PROOF: What makes people believe YOU can deliver?",
-    subtext: "Check all that apply - this builds your credibility",
-    type: 'checkbox',
-    options: [
-      {
-        value: 'personal_results',
-        label: 'I\'ve achieved this myself',
-        description: 'Your transformation is proof'
-      },
-      {
-        value: 'helped_free',
-        label: 'Helped others for free',
-        description: 'Friends, family, colleagues'
-      },
-      {
-        value: 'paid_experience',
-        label: 'Been paid for this',
-        description: 'Professional experience'
-      },
-      {
-        value: 'certification',
-        label: 'Relevant certification',
-        description: 'Formal credentials'
-      },
-      {
-        value: 'unique_method',
-        label: 'Unique system/method',
-        description: 'Your own framework'
-      },
-      {
-        value: 'insider_access',
-        label: 'Insider knowledge',
-        description: 'Industry secrets, exclusive info'
-      },
-      {
-        value: 'track_record',
-        label: 'Documented case studies',
-        description: 'Screenshots, testimonials'
-      },
-      {
-        value: 'overcome_odds',
-        label: 'Overcame unique challenges',
-        description: 'Did it the hard way'
-      }
-    ],
-    validation: {
-      required: true,
-      minSelections: 1
-    },
-    helpText: "More proof = higher prices. Even 1-2 strong proof points can justify premium pricing."
-  },
-
-  {
-    id: 'speed_to_value',
-    question: "SPEED: How can you get them a quick win?",
-    subtext: "What result can they see FAST to build momentum?",
-    type: 'textarea',
-    placeholder: "In 24 hours: Basic system set up\nIn 7 days: First small result\nIn 30 days: Significant transformation",
-    validation: {
-      required: true,
-      minLength: 30,
-      maxLength: 2500
-    },
-    helpText: "The faster they see results, the more they'll pay. Think: What's the smallest valuable outcome?",
-    examples: [
-      "Day 1: Organize inbox to zero\nWeek 1: Save 5 hours with templates\nMonth 1: Full automation system running",
-      "Hour 1: First pushup with proper form\nWeek 1: Noticeable energy increase\nMonth 1: Visible muscle definition",
-      "Day 1: LinkedIn profile that attracts recruiters\nWeek 1: First interview scheduled\nMonth 1: Multiple job offers"
-    ],
-    showAIHelper: true
-  },
-
-  {
-    id: 'effort_reducers',
-    question: "EASY: What makes your solution require LESS effort?",
-    subtext: "Check everything you could provide to reduce friction",
-    type: 'checkbox',
-    options: [
-      {
-        value: 'templates',
-        label: 'Done-for-you templates',
-        description: 'Copy-paste ready'
-      },
-      {
-        value: 'step_system',
-        label: 'Step-by-step system',
-        description: 'No guesswork'
-      },
-      {
-        value: 'daily_plan',
-        label: 'Daily action plan',
-        description: 'Exactly what to do when'
-      },
-      {
-        value: 'swipe_copy',
-        label: 'Scripts & swipe copy',
-        description: 'Exact words to use'
-      },
-      {
-        value: 'quick_wins',
-        label: '10-minute implementations',
-        description: 'Fits busy schedules'
-      },
-      {
-        value: 'mobile_friendly',
-        label: 'Mobile/on-the-go friendly',
-        description: 'Learn anywhere'
-      },
-      {
-        value: 'accountability',
-        label: 'Built-in accountability',
-        description: 'Stay on track'
-      },
-      {
-        value: 'community',
-        label: 'Supportive community',
-        description: 'Never feel alone'
-      },
-      {
-        value: 'automation',
-        label: 'Automation tools',
-        description: 'Set and forget'
-      },
-      {
-        value: 'ai_powered',
-        label: 'AI-powered shortcuts',
-        description: 'Leverage technology'
-      }
-    ],
-    validation: {
-      required: true,
-      minSelections: 3
-    },
-    helpText: "Stack 3+ effort reducers to justify premium pricing. People pay to save time and avoid headaches."
-  },
-
-  {
-  id: 'value_stack',
-  question: "The STACK: What bonuses make this irresistible?",
-  subtext: "List 5-10 bonuses that make your offer irresistible",
-  type: 'textarea',
-  placeholder: "I'll suggest valuable bonuses based on your skills and niche...",
-  validation: {
-    required: true,
-    minLength: 50,
-    maxLength: 2500
-  },
-  helpText: "Each bonus should solve a specific objection or fear. Assign a value to each!",
-  showAIHelper: true,
-  smartSuggestion: true
-}
+    showAutoGenerate: true
+  }
 ];
 
 export default function ProductIdeaGenerator() {
@@ -907,7 +736,7 @@ export default function ProductIdeaGenerator() {
   const [aiResponses, setAiResponses] = useState<AIResponses>({});
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [showSmartSuggestion, setShowSmartSuggestion] = useState<string | null>(null);  // ADD THIS
+  const [showSmartSuggestion, setShowSmartSuggestion] = useState<string | null>(null);
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
   const [generatedIdeas, setGeneratedIdeas] = useState<GeneratedIdea[]>([]);
   const [nicheScore, setNicheScore] = useState<{ score: number; feedback: string }>({ score: 0, feedback: '' });
@@ -955,46 +784,84 @@ export default function ProductIdeaGenerator() {
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
   
   // Determine current phase based on question index
+  // Phase 1: Skills Discovery (Q1-3: craft_skills, actual_requests, confidence_test)
+  // Phase 2: Niche Definition (Q4-8: target_who, target_outcome, primary_target, starting_product, mission_statement)
+  // Phase 3: Validation (Q9-11: do_i_like_it, can_i_help, will_they_pay)
+  // Phase 4: Value (Q12: dream_outcome)
   const getCurrentPhase = () => {
-    if (currentQuestionIndex < 3) return 1; // Skills Discovery
-    if (currentQuestionIndex < 7) return 2; // Niche Definition
-    if (currentQuestionIndex < 10) return 3; // Validation
-    return 4; // Value Maximizer
+    if (currentQuestionIndex < 3) return 1;
+    if (currentQuestionIndex < 8) return 2;
+    if (currentQuestionIndex < 11) return 3;
+    return 4;
   };
   
   const currentPhase = getCurrentPhase();
 
-  // Auto-fill mission statement when reaching that question
-  useEffect(() => {
-    if (currentQuestion.id === 'mission_statement' && !answers.mission_statement) {
-      const who = answers.target_who;
-      const what = answers.target_outcome;
+  // Generate dynamic options for primary_target based on target_who answers
+  const getDynamicPrimaryTargetOptions = () => {
+    const targetWhoAnswers = answers.target_who || [];
+    if (!targetWhoAnswers.length) return [];
+    
+    return targetWhoAnswers.map((selection: any, index: number) => {
+      const value = typeof selection === 'object' ? selection.value : selection;
+      const custom = typeof selection === 'object' ? selection.custom : '';
       
-      if (who && what) {
-        let whoText = '';
-        if (Array.isArray(who)) {
-          const labels = who.map((w: any) => {
-            // Handle custom input objects
-            if (typeof w === 'object' && w.custom) {
-              return w.custom.toLowerCase();
-            }
-            // Handle regular string values
-            const option = questions.find(q => q.id === 'target_who')?.options?.find(o => o.value === w);
-            return option?.label?.toLowerCase() || w;
-          });
-          whoText = labels.join(' and ');
-        } else if (typeof who === 'object' && who.custom) {
-          whoText = who.custom.toLowerCase();
-        } else {
-          const option = questions.find(q => q.id === 'target_who')?.options?.find(o => o.value === who);
-          whoText = option?.label?.toLowerCase() || who;
-        }
-        
-        const missionDraft = `I help ${whoText} ${what}`;
-        setAnswers(prev => ({ ...prev, mission_statement: missionDraft }));
-      }
+      const labelMap: { [key: string]: string } = {
+        'business_owners': 'Business Owners',
+        'professionals': 'Corporate Professionals', 
+        'freelancers': 'Freelancers/Consultants',
+        'creators': 'Content Creators',
+        'students': 'Students/Learners',
+        'parents': 'Parents',
+        'hobbyists': 'Hobbyists',
+        'other': 'Other'
+      };
+      
+      const baseLabel = labelMap[value] || value;
+      const fullLabel = custom ? `${baseLabel}: ${custom}` : baseLabel;
+      
+      const scoringHints: { [key: string]: { pain: string; money: string; access: string } } = {
+        'business_owners': { pain: '🔥 High pain', money: '💰 Have budget', access: '📧 Easy to reach' },
+        'professionals': { pain: '🔥 Moderate pain', money: '💰 Have income', access: '📧 LinkedIn accessible' },
+        'freelancers': { pain: '🔥 High pain', money: '💵 Variable budget', access: '📧 Online communities' },
+        'creators': { pain: '🔥 High pain', money: '💵 Growing income', access: '📧 Social platforms' },
+        'students': { pain: '😐 Moderate pain', money: '💵 Limited budget', access: '📧 Easy to reach' },
+        'parents': { pain: '🔥 High pain', money: '💰 Have budget', access: '📧 FB groups' },
+        'hobbyists': { pain: '😐 Passion-driven', money: '💵 Discretionary', access: '📧 Niche forums' },
+        'other': { pain: '❓ Varies', money: '❓ Varies', access: '❓ Varies' }
+      };
+      
+      const hints = scoringHints[value] || scoringHints['other'];
+      
+      return {
+        value: `${value}${custom ? `_${index}` : ''}`,
+        label: fullLabel,
+        description: `${hints.pain} • ${hints.money} • ${hints.access}`,
+        originalSelection: selection
+      };
+    });
+  };
+
+  // Get product recommendation based on answers - favor low_ticket for fast validation
+  const getProductRecommendation = () => {
+    const skills = answers.craft_skills || [];
+    const hasProvenResults = skills.some((s: any) => {
+      const val = typeof s === 'object' ? s.value : s;
+      return val === 'personal_transformation' || val === 'paid_experience';
+    });
+    const hasProfessionalExp = skills.some((s: any) => {
+      const val = typeof s === 'object' ? s.value : s;
+      return val === 'professional_current' || val === 'professional_past';
+    });
+    
+    // Default to low_ticket for fast validation
+    // Only suggest higher tiers if they have strong proof
+    if (hasProvenResults && hasProfessionalExp) {
+      return 'mid_ticket'; // Strong proof = can deliver transformation
+    } else {
+      return 'low_ticket'; // Start with fast validation
     }
-  }, [currentQuestionIndex, currentQuestion, answers]);
+  };
 
   // Calculate niche score when completing validation questions
   useEffect(() => {
@@ -1002,23 +869,20 @@ export default function ProductIdeaGenerator() {
       let score = 0;
       let feedback = '';
       
-      // Count green lights
       if (answers.do_i_like_it === 'yes') score++;
       if (answers.can_i_help === 'yes') score++;
       if (answers.will_they_pay === 'yes') score++;
       
-      // Add yellow lights as half points
       if (answers.do_i_like_it === 'maybe') score += 0.5;
       if (answers.can_i_help === 'maybe') score += 0.5;
       if (answers.will_they_pay === 'maybe') score += 0.5;
       
-      // Generate feedback
       if (score >= 3) {
-        feedback = "Ã°Å¸Å¸Â¢ GREEN LIGHT! This niche has strong potential. Full speed ahead!";
+        feedback = "GREEN LIGHT! This niche has strong potential. Full speed ahead!";
       } else if (score >= 2) {
-        feedback = "Ã°Å¸Å¸Â¡ YELLOW LIGHT: Proceed with caution. Some challenges but workable for 6 weeks.";
+        feedback = "YELLOW LIGHT: Proceed with caution. Some challenges but workable for your first launch.";
       } else {
-        feedback = "Ã°Å¸â€Â´ RED LIGHT: High risk niche. Consider pivoting to something with better alignment.";
+        feedback = "RED LIGHT: High risk niche. Consider pivoting to something with better alignment.";
       }
       
       setNicheScore({ score, feedback });
@@ -1027,44 +891,91 @@ export default function ProductIdeaGenerator() {
 
 
   useEffect(() => {
-    // Debug to confirm useEffect is running
-    console.log('📍 useEffect running, currentQuestionIndex:', currentQuestionIndex);
-    console.log('📍 Current question:', questions[currentQuestionIndex]?.id);
+    console.log('useEffect running, currentQuestionIndex:', currentQuestionIndex);
+    console.log('Current question:', questions[currentQuestionIndex]?.id);
     
-    // Clear smart suggestion first when changing questions
     setShowSmartSuggestion(null);
     
     const currentQ = questions[currentQuestionIndex];
     
     // Special handling for target_who - pre-select based on analysis
     if (currentQ.id === 'target_who' && !hasPreselected['target_who']) {
-      // Check if answer is truly empty (undefined, null, or empty array)
       const currentAnswer = answers.target_who;
       const hasAnswer = currentAnswer && 
                        (!Array.isArray(currentAnswer) || currentAnswer.length > 0);
       
-      console.log('🎯 Target WHO question reached. Has answer?', hasAnswer);
-      console.log('🎯 Current answer:', currentAnswer);
+      console.log('Target WHO question reached. Has answer?', hasAnswer);
+      console.log('Current answer:', currentAnswer);
       
       if (!hasAnswer) {
-        console.log('🎯 Analyzing for target_who pre-selection...');
+        console.log('Analyzing for target_who pre-selection...');
         const whoRequests = answers.actual_requests || '';
         const whoSkills = answers.craft_skills || [];
+        const confidenceTest = answers.confidence_test || '';
         
         console.log('Requests to analyze:', whoRequests);
+        
+        const getJobContext = () => {
+          const professionalSkill = whoSkills.find((s: any) => 
+            (typeof s === 'object' && s.value === 'professional_current') ||
+            s === 'professional_current'
+          );
+          if (professionalSkill && typeof professionalSkill === 'object' && professionalSkill.custom) {
+            return professionalSkill.custom;
+          }
+          return null;
+        };
+        
+        const getTechContext = () => {
+          const techSkill = whoSkills.find((s: any) => 
+            (typeof s === 'object' && s.value === 'technical_tools') ||
+            s === 'technical_tools'
+          );
+          if (techSkill && typeof techSkill === 'object' && techSkill.custom) {
+            return techSkill.custom;
+          }
+          return null;
+        };
+        
+        const getFitnessContext = () => {
+          const fitnessSkill = whoSkills.find((s: any) => 
+            (typeof s === 'object' && s.value === 'personal_transformation') ||
+            s === 'personal_transformation'
+          );
+          if (fitnessSkill && typeof fitnessSkill === 'object' && fitnessSkill.custom) {
+            return fitnessSkill.custom;
+          }
+          return null;
+        };
+        
+        const jobContext = getJobContext();
+        const techContext = getTechContext();
+        const fitnessContext = getFitnessContext();
         
         if (whoRequests) {
           const preSelected: any[] = [];
           const requestsLower = whoRequests.toLowerCase();
           
-          // Analyze requests to identify WHO is asking
           if (requestsLower.includes('colleague') || requestsLower.includes('boss') || 
               requestsLower.includes('work') || requestsLower.includes('team') ||
               requestsLower.includes('coworker') || requestsLower.includes('employee') ||
-              requestsLower.includes('manager') || requestsLower.includes('office')) {
+              requestsLower.includes('manager') || requestsLower.includes('office') ||
+              requestsLower.includes('teammate')) {
+            
+            let customText = '';
+            if (jobContext && techContext) {
+              customText = `Other ${jobContext}s or tech professionals who work with ${techContext} and need help with similar challenges`;
+            } else if (jobContext) {
+              customText = `Other ${jobContext}s or professionals in similar roles who face the same technical challenges`;
+            } else if (techContext) {
+              customText = `Developers and tech professionals who work with ${techContext}`;
+            } else {
+              customText = 'Colleagues and professionals who need help with similar technical challenges';
+            }
+            
             preSelected.push({ 
               value: 'professionals', 
-              custom: 'Colleagues from my current workplace who need help with similar challenges' 
+              custom: customText
             });
             console.log('✅ Detected professionals');
           }
@@ -1072,10 +983,19 @@ export default function ProductIdeaGenerator() {
           if (requestsLower.includes('client') || requestsLower.includes('founder') || 
               requestsLower.includes('business') || requestsLower.includes('startup') ||
               requestsLower.includes('entrepreneur') || requestsLower.includes('owner') ||
-              requestsLower.includes('company') || requestsLower.includes('ceo')) {
+              requestsLower.includes('company') || requestsLower.includes('ceo') ||
+              requestsLower.includes('dashboard')) {
+            
+            let customText = '';
+            if (techContext) {
+              customText = `Small business owners who need custom dashboards or apps built with ${techContext}`;
+            } else {
+              customText = 'Small business owners who need technical solutions for their data/reporting needs';
+            }
+            
             preSelected.push({ 
               value: 'business_owners', 
-              custom: 'Small business owners in my network' 
+              custom: customText
             });
             console.log('✅ Detected business owners');
           }
@@ -1083,17 +1003,43 @@ export default function ProductIdeaGenerator() {
           if (requestsLower.includes('student') || requestsLower.includes('learn') ||
               requestsLower.includes('study') || requestsLower.includes('class') ||
               requestsLower.includes('course') || requestsLower.includes('school')) {
+            
+            let customText = '';
+            if (techContext) {
+              customText = `Students or bootcamp grads learning ${techContext}`;
+            } else {
+              customText = 'Students or people learning new technical skills';
+            }
+            
             preSelected.push({
               value: 'students',
-              custom: 'Students or people learning new skills'
+              custom: customText
             });
             console.log('✅ Detected students');
+          }
+          
+          if (requestsLower.includes('workout') || requestsLower.includes('gym') ||
+              requestsLower.includes('weight') || requestsLower.includes('muscle') ||
+              requestsLower.includes('fitness') || requestsLower.includes('diet') ||
+              requestsLower.includes('meal') || requestsLower.includes('lifting')) {
+            
+            let customText = '';
+            if (fitnessContext) {
+              customText = `People who want to achieve ${fitnessContext.toLowerCase()} - friends, coworkers, or online community members`;
+            } else {
+              customText = 'People starting their fitness journey who want real, practical advice from someone who has done it';
+            }
+            
+            preSelected.push({
+              value: 'hobbyists',
+              custom: customText
+            });
+            console.log('✅ Detected fitness hobbyists');
           }
           
           if (requestsLower.includes('friend') || requestsLower.includes('family') ||
               requestsLower.includes('sister') || requestsLower.includes('brother') ||
               requestsLower.includes('neighbor') || requestsLower.includes('people')) {
-            // Determine most likely category based on context
             if (requestsLower.includes('parent') || requestsLower.includes('mom') || 
                 requestsLower.includes('dad') || requestsLower.includes('kid') ||
                 requestsLower.includes('child')) {
@@ -1102,11 +1048,15 @@ export default function ProductIdeaGenerator() {
                 custom: 'Parents in my social circle' 
               });
               console.log('✅ Detected parents');
-            } else if (!preSelected.find(p => p.value === 'professionals')) {
-              // Generic friends/family - try to be more specific
+            } else if (!preSelected.find(p => p.value === 'hobbyists') && 
+                       !preSelected.find(p => p.value === 'professionals')) {
+              let customText = 'Friends and family members interested in my skills';
+              if (fitnessContext) {
+                customText = `Friends and family who want help with ${fitnessContext.toLowerCase()}`;
+              }
               preSelected.push({
                 value: 'hobbyists',
-                custom: 'Friends and family members interested in my skills'
+                custom: customText
               });
               console.log('✅ Detected hobbyists/general');
             }
@@ -1115,48 +1065,108 @@ export default function ProductIdeaGenerator() {
           console.log('Total pre-selected:', preSelected.length);
           
           if (preSelected.length > 0) {
-            // Pre-fill the answer
             console.log('Setting pre-selected answers:', preSelected);
-            setHasPreselected(prev => ({ ...prev, target_who: true })); // Mark that we've preselected
+            setHasPreselected(prev => ({ ...prev, target_who: true }));
             setAnswers(prev => ({
               ...prev,
-              target_who: preSelected.slice(0, 2) // Max 2 selections
+              target_who: preSelected.slice(0, 3)
             }));
             
-            // Show notification about pre-selection
             setShowSmartSuggestion(
-              `✅ We've pre-selected ${preSelected.length} group${preSelected.length > 1 ? 's' : ''} based on who's already asking you for help. Please review and add specific details about your exact target audience in each field - the more specific, the better your product will be!`
+              `✅ We've pre-selected ${preSelected.length} group${preSelected.length > 1 ? 's' : ''} based on who's already asking you for help. Please review and refine the details to be even more specific!`
             );
           } else {
             console.log('⚠️ No matches found for pre-selection');
-            setHasPreselected(prev => ({ ...prev, target_who: true })); // Still mark as attempted
-            // Still show a helpful message
+            setHasPreselected(prev => ({ ...prev, target_who: true }));
             setShowSmartSuggestion(
               `💡 Based on your skills and requests, think about who in your network needs this help most. Are they professionals, business owners, parents, or another specific group?`
             );
           }
         } else {
           console.log('⚠️ No actual_requests found to analyze');
-          setHasPreselected(prev => ({ ...prev, target_who: true })); // Mark as attempted
+          setHasPreselected(prev => ({ ...prev, target_who: true }));
         }
       } else {
         console.log('Already has answer, skipping pre-selection');
-        setHasPreselected(prev => ({ ...prev, target_who: true })); // Mark as checked
+        setHasPreselected(prev => ({ ...prev, target_who: true }));
       }
+    }
+    // Special handling for primary_target - show AI recommendation
+    else if (currentQ.id === 'primary_target' && !hasPreselected['primary_target']) {
+      const targetWhoAnswers = answers.target_who || [];
+      
+      if (targetWhoAnswers.length > 0) {
+        let recommendation = '';
+        let bestTarget = '';
+        
+        const scoringMap: { [key: string]: { pain: number; money: number; access: number } } = {
+          'business_owners': { pain: 9, money: 9, access: 8 },
+          'professionals': { pain: 7, money: 8, access: 8 },
+          'freelancers': { pain: 8, money: 6, access: 7 },
+          'creators': { pain: 8, money: 6, access: 9 },
+          'students': { pain: 6, money: 4, access: 9 },
+          'parents': { pain: 8, money: 7, access: 7 },
+          'hobbyists': { pain: 5, money: 6, access: 6 },
+          'other': { pain: 5, money: 5, access: 5 }
+        };
+        
+        let highestScore = 0;
+        targetWhoAnswers.forEach((selection: any) => {
+          const value = typeof selection === 'object' ? selection.value : selection;
+          const scores = scoringMap[value] || scoringMap['other'];
+          const totalScore = scores.pain + scores.money + scores.access;
+          if (totalScore > highestScore) {
+            highestScore = totalScore;
+            bestTarget = value;
+          }
+        });
+        
+        if (targetWhoAnswers.length === 1) {
+          recommendation = `✅ You have ONE target audience - perfect! Focus all your energy here for your first launch.`;
+        } else {
+          const targetLabels: { [key: string]: string } = {
+            'business_owners': 'Business Owners',
+            'professionals': 'Professionals',
+            'freelancers': 'Freelancers',
+            'creators': 'Content Creators',
+            'students': 'Students',
+            'parents': 'Parents',
+            'hobbyists': 'Hobbyists'
+          };
+          recommendation = `🎯 AI Recommendation: Start with "${targetLabels[bestTarget] || bestTarget}" - they score highest on key success criteria (Pain + Money + Accessibility). But follow your gut if another audience excites you more!`;
+        }
+        
+        setShowSmartSuggestion(recommendation);
+        setHasPreselected(prev => ({ ...prev, primary_target: true }));
+      } else {
+        setShowSmartSuggestion('⚠️ Go back and select at least one target audience in the previous step.');
+        setHasPreselected(prev => ({ ...prev, primary_target: true }));
+      }
+    }
+    // Special handling for starting_product - show AI recommendation
+    else if (currentQ.id === 'starting_product' && !hasPreselected['starting_product']) {
+      const recommendation = getProductRecommendation();
+      const messages: { [key: string]: string } = {
+        'low_ticket': '🎯 AI Recommendation: Perfect choice for fast validation! LOW-TICKET ($27-97) lets you test demand quickly with minimal friction.',
+        'mid_ticket': '🎯 AI Recommendation: Great for proven results! MID-TICKET ($197-497) delivers real transformation and builds your reputation.',
+        'high_ticket': '🎯 AI Recommendation: Bold move! HIGH-TICKET ($997+) works best with established expertise - fewer clients, higher touch.'
+      };
+      
+      setShowSmartSuggestion(messages[recommendation] || messages['low_ticket']);
+      setHasPreselected(prev => ({ ...prev, starting_product: true }));
     }
     // Regular smart suggestion for other questions
     else if (currentQ.smartSuggestion && !answers[currentQ.id]) {
       const suggestion = generateSmartSuggestion(currentQ.id, answers);
       if (suggestion) {
         setShowSmartSuggestion(suggestion);
-        // Pre-fill the answer with the suggestion
         setAnswers(prev => ({
           ...prev,
           [currentQ.id]: suggestion
         }));
       }
     }
-  }, [currentQuestionIndex, hasPreselected]); // Add hasPreselected to dependencies
+  }, [currentQuestionIndex, hasPreselected]);
 
   // Handle answer changes
   const handleAnswerChange = (answer: any) => {
@@ -1165,16 +1175,13 @@ export default function ProductIdeaGenerator() {
       [currentQuestion.id]: answer
     }));
     
-    // Clear smart suggestion notification after user interacts
     if (showSmartSuggestion) {
       setTimeout(() => setShowSmartSuggestion(null), 2000);
     }
 
-    // Check if answer is empty
     const isEmpty = !answer || (Array.isArray(answer) && answer.length === 0) || answer === '';
     
     if (isEmpty) {
-      // Clear AI response when answer is empty
       setAiResponses(prev => {
         const newResponses = { ...prev };
         delete newResponses[currentQuestion.id];
@@ -1182,23 +1189,20 @@ export default function ProductIdeaGenerator() {
       });
       setIsProcessingAI(false);
     } else if (currentQuestion.showAIHelper) {
-      // Generate AI response only when there's content
       generateAIResponse(currentQuestion.id, answer);
     }
   };
-  // Add this state at the top with other states
+
   const [isGeneratingOptimal, setIsGeneratingOptimal] = useState(false);
 
-  // Replace the handleAutoGenerate function
   const handleAutoGenerate = async () => {
     setIsGeneratingOptimal(true);
     
     try {
       const user = auth.currentUser;
       
-      // First try the Claude API for better quality
       if (user) {
-        console.log('🤖 Generating optimal answer with Claude...');
+        console.log('Generating optimal answer with Claude...');
         const generateOptimalFunction = httpsCallable(functions, 'generateOptimalAnswer');
         
         const payload = {
@@ -1216,24 +1220,20 @@ export default function ProductIdeaGenerator() {
         const data = result.data as any;
         
         if (data.success && data.generatedAnswer) {
-          console.log('✨ Got optimal answer from Claude!');
-          // Set preview instead of directly changing answer
+          console.log('✓ Got optimal answer from Claude!');
           setSuggestionPreview(data.generatedAnswer);
           setIsGeneratingOptimal(false);
           return;
         }
       }
       
-      // Fallback to local generation
-      console.log('📝 Using local generation...');
+      console.log('Using local generation...');
       const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
       if (suggestion) {
-        // Set preview instead of directly changing answer
         setSuggestionPreview(suggestion);
       }
     } catch (error) {
       console.error('Error generating optimal answer:', error);
-      // Fallback to local generation
       const suggestion = generateSmartSuggestion(currentQuestion.id, answers);
       if (suggestion) {
         setSuggestionPreview(suggestion);
@@ -1243,7 +1243,6 @@ export default function ProductIdeaGenerator() {
     }
   };
 
-  // Handle accepting suggestion
   const handleAcceptSuggestion = () => {
     if (suggestionPreview) {
       setAnswers(prev => ({
@@ -1252,69 +1251,65 @@ export default function ProductIdeaGenerator() {
       }));
       setSuggestionPreview('');
       
-      // Trigger AI response for the accepted content
       if (currentQuestion.showAIHelper) {
         generateAIResponse(currentQuestion.id, suggestionPreview);
       }
     }
   };
 
-  // Handle rejecting suggestion
   const handleRejectSuggestion = () => {
     setSuggestionPreview('');
   };
 
- const handleImproveAnswer = async (currentAnswer: string) => {
-    console.log('ðŸš€ Starting improvement process...');
+  const handleImproveAnswer = async (currentAnswer: string) => {
+    console.log('🚀 Starting improvement process...');
     setIsGeneratingImprovement(true);
     
     try {
       const user = auth.currentUser;
       
       if (!user) {
-        console.log('âŒ No user, using local fallback');
+        console.log('No user, using local fallback');
         const improved = generateImprovedAnswer(currentQuestion.id, currentAnswer);
         setImprovementSuggestion(improved);
         setIsGeneratingImprovement(false);
         return;
       }
 
-      console.log('ðŸ“¡ Calling Firebase Function...');
+      console.log('Calling Firebase Function...');
       const improveAnswerFunction = httpsCallable(functions, 'improveAnswer');
       
-      // FIXED: Send the parameters the function expects
       const payload = {
-        userId: user.uid,  // Add userId
+        userId: user.uid,
         questionId: currentQuestion.id,
-        originalAnswer: currentAnswer,  // Changed from currentAnswer
-        questionText: currentQuestion.question,  // Add questionText
+        originalAnswer: currentAnswer,
+        questionText: currentQuestion.question,
         previousAnswers: Object.keys(answers).slice(0, 5).reduce((acc, key) => {
           acc[key] = answers[key];
           return acc;
         }, {} as any)
       };
       
-      console.log('ðŸ“¦ Sending payload:', payload);
+      console.log('Sending payload:', payload);
       
       const result = await improveAnswerFunction(payload);
-      console.log('âœ… Function response:', result);
+      console.log('Function response:', result);
       
       const data = result.data as any;
       
       if (data.success && data.improvedAnswer) {
-        console.log('ðŸŽ‰ Got improved answer from Claude!');
+        console.log('Got improved answer from Claude!');
         setImprovementSuggestion(data.improvedAnswer);
       } else {
-        console.log('âš ï¸ Unexpected response format:', data);
+        console.log('Unexpected response format:', data);
         throw new Error('Unexpected response format');
       }
       
     } catch (error: any) {
-      console.error('âŒ Full error:', error);
+      console.error('Full error:', error);
       console.error('Error code:', error.code);
       console.error('Error message:', error.message);
       
-      // Fallback to local improvement
       const improved = generateImprovedAnswer(currentQuestion.id, currentAnswer);
       setImprovementSuggestion(improved);
     } finally {
@@ -1322,32 +1317,27 @@ export default function ProductIdeaGenerator() {
     }
   };
 
-// Handle accepting improvement
-const handleAcceptImprovement = () => {
-  if (improvementSuggestion) {
-    setAnswers(prev => ({
-      ...prev,
-      [currentQuestion.id]: improvementSuggestion
-    }));
-    setImprovementSuggestion('');
-    
-    // Trigger AI response for the improved content
-    if (currentQuestion.showAIHelper) {
-      generateAIResponse(currentQuestion.id, improvementSuggestion);
+  const handleAcceptImprovement = () => {
+    if (improvementSuggestion) {
+      setAnswers(prev => ({
+        ...prev,
+        [currentQuestion.id]: improvementSuggestion
+      }));
+      setImprovementSuggestion('');
+      
+      if (currentQuestion.showAIHelper) {
+        generateAIResponse(currentQuestion.id, improvementSuggestion);
+      }
     }
-  }
-};
+  };
 
-// Handle rejecting improvement
-const handleRejectImprovement = () => {
-  setImprovementSuggestion('');
-};
+  const handleRejectImprovement = () => {
+    setImprovementSuggestion('');
+  };
 
-  // Generate AI response (enhanced with context-aware responses)
   const generateAIResponse = async (questionId: string, answer: any) => {
     setIsProcessingAI(true);
     
-    // Simulate AI processing with contextual responses
     setTimeout(() => {
       let response = '';
       
@@ -1384,8 +1374,29 @@ const handleRejectImprovement = () => {
           response = `Strong outcome! "${answer}" is specific and measurable. This clarity makes marketing 10x easier. People buy outcomes, not information. Let's validate if your target audience will pay for this transformation...`;
           break;
           
+        case 'primary_target':
+          const targetWhoAnswers = answers.target_who || [];
+          const selectedTarget = targetWhoAnswers.find((t: any) => {
+            const val = typeof t === 'object' ? t.value : t;
+            return answer.startsWith(val);
+          });
+          const targetCustom = selectedTarget && typeof selectedTarget === 'object' ? selectedTarget.custom : '';
+          
+          response = `Great choice! Focusing on ONE audience lets you become the go-to expert. ${targetCustom ? `"${targetCustom}"` : 'This group'} gets ALL your attention for your first launch. Master this market, then expand.`;
+          break;
+          
+        case 'starting_product':
+          const productMessages: { [key: string]: string } = {
+            'low_ticket': "Smart start! Low-ticket products ($27-97) let you TEST demand with minimal risk. Goal: Get 10 sales to validate, then build your upsell ladder. Speed beats perfection here.",
+            'mid_ticket': "Solid choice! Mid-ticket ($197-497) delivers real transformation. You need fewer customers but must deliver results. Focus on the OUTCOME, not hours of content.",
+            'high_ticket': "Bold move! High-ticket ($997+) means you need just 3-5 customers to validate. Pro tip: Start premium, then create downsells. Fewer customers = more attention = better results = better testimonials.",
+            'membership': "Recurring revenue! Memberships build predictable income but require ongoing value. Make sure you can commit to regular content/community engagement."
+          };
+          response = productMessages[answer] || "Good selection! Now let's craft your mission statement.";
+          break;
+          
         case 'mission_statement':
-          response = `Excellent mission! "${answer}" is clear and focused. This becomes your north star - every product, every piece of content serves this mission. Stick to this for 6 weeks and watch the compound effect...`;
+          response = `Excellent mission! "${answer}" is clear and focused. This becomes your north star - every product, every piece of content serves this mission. Stick to this for your first launch and watch the compound effect...`;
           break;
           
         case 'will_they_pay':
@@ -1401,15 +1412,6 @@ const handleRejectImprovement = () => {
         case 'dream_outcome':
           response = `Powerful! "${answer.substring(0, 60)}..." taps into deep emotional drivers. This is what they'll actually pay for - not the features, but this transformation. Price based on this value, not your time.`;
           break;
-          
-        case 'speed_to_value':
-          response = `Smart progression! Quick wins build trust and momentum. Your Day 1 result proves competence, Week 1 creates believers, Month 1 delivers transformation. This timeline justifies premium pricing.`;
-          break;
-          
-        case 'value_stack':
-        const bonusCount = (answer.split('\n') || []).filter((line: string) => line.trim()).length;
-        response = `Excellent stack! With ${bonusCount} bonuses, you can create massive perceived value. Hormozi's rule: Stack value until it feels like they're stealing from you. Each bonus should solve a specific objection or fear.`;
-        break;
       }
       
       if (response) {
@@ -1422,9 +1424,7 @@ const handleRejectImprovement = () => {
     }, 800);
   };
 
-  // Navigation
   const handleNext = () => {
-    // Clear smart suggestion when moving to next question
     setShowSmartSuggestion(null);
     setImprovementSuggestion('');
     setSuggestionPreview('');
@@ -1433,14 +1433,12 @@ const handleRejectImprovement = () => {
       setCurrentQuestionIndex(prev => prev + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-      // All questions answered - generate product ideas
       setShowResults(true);
       generateProductIdeas();
     }
   };
 
   const handleBack = () => {
-    // Clear smart suggestion when moving to previous question
     setShowSmartSuggestion(null);
     setImprovementSuggestion('');
     setSuggestionPreview('');
@@ -1451,9 +1449,8 @@ const handleRejectImprovement = () => {
     }
   };
 
- const handleProgressClick = (step: number) => {
+  const handleProgressClick = (step: number) => {
     if (step <= currentQuestionIndex + 1) {
-      // Clear smart suggestion when jumping to a different question
       setShowSmartSuggestion(null);
       setImprovementSuggestion('');
       setSuggestionPreview('');
@@ -1461,11 +1458,9 @@ const handleRejectImprovement = () => {
     }
   };
 
-  // Generate product ideas based on all answers
   const generateProductIdeas = async () => {
     setIsGeneratingIdeas(true);
     
-    // Save progress to Firebase
     if (auth.currentUser) {
       try {
         const userRef = doc(db, 'users', auth.currentUser.uid);
@@ -1478,7 +1473,6 @@ const handleRejectImprovement = () => {
       }
     }
     
-    // Generate 3 product ideas at different price points
     setTimeout(() => {
       const ideas: GeneratedIdea[] = [
         {
@@ -1546,12 +1540,10 @@ const handleRejectImprovement = () => {
     }, 3000);
   };
 
-  // Select a product idea and create it
   const selectProductIdea = async (idea: GeneratedIdea) => {
     if (!auth.currentUser) return;
     
     try {
-      // Create a new product document with pre-filled data
       const productRef = doc(collection(db, 'products'));
       await setDoc(productRef, {
         userId: auth.currentUser.uid,
@@ -1580,19 +1572,16 @@ const handleRejectImprovement = () => {
         }
       });
       
-      // Navigate to sales page builder with this product
       navigate(`/products/${productRef.id}/landing/edit`);
     } catch (error) {
       console.error('Error creating product:', error);
     }
   };
 
-  // Show results view
   if (showResults) {
     return (
       <div className="min-h-screen bg-white dark:bg-[#0B0B0D] py-12">
         <div className="max-w-4xl mx-auto px-4">
-          {/* Header */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 mb-4">
               <Trophy className="w-8 h-8 text-white" />
@@ -1603,14 +1592,12 @@ const handleRejectImprovement = () => {
             
             {!isGeneratingIdeas && (
               <>
-                {/* Mission Statement */}
                 <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 mb-4 max-w-2xl mx-auto">
                   <p className="text-lg font-medium text-purple-900 dark:text-purple-100">
                     {answers.mission_statement}
                   </p>
                 </div>
                 
-                {/* Niche Score */}
                 <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${
                   nicheScore.score >= 3 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
                   nicheScore.score >= 2 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
@@ -1625,11 +1612,10 @@ const handleRejectImprovement = () => {
           {isGeneratingIdeas ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-600 border-t-transparent mb-4" />
-              <p className="text-neutral-600 dark:text-neutral-400">Applying Hormozi's value equation to your answers...</p>
+              <p className="text-neutral-600 dark:text-neutral-400">Analyzing your answers to create personalized product ideas...</p>
             </div>
           ) : (
             <>
-              {/* Product Ideas */}
               <div className="space-y-6 mb-8">
                 {generatedIdeas.map((idea) => (
                   <div
@@ -1691,7 +1677,7 @@ const handleRejectImprovement = () => {
                         onClick={() => selectProductIdea(idea)}
                         className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-indigo-700 transition-all text-sm"
                       >
-                        Build This Product Ã¢â€ â€™
+                        Build This Product
                       </button>
                     </div>
 
@@ -1704,7 +1690,6 @@ const handleRejectImprovement = () => {
                 ))}
               </div>
 
-              {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <button
                   onClick={() => {
@@ -1731,28 +1716,23 @@ const handleRejectImprovement = () => {
   }
 
   return (
-   <div className="min-h-screen bg-white dark:bg-[#0B0B0D] py-12">
-    <div className="max-w-7xl mx-auto px-4">
-      <div className="flex gap-8"> 
-        {/* Left Sidebar - Progress Summary (Desktop Only) */}
-        <div className="hidden lg:block flex-shrink-0 relative z-10" style={{marginTop:'13.9rem'}}>
-          <ProgressSummary
-            answers={answers}
-            currentPhase={currentPhase}
-            questions={questions}
-          />
-        </div>
+    <div className="min-h-screen bg-white dark:bg-[#0B0B0D] py-12">
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="flex gap-8">
+          <div className="hidden lg:block flex-shrink-0" style={{marginTop:'19rem'}}>
+            <ProgressSummary
+              answers={answers}
+              currentPhase={currentPhase}
+              questions={questions}
+            />
+          </div>
 
-        {/* Main Content - Center it when sidebar is hidden */}
-        <div className="flex-1 max-w-4xl mx-auto">
-            {/* Header */}
+          <div className="flex-1 max-w-3xl mx-auto">
             <div className="text-center mb-8">
               <button
                 onClick={() => navigate('/onboarding')}
-                className="inline-flex items-center gap-2 text-sm mr-px  text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white mb-4 transition-colors"
-                style={{
-                  marginRight:'1rem'
-                }}
+                className="inline-flex items-center gap-2 text-sm mr-px text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white mb-4 transition-colors"
+                style={{ marginRight:'1rem' }}
               >
                 <ArrowLeft className="w-4 h-4" />
                 Back to Onboarding
@@ -1765,11 +1745,10 @@ const handleRejectImprovement = () => {
                 Product Idea Co-Pilot
               </h1>
               <p className="text-lg text-neutral-600 dark:text-neutral-400">
-                Million Dollar Weekend + $100M Offers = Your Perfect Product
+                Discover Your Perfect Product in Minutes
               </p>
             </div>
 
-            {/* Progress Bar */}
             <div className="mb-8">
               <ProgressBar
                 currentStep={currentQuestionIndex + 1}
@@ -1779,17 +1758,15 @@ const handleRejectImprovement = () => {
               />
             </div>
 
-            {/* Phase Indicator */}
             <div className="text-center mb-6">
               <span className="inline-block px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm font-medium">
                 {currentPhase === 1 && 'Phase 1: Discover Your Skills'}
                 {currentPhase === 2 && 'Phase 2: Define Your Niche'}
                 {currentPhase === 3 && 'Phase 3: Validate Your Market'}
-                {currentPhase === 4 && 'Phase 4: Maximize Your Value'}
+                {currentPhase === 4 && 'Phase 4: Define the Dream'}
               </span>
             </div>
 
-            {/* Smart Suggestion Notification */}
             {showSmartSuggestion && (
               <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
                 <div className="flex items-start gap-3">
@@ -1797,9 +1774,9 @@ const handleRejectImprovement = () => {
                   <div className="flex-1">
                     <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
                       {currentQuestion.id === 'target_who' 
-                        ? "📊 Pre-selected based on your previous answers - Please validate!"
+                        ? "Pre-selected based on your previous answers - Please validate!"
                         : currentQuestion.id === 'confidence_test'
-                        ? "💡 We've calculated what you could charge based on your skills"
+                        ? "We've calculated what you could charge based on your skills"
                         : "We've pre-filled this based on your previous answers!"}
                     </p>
                     <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
@@ -1819,49 +1796,49 @@ const handleRejectImprovement = () => {
               </div>
             )}
 
-            {/* Question Card */}
             <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 p-8 md:p-12 mb-6">
               <QuestionStep
-              question={{
-                ...currentQuestion,
-                examples: currentQuestion.id === 'actual_requests' 
-                  ? generateContextualExamples('actual_requests')
-                  : currentQuestion.examples
-              }}
-              answer={answers[currentQuestion.id]}
-              onAnswerChange={handleAnswerChange}
-              onNext={handleNext}
-              onBack={handleBack}
-              onAutoGenerate={handleAutoGenerate}
-              suggestionPreview={suggestionPreview}
-              onAcceptSuggestion={handleAcceptSuggestion}
-              onRejectSuggestion={handleRejectSuggestion}
-              onImproveAnswer={handleImproveAnswer}
-              improvementSuggestion={currentQuestionIndex === questions.findIndex(q => q.id === currentQuestion.id) ? improvementSuggestion : ''}
-              onAcceptImprovement={handleAcceptImprovement}
-              onRejectImprovement={handleRejectImprovement}
-              isFirstQuestion={currentQuestionIndex === 0}
-              isLastQuestion={currentQuestionIndex === questions.length - 1}
-              aiResponse={aiResponses[currentQuestion.id]}
-              isProcessingAI={isProcessingAI}
-              isGeneratingOptimal={isGeneratingOptimal} 
-              isGeneratingImprovement={isGeneratingImprovement} 
-            />
+                question={{
+                  ...currentQuestion,
+                  options: currentQuestion.id === 'primary_target' 
+                    ? getDynamicPrimaryTargetOptions()
+                    : currentQuestion.options,
+                  examples: currentQuestion.id === 'actual_requests' 
+                    ? generateContextualExamples('actual_requests')
+                    : currentQuestion.examples
+                }}
+                answer={answers[currentQuestion.id]}
+                onAnswerChange={handleAnswerChange}
+                onNext={handleNext}
+                onBack={handleBack}
+                onAutoGenerate={handleAutoGenerate}
+                suggestionPreview={suggestionPreview}
+                onAcceptSuggestion={handleAcceptSuggestion}
+                onRejectSuggestion={handleRejectSuggestion}
+                onImproveAnswer={handleImproveAnswer}
+                improvementSuggestion={currentQuestionIndex === questions.findIndex(q => q.id === currentQuestion.id) ? improvementSuggestion : ''}
+                onAcceptImprovement={handleAcceptImprovement}
+                onRejectImprovement={handleRejectImprovement}
+                isFirstQuestion={currentQuestionIndex === 0}
+                isLastQuestion={currentQuestionIndex === questions.length - 1}
+                aiResponse={aiResponses[currentQuestion.id]}
+                isProcessingAI={isProcessingAI}
+                isGeneratingOptimal={isGeneratingOptimal} 
+                isGeneratingImprovement={isGeneratingImprovement} 
+              />
             </div>
 
-            {/* Skip Option */}
             <div className="text-center">
               <button
                 onClick={() => navigate('/products/sales')}
                 className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
               >
-                Skip and go directly to sales page builder Ã¢â€ â€™
+                Skip and go directly to sales page builder
               </button>
             </div>
           </div>
         </div>
 
-        {/* Mobile Progress Summary */}
         <div className="lg:hidden">
           <ProgressSummary
             answers={answers}
