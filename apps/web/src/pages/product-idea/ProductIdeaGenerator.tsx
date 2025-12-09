@@ -7,6 +7,13 @@ import { auth, db } from '../../lib/firebase';
 import { doc, updateDoc, setDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { 
+  saveProductCoPilotAnswers, 
+  getOrCreateActiveSession, 
+  markProductCoPilotComplete,
+  resetProductCoPilotSession,
+  startNewCoPilotSession
+} from '../../lib/UserDocumentHelpers';
+import { 
   Lightbulb, 
   Users, 
   DollarSign, 
@@ -27,7 +34,15 @@ import {
   Star,
   Award,
   Briefcase,
-  Sparkles
+  Sparkles,
+  RefreshCw,
+  X,
+  Edit2,
+  Plus,
+  Minus,
+  ChevronDown,
+  ChevronUp,
+  Trash2
 } from 'lucide-react';
 
 import ProgressBar from './ProgressBar';
@@ -608,104 +623,7 @@ const questions: QuestionData[] = [
   },
 
   // ========================================
-  // PHASE 3: THE 3-QUESTION VALIDATION
-  // ========================================
-  {
-    id: 'do_i_like_it',
-    question: "Question 1 of 3: Do you LIKE this niche?",
-    subtext: "Would you enjoy talking about this for the next few weeks?",
-    type: 'radio',
-    options: [
-      {
-        value: 'yes',
-        label: 'Yes! I\'m excited about this',
-        description: 'I could talk about this all day',
-        icon: <Heart className="w-5 h-5 text-green-600" />
-      },
-      {
-        value: 'maybe',
-        label: 'It\'s okay, not passionate but interested',
-        description: 'I can sustain this for a while',
-        icon: <Heart className="w-5 h-5 text-yellow-600" />
-      },
-      {
-        value: 'no',
-        label: 'Not really, seems like work',
-        description: 'Already feeling drained thinking about it',
-        icon: <Heart className="w-5 h-5 text-red-600" />
-      }
-    ],
-    validation: {
-      required: true
-    },
-    helpText: "Be honest. You need at least 'okay' to sustain your first launch with content and products."
-  },
-
-  {
-    id: 'can_i_help',
-    question: "Question 2 of 3: Can you ACTUALLY HELP them?",
-    subtext: "Do you have real knowledge or experience here?",
-    type: 'radio',
-    options: [
-      {
-        value: 'yes',
-        label: 'Yes! I have solid expertise',
-        description: 'Done it myself or helped others',
-        icon: <CheckCircle className="w-5 h-5 text-green-600" />
-      },
-      {
-        value: 'maybe',
-        label: 'Somewhat - I know more than beginners',
-        description: 'Not an expert but can add value',
-        icon: <CheckCircle className="w-5 h-5 text-yellow-600" />
-      },
-      {
-        value: 'no',
-        label: 'Not really, would be teaching as I learn',
-        description: 'No real experience or results',
-        icon: <CheckCircle className="w-5 h-5 text-red-600" />
-      }
-    ],
-    validation: {
-      required: true
-    },
-    helpText: "You need at least 'somewhat' to create valuable products. Teaching what you don't know is a recipe for refunds."
-  },
-
-  {
-    id: 'will_they_pay',
-    question: "Question 3 of 3: Will they PAY for solutions?",
-    subtext: "Do they have money AND willingness to spend it?",
-    type: 'radio',
-    options: [
-      {
-        value: 'yes',
-        label: 'Yes! They have money and already buy solutions',
-        description: 'I see competitors selling successfully',
-        icon: <DollarSign className="w-5 h-5 text-green-600" />
-      },
-      {
-        value: 'maybe',
-        label: 'Possibly - they have money but need convincing',
-        description: 'Problem is painful but market unproven',
-        icon: <DollarSign className="w-5 h-5 text-yellow-600" />
-      },
-      {
-        value: 'no',
-        label: 'Unlikely - broke or don\'t see value',
-        description: 'Students, unemployed, or low pain problem',
-        icon: <DollarSign className="w-5 h-5 text-red-600" />
-      }
-    ],
-    validation: {
-      required: true
-    },
-    helpText: "Quick check: Search for similar products on Gumroad, Udemy, or Google. If others are selling, that's validation.",
-    showAIHelper: true
-  },
-
-  // ========================================
-  // PHASE 4: DEFINE THE DREAM
+  // PHASE 3: DEFINE THE DREAM (Previously Phase 4)
   // ========================================
   {
     id: 'dream_outcome',
@@ -739,11 +657,133 @@ export default function ProductIdeaGenerator() {
   const [showSmartSuggestion, setShowSmartSuggestion] = useState<string | null>(null);
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
   const [generatedIdeas, setGeneratedIdeas] = useState<GeneratedIdea[]>([]);
-  const [nicheScore, setNicheScore] = useState<{ score: number; feedback: string }>({ score: 0, feedback: '' });
+  const [editableProduct, setEditableProduct] = useState<{
+    name: string;
+    description: string;
+    price: number;
+    valueStack: string[];
+    guarantees: string[];
+  } | null>(null);
+  const [currentTierType, setCurrentTierType] = useState<string>('low');
+  const [showOtherTiers, setShowOtherTiers] = useState(false);
+  const [showTierChangeConfirm, setShowTierChangeConfirm] = useState(false);
+  const [pendingTierChange, setPendingTierChange] = useState<GeneratedIdea | null>(null);
   const [improvementSuggestion, setImprovementSuggestion] = useState<string>('');
   const [suggestionPreview, setSuggestionPreview] = useState<string>('');
   const [isGeneratingImprovement, setIsGeneratingImprovement] = useState(false);
   const [hasPreselected, setHasPreselected] = useState<{[key: string]: boolean}>({});
+  const [isLoadingAnswers, setIsLoadingAnswers] = useState(true);
+  const [hasResumedSession, setHasResumedSession] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [sessionName, setSessionName] = useState<string>('');
+
+  // Load existing session or create new one on mount
+  useEffect(() => {
+    const loadOrCreateSession = async () => {
+      const user = auth.currentUser;
+      if (!user) {
+        setIsLoadingAnswers(false);
+        return;
+      }
+
+      try {
+        const { sessionId, session, isNew } = await getOrCreateActiveSession(user.uid);
+        
+        setCurrentSessionId(sessionId);
+        setSessionName(session.name);
+        
+        if (!isNew && session.answers && Object.keys(session.answers).length > 0) {
+          console.log('Found saved Co-Pilot session, resuming...', sessionId);
+          setAnswers(session.answers);
+          
+          // Cap the index to valid range (in case questions were removed)
+          const maxIndex = questions.length - 1;
+          const savedIndex = session.currentQuestionIndex || 0;
+          setCurrentQuestionIndex(Math.min(savedIndex, maxIndex));
+          setHasResumedSession(true);
+          
+          // If they already completed, show results and regenerate product
+          if (session.status === 'completed' && session.completedAt) {
+            setShowResults(true);
+            // Regenerate product ideas from saved answers
+            regenerateProductFromAnswers(session.answers);
+          }
+        } else {
+          console.log('Starting new Co-Pilot session:', sessionId);
+        }
+      } catch (error) {
+        console.error('Error loading/creating session:', error);
+      } finally {
+        setIsLoadingAnswers(false);
+      }
+    };
+
+    loadOrCreateSession();
+  }, []);
+
+  // Helper to regenerate product from saved answers (for resuming completed sessions)
+  const regenerateProductFromAnswers = (savedAnswers: Record<string, any>) => {
+    const ideas: GeneratedIdea[] = [
+      {
+        id: '1',
+        name: 'Quick Win Starter Pack',
+        description: `The fastest path to ${savedAnswers.target_outcome}. Perfect for testing the waters.`,
+        price: 27,
+        priceType: 'low',
+        targetAudience: savedAnswers.target_who,
+        mainOutcome: savedAnswers.target_outcome,
+        timeToResult: '24-48 hours',
+        difficultyLevel: 'Beginner friendly',
+        valueStack: ['Quick-start guide', 'Cheat sheet or checklist', 'Email support for 7 days'],
+        guarantee: '7-day money back guarantee',
+        whyItFits: 'Low-risk entry point to validate your idea.'
+      },
+      {
+        id: '2',
+        name: 'Complete Transformation System',
+        description: `Comprehensive solution for serious action-takers who want ${savedAnswers.dream_outcome}.`,
+        price: 197,
+        priceType: 'mid',
+        targetAudience: savedAnswers.target_who,
+        mainOutcome: savedAnswers.dream_outcome || savedAnswers.target_outcome,
+        timeToResult: '30 days',
+        difficultyLevel: 'Some commitment required',
+        valueStack: ['Core training program', 'Templates & tools', 'Private community access', 'Email support for 30 days'],
+        guarantee: '30-day results guarantee',
+        whyItFits: 'Your main offer that delivers full transformation.'
+      },
+      {
+        id: '3',
+        name: 'VIP Implementation Program',
+        description: `Done-with-you intensive with personal guidance.`,
+        price: 997,
+        priceType: 'high',
+        targetAudience: savedAnswers.target_who,
+        mainOutcome: savedAnswers.dream_outcome || savedAnswers.target_outcome,
+        timeToResult: '5-7 days',
+        difficultyLevel: 'Done with you',
+        valueStack: ['1-on-1 kickoff call', 'Daily check-ins for 7 days', 'Custom action plan', 'Everything from lower tiers', 'Lifetime support access'],
+        guarantee: 'Results or full refund',
+        whyItFits: 'Premium offer for high-touch support.'
+      }
+    ];
+    
+    const selectedType = savedAnswers.starting_product || 'low_ticket';
+    const typeMap: { [key: string]: string } = { 'low_ticket': 'low', 'mid_ticket': 'mid', 'high_ticket': 'high' };
+    const selectedPriceType = typeMap[selectedType] || 'low';
+    const selectedIdea = ideas.find(idea => idea.priceType === selectedPriceType) || ideas[0];
+    
+    setEditableProduct({
+      name: selectedIdea.name,
+      description: selectedIdea.description,
+      price: selectedIdea.price,
+      valueStack: [...selectedIdea.valueStack],
+      guarantees: [selectedIdea.guarantee]
+    });
+    setCurrentTierType(selectedPriceType);
+    
+    setGeneratedIdeas(ideas);
+  };
 
   const generateContextualExamples = (questionId: string): string[] => {
     if (questionId === 'actual_requests' && answers.craft_skills) {
@@ -786,13 +826,11 @@ export default function ProductIdeaGenerator() {
   // Determine current phase based on question index
   // Phase 1: Skills Discovery (Q1-3: craft_skills, actual_requests, confidence_test)
   // Phase 2: Niche Definition (Q4-8: target_who, target_outcome, primary_target, starting_product, mission_statement)
-  // Phase 3: Validation (Q9-11: do_i_like_it, can_i_help, will_they_pay)
-  // Phase 4: Value (Q12: dream_outcome)
+  // Phase 3: Define the Dream (Q9: dream_outcome)
   const getCurrentPhase = () => {
     if (currentQuestionIndex < 3) return 1;
     if (currentQuestionIndex < 8) return 2;
-    if (currentQuestionIndex < 11) return 3;
-    return 4;
+    return 3;
   };
   
   const currentPhase = getCurrentPhase();
@@ -862,32 +900,6 @@ export default function ProductIdeaGenerator() {
       return 'low_ticket'; // Start with fast validation
     }
   };
-
-  // Calculate niche score when completing validation questions
-  useEffect(() => {
-    if (answers.do_i_like_it && answers.can_i_help && answers.will_they_pay) {
-      let score = 0;
-      let feedback = '';
-      
-      if (answers.do_i_like_it === 'yes') score++;
-      if (answers.can_i_help === 'yes') score++;
-      if (answers.will_they_pay === 'yes') score++;
-      
-      if (answers.do_i_like_it === 'maybe') score += 0.5;
-      if (answers.can_i_help === 'maybe') score += 0.5;
-      if (answers.will_they_pay === 'maybe') score += 0.5;
-      
-      if (score >= 3) {
-        feedback = "GREEN LIGHT! This niche has strong potential. Full speed ahead!";
-      } else if (score >= 2) {
-        feedback = "YELLOW LIGHT: Proceed with caution. Some challenges but workable for your first launch.";
-      } else {
-        feedback = "RED LIGHT: High risk niche. Consider pivoting to something with better alignment.";
-      }
-      
-      setNicheScore({ score, feedback });
-    }
-  }, [answers.do_i_like_it, answers.can_i_help, answers.will_they_pay]);
 
 
   useEffect(() => {
@@ -977,7 +989,7 @@ export default function ProductIdeaGenerator() {
               value: 'professionals', 
               custom: customText
             });
-            console.log('✅ Detected professionals');
+            console.log('[OK] Detected professionals');
           }
           
           if (requestsLower.includes('client') || requestsLower.includes('founder') || 
@@ -997,7 +1009,7 @@ export default function ProductIdeaGenerator() {
               value: 'business_owners', 
               custom: customText
             });
-            console.log('✅ Detected business owners');
+            console.log('[OK] Detected business owners');
           }
           
           if (requestsLower.includes('student') || requestsLower.includes('learn') ||
@@ -1015,7 +1027,7 @@ export default function ProductIdeaGenerator() {
               value: 'students',
               custom: customText
             });
-            console.log('✅ Detected students');
+            console.log('[OK] Detected students');
           }
           
           if (requestsLower.includes('workout') || requestsLower.includes('gym') ||
@@ -1034,7 +1046,7 @@ export default function ProductIdeaGenerator() {
               value: 'hobbyists',
               custom: customText
             });
-            console.log('✅ Detected fitness hobbyists');
+            console.log('[OK] Detected fitness hobbyists');
           }
           
           if (requestsLower.includes('friend') || requestsLower.includes('family') ||
@@ -1047,7 +1059,7 @@ export default function ProductIdeaGenerator() {
                 value: 'parents', 
                 custom: 'Parents in my social circle' 
               });
-              console.log('✅ Detected parents');
+              console.log('[OK] Detected parents');
             } else if (!preSelected.find(p => p.value === 'hobbyists') && 
                        !preSelected.find(p => p.value === 'professionals')) {
               let customText = 'Friends and family members interested in my skills';
@@ -1058,7 +1070,7 @@ export default function ProductIdeaGenerator() {
                 value: 'hobbyists',
                 custom: customText
               });
-              console.log('✅ Detected hobbyists/general');
+              console.log('[OK] Detected hobbyists/general');
             }
           }
           
@@ -1073,7 +1085,7 @@ export default function ProductIdeaGenerator() {
             }));
             
             setShowSmartSuggestion(
-              `✅ We've pre-selected ${preSelected.length} group${preSelected.length > 1 ? 's' : ''} based on who's already asking you for help. Please review and refine the details to be even more specific!`
+              `[OK] We've pre-selected ${preSelected.length} group${preSelected.length > 1 ? 's' : ''} based on who's already asking you for help. Please review and refine the details to be even more specific!`
             );
           } else {
             console.log('⚠️ No matches found for pre-selection');
@@ -1122,7 +1134,7 @@ export default function ProductIdeaGenerator() {
         });
         
         if (targetWhoAnswers.length === 1) {
-          recommendation = `✅ You have ONE target audience - perfect! Focus all your energy here for your first launch.`;
+          recommendation = `[OK] You have ONE target audience - perfect! Focus all your energy here for your first launch.`;
         } else {
           const targetLabels: { [key: string]: string } = {
             'business_owners': 'Business Owners',
@@ -1399,16 +1411,6 @@ export default function ProductIdeaGenerator() {
           response = `Excellent mission! "${answer}" is clear and focused. This becomes your north star - every product, every piece of content serves this mission. Stick to this for your first launch and watch the compound effect...`;
           break;
           
-        case 'will_they_pay':
-          if (answer === 'yes') {
-            response = "Perfect! Validated market with proven buyers. You're entering a space where money already flows. Focus on differentiation, not education.";
-          } else if (answer === 'maybe') {
-            response = "Opportunity! Unproven markets can mean less competition. Test with 3 beta customers at low prices before scaling.";
-          } else {
-            response = "Warning: This could be challenging. Consider adjusting your target audience to those with more disposable income, or solving a more painful problem.";
-          }
-          break;
-          
         case 'dream_outcome':
           response = `Powerful! "${answer.substring(0, 60)}..." taps into deep emotional drivers. This is what they'll actually pay for - not the features, but this transformation. Price based on this value, not your time.`;
           break;
@@ -1424,10 +1426,21 @@ export default function ProductIdeaGenerator() {
     }, 800);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     setShowSmartSuggestion(null);
     setImprovementSuggestion('');
     setSuggestionPreview('');
+    
+    // Auto-save answers to Firebase
+    const user = auth.currentUser;
+    if (user && currentSessionId) {
+      try {
+        await saveProductCoPilotAnswers(user.uid, currentSessionId, answers, currentQuestionIndex + 1);
+      } catch (error) {
+        console.error('Failed to save answers:', error);
+        // Continue anyway - don't block user progress
+      }
+    }
     
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
@@ -1461,13 +1474,11 @@ export default function ProductIdeaGenerator() {
   const generateProductIdeas = async () => {
     setIsGeneratingIdeas(true);
     
-    if (auth.currentUser) {
+    // Save complete session to Firebase (no niche score since validation questions removed)
+    if (auth.currentUser && currentSessionId) {
       try {
-        const userRef = doc(db, 'users', auth.currentUser.uid);
-        await updateDoc(userRef, {
-          usedProductQuiz: true,
-          lastActiveDate: serverTimestamp(),
-        });
+        await markProductCoPilotComplete(auth.currentUser.uid, currentSessionId, answers, 0);
+        console.log('Co-Pilot session saved and marked complete');
       } catch (error) {
         console.error('Error saving quiz progress:', error);
       }
@@ -1486,9 +1497,9 @@ export default function ProductIdeaGenerator() {
           timeToResult: '24-48 hours',
           difficultyLevel: 'Beginner friendly',
           valueStack: [
-            'Quick-start guide (Value: $47)',
-            'Cheat sheet (Value: $27)',
-            'Email support for 7 days (Value: $97)'
+            'Quick-start guide',
+            'Cheat sheet or checklist',
+            'Email support for 7 days'
           ],
           guarantee: '7-day money back guarantee',
           whyItFits: 'Low-risk entry point to validate your idea and get first customers quickly.'
@@ -1497,25 +1508,24 @@ export default function ProductIdeaGenerator() {
           id: '2',
           name: 'Complete Transformation System',
           description: `Comprehensive solution for serious action-takers who want ${answers.dream_outcome}.`,
-          price: 297,
+          price: 197,
           priceType: 'mid',
           targetAudience: answers.target_who,
           mainOutcome: answers.dream_outcome || answers.target_outcome,
           timeToResult: '30 days',
           difficultyLevel: 'Some commitment required',
           valueStack: [
-            'Core training program (Value: $497)',
-            'Templates & tools (Value: $197)',
-            'Private community access (Value: $297)',
-            '30-day email course (Value: $97)',
-            'Bonus resources (Value: $147)'
+            'Core training program',
+            'Templates & tools',
+            'Private community access',
+            'Email support for 30 days'
           ],
           guarantee: '30-day results guarantee',
           whyItFits: 'Your main offer that delivers full transformation with strong support.'
         },
         {
           id: '3',
-          name: 'VIP Implementation Week',
+          name: 'VIP Implementation Program',
           description: `Done-with-you intensive for those who want results NOW with personal guidance.`,
           price: 997,
           priceType: 'high',
@@ -1524,24 +1534,44 @@ export default function ProductIdeaGenerator() {
           timeToResult: '5-7 days',
           difficultyLevel: 'Done with you',
           valueStack: [
-            '1-on-1 kickoff call (Value: $297)',
-            'Daily check-ins for 7 days (Value: $497)',
-            'Custom action plan (Value: $397)',
-            'Everything from lower tiers (Value: $497)',
-            'Lifetime alumni access (Value: $297)'
+            '1-on-1 kickoff call',
+            'Daily check-ins for 7 days',
+            'Custom action plan',
+            'Everything from lower tiers',
+            'Lifetime support access'
           ],
           guarantee: 'Results or full refund',
           whyItFits: 'Premium offer for high-touch support. Start with 3 beta clients.'
         }
       ];
       
+      // Find the idea matching user's selected product type
+      const selectedType = answers.starting_product || 'low_ticket';
+      const typeMap: { [key: string]: string } = {
+        'low_ticket': 'low',
+        'mid_ticket': 'mid',
+        'high_ticket': 'high'
+      };
+      const selectedPriceType = typeMap[selectedType] || 'low';
+      const selectedIdea = ideas.find(idea => idea.priceType === selectedPriceType) || ideas[0];
+      
+      // Set editable product from selected idea
+      setEditableProduct({
+        name: selectedIdea.name,
+        description: selectedIdea.description,
+        price: selectedIdea.price,
+        valueStack: [...selectedIdea.valueStack],
+        guarantees: [selectedIdea.guarantee]
+      });
+      setCurrentTierType(selectedPriceType);
+      
       setGeneratedIdeas(ideas);
       setIsGeneratingIdeas(false);
-    }, 3000);
+    }, 2000);
   };
 
-  const selectProductIdea = async (idea: GeneratedIdea) => {
-    if (!auth.currentUser) return;
+  const createProduct = async () => {
+    if (!auth.currentUser || !editableProduct) return;
     
     try {
       const productRef = doc(collection(db, 'products'));
@@ -1551,24 +1581,25 @@ export default function ProductIdeaGenerator() {
         isDraft: true,
         salesPage: {
           coreInfo: {
-            name: idea.name,
-            tagline: idea.description,
-            price: idea.price,
+            name: editableProduct.name,
+            tagline: editableProduct.description,
+            price: editableProduct.price,
             priceType: 'one-time',
             currency: 'USD'
           },
           valueProp: {
             productType: 'custom',
-            description: idea.description,
-            benefits: idea.valueStack,
-            targetAudience: `${idea.targetAudience} who want ${idea.mainOutcome}`,
-            deliverables: idea.valueStack
+            description: editableProduct.description,
+            benefits: editableProduct.valueStack,
+            targetAudience: answers.primary_target || '',
+            deliverables: editableProduct.valueStack,
+            guarantees: editableProduct.guarantees
           }
         },
         metadata: {
           fromQuiz: true,
           mission: answers.mission_statement,
-          nicheScore: nicheScore.score
+          sessionId: currentSessionId
         }
       });
       
@@ -1578,137 +1609,432 @@ export default function ProductIdeaGenerator() {
     }
   };
 
+  // Switch to a different product tier
+  // Request tier change (shows confirmation)
+  const requestTierChange = (idea: GeneratedIdea) => {
+    setPendingTierChange(idea);
+    setShowTierChangeConfirm(true);
+  };
+
+  // Actually switch to tier after confirmation
+  const confirmTierChange = () => {
+    if (!pendingTierChange) return;
+    
+    setEditableProduct({
+      name: pendingTierChange.name,
+      description: pendingTierChange.description,
+      price: pendingTierChange.price,
+      valueStack: [...pendingTierChange.valueStack],
+      guarantees: [pendingTierChange.guarantee]
+    });
+    setCurrentTierType(pendingTierChange.priceType);
+    setShowOtherTiers(false);
+    setShowTierChangeConfirm(false);
+    setPendingTierChange(null);
+  };
+
+  // Cancel tier change
+  const cancelTierChange = () => {
+    setShowTierChangeConfirm(false);
+    setPendingTierChange(null);
+  };
+
+  // Show loading while checking for saved session
+  if (isLoadingAnswers) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-[#0B0B0D] flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 mb-4 animate-pulse">
+            <Sparkles className="w-8 h-8 text-white" />
+          </div>
+          <p className="text-neutral-600 dark:text-neutral-400">Loading your progress...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (showResults) {
+    const otherTiers = generatedIdeas.filter(idea => idea.priceType !== currentTierType);
+    
+    const tierLabels: { [key: string]: string } = {
+      'low': 'Quick Win ($27-97)',
+      'mid': 'Core Offer ($197-497)',
+      'high': 'Premium ($997+)'
+    };
+
     return (
       <div className="min-h-screen bg-white dark:bg-[#0B0B0D] py-12">
-        <div className="max-w-4xl mx-auto px-4">
+        <div className="max-w-3xl mx-auto px-4">
           <div className="text-center mb-8">
+            {sessionName && (
+              <p className="text-sm text-purple-600 dark:text-purple-400 font-medium mb-2">
+                {sessionName}
+              </p>
+            )}
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 mb-4">
               <Trophy className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl md:text-4xl font-bold text-neutral-900 dark:text-white mb-3">
-              {isGeneratingIdeas ? "Creating Your Product Ideas..." : "Your Product Ideas Are Ready!"}
+              {isGeneratingIdeas ? "Creating Your Product..." : "Customize Your Product"}
             </h1>
             
             {!isGeneratingIdeas && (
-              <>
-                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 mb-4 max-w-2xl mx-auto">
-                  <p className="text-lg font-medium text-purple-900 dark:text-purple-100">
-                    {answers.mission_statement}
-                  </p>
-                </div>
-                
-                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${
-                  nicheScore.score >= 3 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
-                  nicheScore.score >= 2 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
-                  'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                }`}>
-                  {nicheScore.feedback}
-                </div>
-              </>
+              <p className="text-neutral-600 dark:text-neutral-400">
+                We've created a starting point based on your answers. Edit anything below to make it yours.
+              </p>
             )}
           </div>
 
           {isGeneratingIdeas ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-600 border-t-transparent mb-4" />
-              <p className="text-neutral-600 dark:text-neutral-400">Analyzing your answers to create personalized product ideas...</p>
+              <p className="text-neutral-600 dark:text-neutral-400">Creating your product idea...</p>
             </div>
-          ) : (
+          ) : editableProduct ? (
             <>
-              <div className="space-y-6 mb-8">
-                {generatedIdeas.map((idea) => (
-                  <div
-                    key={idea.id}
-                    className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 p-6 hover:border-purple-500 dark:hover:border-purple-400 transition-all"
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="text-xl font-bold text-neutral-900 dark:text-white mb-1">
-                          {idea.name}
-                        </h3>
-                        <p className="text-neutral-600 dark:text-neutral-400">
-                          {idea.description}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                          ${idea.price}
-                        </div>
-                        <div className={`text-xs font-medium px-2 py-1 rounded-full inline-block ${
-                          idea.priceType === 'low' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
-                          idea.priceType === 'mid' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
-                          'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                        }`}>
-                          {idea.priceType === 'low' ? 'Entry Level' : idea.priceType === 'mid' ? 'Core Offer' : 'Premium'}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-1">Time to First Result</p>
-                        <p className="font-medium text-neutral-900 dark:text-white">{idea.timeToResult}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-1">Difficulty</p>
-                        <p className="font-medium text-neutral-900 dark:text-white">{idea.difficultyLevel}</p>
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-2">Value Stack:</p>
-                      <ul className="space-y-1">
-                        {idea.valueStack.slice(0, 3).map((item, idx) => (
-                          <li key={idx} className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
-                            <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-4 border-t border-neutral-200 dark:border-neutral-800">
-                      <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
-                        <Shield className="w-4 h-4" />
-                        {idea.guarantee}
-                      </div>
-                      <button
-                        onClick={() => selectProductIdea(idea)}
-                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-indigo-700 transition-all text-sm"
-                      >
-                        Build This Product
-                      </button>
-                    </div>
-
-                    <div className="mt-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg">
-                      <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                        <span className="font-medium">Why this fits:</span> {idea.whyItFits}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              {/* Mission Statement */}
+              <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 mb-6 border border-purple-200 dark:border-purple-800">
+                <p className="text-sm font-medium text-purple-600 dark:text-purple-400 mb-1">Your Mission</p>
+                <p className="text-purple-900 dark:text-purple-100">
+                  {answers.mission_statement}
+                </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              {/* Editable Product Card */}
+              <div className="bg-white dark:bg-neutral-900 rounded-2xl border-2 border-purple-500 dark:border-purple-400 p-6 mb-6 shadow-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <span className={`text-xs font-medium px-3 py-1 rounded-full ${
+                    currentTierType === 'low' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                    currentTierType === 'mid' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                    'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                  }`}>
+                    {tierLabels[currentTierType]}
+                  </span>
+                  <Edit2 className="w-4 h-4 text-neutral-400" />
+                </div>
+
+                {/* Product Name */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Product Name
+                  </label>
+                  <textarea
+                    value={editableProduct.name}
+                    onChange={(e) => {
+                      setEditableProduct({...editableProduct, name: e.target.value});
+                      e.target.style.height = 'auto';
+                      e.target.style.height = e.target.scrollHeight + 'px';
+                    }}
+                    ref={(el) => {
+                      if (el) {
+                        el.style.height = 'auto';
+                        el.style.height = el.scrollHeight + 'px';
+                      }
+                    }}
+                    rows={1}
+                    className="w-full px-4 py-3 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden"
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={editableProduct.description}
+                    onChange={(e) => {
+                      setEditableProduct({...editableProduct, description: e.target.value});
+                      // Auto-resize
+                      e.target.style.height = 'auto';
+                      e.target.style.height = e.target.scrollHeight + 'px';
+                    }}
+                    ref={(el) => {
+                      // Auto-resize on mount
+                      if (el) {
+                        el.style.height = 'auto';
+                        el.style.height = el.scrollHeight + 'px';
+                      }
+                    }}
+                    rows={1}
+                    className="w-full px-4 py-3 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden"
+                  />
+                </div>
+
+                {/* Price */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Price (USD)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 text-lg">$</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={editableProduct.price === 0 ? '' : editableProduct.price}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9]/g, '');
+                        setEditableProduct({...editableProduct, price: value === '' ? 0 : parseInt(value, 10)});
+                      }}
+                      placeholder="0"
+                      className="w-full pl-8 pr-4 py-3 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* What's Included */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                    What's Included
+                  </label>
+                  <div className="space-y-2">
+                    {editableProduct.valueStack.map((item, idx) => (
+                      <div key={idx} className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-2.5" />
+                        <textarea
+                          value={item}
+                          onChange={(e) => {
+                            const newStack = [...editableProduct.valueStack];
+                            newStack[idx] = e.target.value;
+                            setEditableProduct({...editableProduct, valueStack: newStack});
+                            e.target.style.height = 'auto';
+                            e.target.style.height = e.target.scrollHeight + 'px';
+                          }}
+                          ref={(el) => {
+                            if (el) {
+                              el.style.height = 'auto';
+                              el.style.height = el.scrollHeight + 'px';
+                            }
+                          }}
+                          rows={1}
+                          className="flex-1 px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden"
+                        />
+                        <button
+                          onClick={() => {
+                            const newStack = editableProduct.valueStack.filter((_, i) => i !== idx);
+                            setEditableProduct({...editableProduct, valueStack: newStack});
+                          }}
+                          className="p-1 text-neutral-400 hover:text-red-500 transition-colors mt-1.5"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setEditableProduct({
+                        ...editableProduct, 
+                        valueStack: [...editableProduct.valueStack, 'New item']
+                      })}
+                      className="flex items-center gap-2 text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 mt-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add item
+                    </button>
+                  </div>
+                </div>
+
+                {/* Guarantees */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                    Guarantees
+                  </label>
+                  <div className="space-y-2">
+                    {editableProduct.guarantees.map((item, idx) => (
+                      <div key={idx} className="flex items-start gap-2">
+                        <Shield className="w-4 h-4 text-green-500 flex-shrink-0 mt-2.5" />
+                        <textarea
+                          value={item}
+                          onChange={(e) => {
+                            const newGuarantees = [...editableProduct.guarantees];
+                            newGuarantees[idx] = e.target.value;
+                            setEditableProduct({...editableProduct, guarantees: newGuarantees});
+                            e.target.style.height = 'auto';
+                            e.target.style.height = e.target.scrollHeight + 'px';
+                          }}
+                          ref={(el) => {
+                            if (el) {
+                              el.style.height = 'auto';
+                              el.style.height = el.scrollHeight + 'px';
+                            }
+                          }}
+                          rows={1}
+                          className="flex-1 px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden"
+                        />
+                        {editableProduct.guarantees.length > 1 && (
+                          <button
+                            onClick={() => {
+                              const newGuarantees = editableProduct.guarantees.filter((_, i) => i !== idx);
+                              setEditableProduct({...editableProduct, guarantees: newGuarantees});
+                            }}
+                            className="p-1 text-neutral-400 hover:text-red-500 transition-colors mt-1.5"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setEditableProduct({
+                        ...editableProduct, 
+                        guarantees: [...editableProduct.guarantees, 'New guarantee']
+                      })}
+                      className="flex items-center gap-2 text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 mt-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add guarantee
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Other Tiers Accordion */}
+              {otherTiers.length > 0 && (
+                <div className="mb-6">
+                  <button
+                    onClick={() => setShowOtherTiers(!showOtherTiers)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
+                  >
+                    <span className="text-sm font-medium">Want a different product tier?</span>
+                    {showOtherTiers ? (
+                      <ChevronUp className="w-5 h-5" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5" />
+                    )}
+                  </button>
+                  
+                  {showOtherTiers && (
+                    <div className="mt-3 space-y-3">
+                      {otherTiers.map((idea) => (
+                        <div
+                          key={idea.id}
+                          className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-4"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                                idea.priceType === 'low' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                                idea.priceType === 'mid' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                                'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                              }`}>
+                                {tierLabels[idea.priceType]}
+                              </span>
+                              <h4 className="font-semibold text-neutral-900 dark:text-white mt-2">{idea.name}</h4>
+                              <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">{idea.description}</p>
+                              <p className="text-lg font-bold text-purple-600 dark:text-purple-400 mt-2">${idea.price}</p>
+                            </div>
+                            <button
+                              onClick={() => requestTierChange(idea)}
+                              className="px-3 py-1.5 text-sm bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-lg hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
+                            >
+                              Use This
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-3">
                 <button
-                  onClick={() => {
-                    setShowResults(false);
-                    setCurrentQuestionIndex(0);
-                    setAnswers({});
-                  }}
-                  className="px-6 py-3 bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-lg font-medium hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-all"
+                  onClick={createProduct}
+                  className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-semibold text-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg"
                 >
-                  Start Over
+                  Create Sales Page
                 </button>
-                <button
-                  onClick={() => navigate('/dashboard')}
-                  className="px-6 py-3 bg-neutral-100 dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300 rounded-lg font-medium hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-all"
-                >
-                  Go to Dashboard
-                </button>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={async () => {
+                      const user = auth.currentUser;
+                      if (user && currentSessionId) {
+                        try {
+                          await resetProductCoPilotSession(user.uid, currentSessionId);
+                          const newSessionId = await startNewCoPilotSession(user.uid);
+                          setCurrentSessionId(newSessionId);
+                          setSessionName(`Business Idea #${newSessionId.slice(-4)}`);
+                        } catch (error) {
+                          console.error('Failed to reset session:', error);
+                        }
+                      }
+                      setShowResults(false);
+                      setCurrentQuestionIndex(0);
+                      setAnswers({});
+                      setAiResponses({});
+                      setGeneratedIdeas([]);
+                      setEditableProduct(null);
+                      setHasResumedSession(false);
+                    }}
+                    className="flex-1 px-6 py-3 bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-lg font-medium hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-all"
+                  >
+                    Start Over
+                  </button>
+                  <button
+                    onClick={() => navigate('/dashboard')}
+                    className="flex-1 px-6 py-3 bg-neutral-100 dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300 rounded-lg font-medium hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-all"
+                  >
+                    Dashboard
+                  </button>
+                </div>
               </div>
             </>
+          ) : null}
+
+          {/* Tier Change Confirmation Modal */}
+          {showTierChangeConfirm && pendingTierChange && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-neutral-900 rounded-2xl max-w-md w-full p-6 shadow-xl">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                    <RefreshCw className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
+                    Switch Product Tier?
+                  </h3>
+                </div>
+                
+                <p className="text-neutral-600 dark:text-neutral-400 mb-4">
+                  Switching to <span className="font-medium text-neutral-900 dark:text-white">{pendingTierChange.name}</span> will replace all your current edits including:
+                </p>
+                
+                <ul className="text-sm text-neutral-600 dark:text-neutral-400 mb-6 space-y-1">
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-400" />
+                    Product name & description
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-400" />
+                    Price
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-400" />
+                    What's included items
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-400" />
+                    Guarantees
+                  </li>
+                </ul>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={cancelTierChange}
+                    className="flex-1 px-4 py-2.5 bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-lg font-medium hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-colors"
+                  >
+                    Keep Current
+                  </button>
+                  <button
+                    onClick={confirmTierChange}
+                    className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                  >
+                    Switch Tier
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -1749,6 +2075,29 @@ export default function ProductIdeaGenerator() {
               </p>
             </div>
 
+            {/* Resume Session Banner */}
+            {hasResumedSession && currentQuestionIndex > 0 && (
+              <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center">
+                    <RefreshCw className="w-4 h-4 text-blue-600 dark:text-blue-300" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-blue-900 dark:text-blue-100">Welcome back!</p>
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      Continuing "{sessionName || 'your session'}" from where you left off.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setHasResumedSession(false)}
+                  className="text-blue-500 hover:text-blue-700 dark:hover:text-blue-300"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            )}
+
             <div className="mb-8">
               <ProgressBar
                 currentStep={currentQuestionIndex + 1}
@@ -1762,8 +2111,7 @@ export default function ProductIdeaGenerator() {
               <span className="inline-block px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm font-medium">
                 {currentPhase === 1 && 'Phase 1: Discover Your Skills'}
                 {currentPhase === 2 && 'Phase 2: Define Your Niche'}
-                {currentPhase === 3 && 'Phase 3: Validate Your Market'}
-                {currentPhase === 4 && 'Phase 4: Define the Dream'}
+                {currentPhase === 3 && 'Phase 3: Define Your Dream'}
               </span>
             </div>
 

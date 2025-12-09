@@ -85,6 +85,36 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
   const [customInputs, setCustomInputs] = useState<{[key: string]: string}>({});
   const [showExamples, setShowExamples] = useState(false);
 
+  // Initialize customInputs from loaded answer (for resume functionality)
+  useEffect(() => {
+    if (question.type === 'checkbox' && Array.isArray(answer)) {
+      const loadedCustomInputs: {[key: string]: string} = {};
+      answer.forEach((item) => {
+        if (typeof item === 'object' && item.value && item.custom) {
+          loadedCustomInputs[item.value] = item.custom;
+        }
+      });
+      if (Object.keys(loadedCustomInputs).length > 0) {
+        setCustomInputs(loadedCustomInputs);
+      }
+    }
+  }, [question.id]); // Re-run when question changes
+
+  // Auto-resize custom input textareas after content loads
+  useEffect(() => {
+    if (Object.keys(customInputs).length > 0) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        const textareas = document.querySelectorAll('textarea[data-custom-input="true"]');
+        textareas.forEach((textarea) => {
+          const el = textarea as HTMLTextAreaElement;
+          el.style.height = 'auto';
+          el.style.height = el.scrollHeight + 'px';
+        });
+      }, 50);
+    }
+  }, [customInputs]);
+
   // Auto-resize textarea when answer changes
     useEffect(() => {
     if (question.type === 'textarea') {
@@ -398,7 +428,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                         {answer && answer.length > 0 && (
                         <div className="bg-red-50 dark:bg-red-900/20 rounded-md p-3 border border-red-200 dark:border-red-800">
                             <p className="text-xs font-medium text-red-700 dark:text-red-300 mb-1">
-                            ⚠️ Your current answer (will be replaced):
+                            <AlertCircle className="w-3 h-3 inline mr-1" /> Your current answer (will be replaced):
                             </p>
                             <p className="text-sm text-red-800 dark:text-red-200 whitespace-pre-wrap">
                             {answer.length > 200 ? answer.substring(0, 200) + '...' : answer}
@@ -409,7 +439,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                         {/* Show suggested answer */}
                         <div className="bg-green-50 dark:bg-green-900/20 rounded-md p-3 border border-green-200 dark:border-green-800">
                         <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">
-                            ✨ Suggested answer:
+                            <Sparkles className="w-3 h-3 inline mr-1" /> Suggested answer:
                         </p>
                         <p className="text-sm text-green-800 dark:text-green-200 whitespace-pre-wrap">
                             {suggestionPreview}
@@ -450,7 +480,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                         {answer && answer.length > 0 && (
                         <div className="bg-amber-50 dark:bg-amber-900/20 rounded-md p-3 border border-amber-200 dark:border-amber-800">
                             <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-1">
-                            📝 Your current answer:
+                            Your current answer:
                             </p>
                             <p className="text-sm text-amber-800 dark:text-amber-200 whitespace-pre-wrap">
                             {answer.length > 200 ? answer.substring(0, 200) + '...' : answer}
@@ -461,7 +491,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                         {/* Show improved answer */}
                         <div className="bg-green-50 dark:bg-green-900/20 rounded-md p-3 border border-green-200 dark:border-green-800">
                         <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">
-                            ✨ Improved answer:
+                            <Sparkles className="w-3 h-3 inline mr-1" /> Improved answer:
                         </p>
                         <p className="text-sm text-green-800 dark:text-green-200 whitespace-pre-wrap">
                             {improvementSuggestion}
@@ -618,22 +648,23 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                   {hasCustomInput && isChecked && (
                     <div className="mt-2 ml-11">
                       <textarea
+                        data-custom-input="true"
                         value={customInputs[option.value] || ''}
                         onChange={(e) => {
                           handleCustomInputChange(option.value, e.target.value);
-                          // Auto-resize textarea
+                          // Auto-resize
                           e.target.style.height = 'auto';
                           e.target.style.height = e.target.scrollHeight + 'px';
                         }}
-                        ref={(el) => {
-                          if (el && customInputs[option.value]) {
-                            // Auto-resize on mount
-                            el.style.height = 'auto';
-                            el.style.height = el.scrollHeight + 'px';
-                          }
-                        }}
                         rows={1}
-                        placeholder={option.customPlaceholder || "Please specify..."}
+                        placeholder={
+                            option.customPlaceholder || 
+                            (option.value === 'professional_current' 
+                                ? "Your job title (e.g., Software Engineer, Marketing Manager...)" 
+                                : option.value === 'professional_past'
+                                ? "Previous role (e.g., Data Analyst, Product Manager...)"
+                                : "Please specify...")
+                            }
                         className="w-full px-3 py-2 rounded-md border border-purple-300 dark:border-purple-600 bg-white dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 placeholder-neutral-400 dark:placeholder-neutral-500 resize-none overflow-hidden"
                       />
                     </div>

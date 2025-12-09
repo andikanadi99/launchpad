@@ -4,6 +4,20 @@
 
 import { serverTimestamp } from 'firebase/firestore';
 
+// Co-Pilot Session interface (stored in subcollection)
+export interface CoPilotSession {
+  id: string;
+  name: string; // Auto-generated or user-named (e.g., "Business Idea #1")
+  answers: Record<string, any>;
+  currentQuestionIndex: number;
+  completedAt: any | null; // serverTimestamp when completed
+  nicheScore: number | null; // Validation score (0-3)
+  selectedProductType: string | null; // low_ticket, mid_ticket, high_ticket, membership
+  createdAt: any; // serverTimestamp
+  updatedAt: any; // serverTimestamp
+  status: 'in_progress' | 'completed';
+}
+
 export interface UserDocument {
   // === BASIC INFO (existing) ===
   email: string | null;
@@ -30,6 +44,10 @@ export interface UserDocument {
   onboardingPath: 'fast' | 'guided' | null; // NEW: Which onboarding path they chose
   usedProductQuiz: boolean; // NEW: Whether they used the Product Idea Co-Pilot
   leadSource: string | null; // NEW: Where they came from (utm_source, referrer, etc.)
+  
+  // === PRODUCT CO-PILOT (sessions stored in subcollection) ===
+  // Sessions stored at: users/{userId}/productCoPilotSessions/{sessionId}
+  activeSessionId: string | null; // Currently active Co-Pilot session ID
   
   // === CONVERSION TRACKING (NEW) ===
   convertedToPaidDate: any | null; // NEW: When they upgraded from free to paid
@@ -124,6 +142,9 @@ export function createNewUserDocument(
     onboardingPath: null,
     usedProductQuiz: false,
     leadSource: options.leadSource || null,
+    
+    // Product Co-Pilot (sessions in subcollection)
+    activeSessionId: null,
     
     // Conversion tracking
     convertedToPaidDate: null,

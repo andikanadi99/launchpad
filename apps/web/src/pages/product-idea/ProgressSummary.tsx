@@ -143,31 +143,12 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
     );
   };
 
-  // Calculate validation score
-  const getValidationScore = () => {
-    if (!answers.do_i_like_it || !answers.can_i_help || !answers.will_they_pay) return null;
-    
-    let score = 0;
-    if (answers.do_i_like_it === 'yes') score++;
-    if (answers.can_i_help === 'yes') score++;
-    if (answers.will_they_pay === 'yes') score++;
-    
-    if (answers.do_i_like_it === 'maybe') score += 0.5;
-    if (answers.can_i_help === 'maybe') score += 0.5;
-    if (answers.will_they_pay === 'maybe') score += 0.5;
-    
-    return score;
-  };
-
-  const validationScore = getValidationScore();
-
   // Don't show if no data yet
   const hasPhase1Data = answers.craft_skills && answers.craft_skills.length > 0;
   const hasPhase2Data = answers.target_who || answers.target_outcome || answers.primary_target || answers.starting_product || answers.mission_statement;
-  const hasPhase3Data = answers.do_i_like_it || answers.can_i_help || answers.will_they_pay;
-  const hasPhase4Data = answers.dream_outcome;
+  const hasPhase3Data = answers.dream_outcome;
 
-  if (!hasPhase1Data && !hasPhase2Data && !hasPhase3Data && !hasPhase4Data) return null;
+  if (!hasPhase1Data && !hasPhase2Data && !hasPhase3Data) return null;
   
   return (
     <>
@@ -319,66 +300,16 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                 </div>
               )}
 
-              {/* Phase 3: Validation */}
-              {currentPhase >= 3 && validationScore !== null && (
-                <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
-                  <h3 className="font-semibold text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
-                    <Trophy className="w-4 h-4 text-yellow-500" />
-                    Validation
-                  </h3>
-                  <div className="space-y-1 text-sm pl-6">
-                    <div className="flex items-center gap-2">
-                      <span className="text-neutral-600 dark:text-neutral-400">Like it:</span>
-                      {answers.do_i_like_it === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">Yes</span>
-                      ) : answers.do_i_like_it === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">Maybe</span>
-                      ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">No</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-neutral-600 dark:text-neutral-400">Can help:</span>
-                      {answers.can_i_help === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">Yes</span>
-                      ) : answers.can_i_help === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">Maybe</span>
-                      ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">No</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-neutral-600 dark:text-neutral-400">Will pay:</span>
-                      {answers.will_they_pay === 'yes' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium">Yes</span>
-                      ) : answers.will_they_pay === 'maybe' ? (
-                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">Maybe</span>
-                      ) : (
-                        <span className="text-red-600 dark:text-red-400 font-medium">No</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className={`mt-2 text-xs font-medium px-2 py-1 rounded-full inline-block ${
-                    validationScore >= 3 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
-                    validationScore >= 2 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
-                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                  }`}>
-                    {validationScore >= 3 ? 'Green Light' : 
-                     validationScore >= 2 ? 'Yellow Light' : 
-                     'Red Light'}
-                  </div>
-                </div>
-              )}
 
-              {/* Phase 4: Value Props */}
-              {currentPhase >= 4 && answers.dream_outcome && (
+              {/* Phase 3: Dream Outcome */}
+              {currentPhase >= 3 && answers.dream_outcome && (
                 <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
                   <h3 className="font-semibold text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
                     <Zap className="w-4 h-4 text-indigo-500" />
-                    Value Creation
+                    Dream Outcome
                   </h3>
                   <div className="text-sm text-neutral-600 dark:text-neutral-400 pl-6 italic">
-                    Dream: <TooltipText fullText={answers.dream_outcome} maxLength={80} prefix='"' />
+                    <TooltipText fullText={answers.dream_outcome} maxLength={80} prefix='"' />
                   </div>
                 </div>
               )}
@@ -440,21 +371,6 @@ const ProgressSummary: React.FC<ProgressSummaryProps> = ({
                     <p className="font-medium text-purple-900 dark:text-purple-100">
                       {answers.mission_statement}
                     </p>
-                  </div>
-                )}
-                
-                {validationScore !== null && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-neutral-600 dark:text-neutral-400">Validation:</span>
-                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                      validationScore >= 3 ? 'bg-green-100 text-green-700' :
-                      validationScore >= 2 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {validationScore >= 3 ? 'Green Light' : 
-                       validationScore >= 2 ? 'Yellow Light' : 
-                       'Red Light'}
-                    </span>
                   </div>
                 )}
               </div>
