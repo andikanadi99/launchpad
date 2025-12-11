@@ -16,6 +16,24 @@ export interface CoPilotSession {
   createdAt: any; // serverTimestamp
   updatedAt: any; // serverTimestamp
   status: 'in_progress' | 'completed';
+  
+  // Product configuration (saved from results page)
+  productConfig?: {
+    name: string;
+    description: string;
+    price: number;
+    priceType: 'one-time' | 'subscription' | 'payment-plan';
+    currency: string;
+    valueStack: string[];
+    guarantees: string[];
+    targetAudience: string;
+    mission: string;
+    tierType: 'low' | 'mid' | 'high';
+  };
+  
+  // Linked resources
+  salesPageId?: string | null; // ID of created sales page (if any)
+  salesPageStatus?: 'none' | 'draft' | 'published';
 }
 
 export interface UserDocument {

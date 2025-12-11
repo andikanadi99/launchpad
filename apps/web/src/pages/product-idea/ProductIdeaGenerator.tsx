@@ -11,7 +11,8 @@ import {
   getOrCreateActiveSession, 
   markProductCoPilotComplete,
   resetProductCoPilotSession,
-  startNewCoPilotSession
+  startNewCoPilotSession,
+  saveProductConfig
 } from '../../lib/UserDocumentHelpers';
 import { 
   Lightbulb, 
@@ -42,7 +43,9 @@ import {
   Minus,
   ChevronDown,
   ChevronUp,
-  Trash2
+  ChevronLeft,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 
 import ProgressBar from './ProgressBar';
@@ -73,6 +76,223 @@ interface GeneratedIdea {
   guarantee: string;
   whyItFits: string;
 }
+
+// ========================================
+// MISSION STATEMENT GENERATOR
+// Combines Q4 (target_who), Q5 (target_outcome), Q6 (primary_target), Q7 (starting_product)
+// ========================================
+
+// Helper to extract a short outcome from the potentially long Q5 answer
+const extractShortOutcome = (targetOutcome: string, maxLength: number = 60): string => {
+  if (!targetOutcome) return 'achieve your goals';
+  
+  let outcome = targetOutcome.trim();
+  
+  // If it's a multi-line answer, just take the first meaningful line
+  const lines = outcome.split('\n').filter(l => l.trim().length > 10);
+  if (lines.length > 1) {
+    outcome = lines[0];
+  }
+  
+  // If it starts with "For..." (multiple audience format), extract the core outcome
+  if (outcome.toLowerCase().startsWith('for ')) {
+    // Try to find the outcome after the colon
+    const colonIndex = outcome.indexOf(':');
+    if (colonIndex > 0 && colonIndex < 100) {
+      const afterColon = outcome.substring(colonIndex + 1).trim();
+      // Get first sentence or phrase
+      const firstSentence = afterColon.split(/[.!?]/)[0].trim();
+      if (firstSentence.length > 10 && firstSentence.length < 100) {
+        outcome = firstSentence;
+      }
+    }
+  }
+  
+  // Clean up common prefixes
+  outcome = outcome
+    .replace(/^(I'll help you |I'll help them |Help them |Help you |To )/i, '')
+    .replace(/^(get |achieve |reach |build |create |master |learn )/i, (match) => match.toLowerCase());
+  
+  // If still too long, truncate at a natural break point
+  if (outcome.length > maxLength) {
+    const breakPoints = ['. ', ', ', ' - ', ' and ', ' or ', ' through ', ' by ', ' with '];
+    for (const bp of breakPoints) {
+      const idx = outcome.indexOf(bp);
+      if (idx > 20 && idx < maxLength) {
+        outcome = outcome.substring(0, idx);
+        break;
+      }
+    }
+    // Final truncation if needed
+    if (outcome.length > maxLength) {
+      outcome = outcome.substring(0, maxLength - 3).trim() + '...';
+    }
+  }
+  
+  return outcome.charAt(0).toLowerCase() + outcome.slice(1);
+};
+
+// Helper to get readable primary target label
+const getPrimaryTargetLabel = (primaryTarget: any, targetWho: any[]): string => {
+  if (!primaryTarget) return 'your ideal customers';
+  
+  let targetValue = '';
+  if (typeof primaryTarget === 'object') {
+    targetValue = primaryTarget.value || primaryTarget.label || '';
+  } else {
+    targetValue = primaryTarget;
+  }
+  
+  // Remove index suffix
+  const baseValue = targetValue.replace(/_\d+$/, '');
+  
+  const labels: { [key: string]: string } = {
+    'business_owners': 'business owners',
+    'professionals': 'professionals',
+    'freelancers': 'freelancers',
+    'creators': 'creators',
+    'students': 'students',
+    'parents': 'parents',
+    'hobbyists': 'hobbyists'
+  };
+  
+  return labels[baseValue] || 'your ideal customers';
+};
+
+// Generate product descriptions based on tier and answers
+const generateProductDescription = (
+  tier: 'low' | 'mid' | 'high',
+  answers: Answers
+): string => {
+  const shortOutcome = extractShortOutcome(answers.target_outcome || '', 50);
+  const targetLabel = getPrimaryTargetLabel(answers.primary_target, answers.target_who || []);
+  
+  switch (tier) {
+    case 'low':
+      return `Help ${targetLabel} ${shortOutcome} with this quick-start toolkit. Perfect for testing your idea.`;
+    case 'mid':
+      return `A complete system to help ${targetLabel} ${shortOutcome} with step-by-step guidance and support.`;
+    case 'high':
+      return `Premium 1-on-1 program for ${targetLabel} who want fast results with personal guidance.`;
+    default:
+      return `Help ${targetLabel} achieve their goals.`;
+  }
+};
+
+const generateMissionStatementSuggestion = (answers: Answers): string => {
+  // Get Q6: Primary Target (who they chose to focus on first)
+  const primaryTarget = answers.primary_target;
+  // Get Q7: Starting Product type
+  const startingProduct = answers.starting_product;
+  // Get Q5: Target Outcome
+  const targetOutcome = answers.target_outcome || '';
+  // Get Q4: All target audiences (for context)
+  const targetWho = answers.target_who || [];
+  
+  // Return empty if core prerequisites not met
+  if (!primaryTarget || !startingProduct || !targetOutcome) {
+    return '';
+  }
+  
+  // === Extract WHO (Primary Target) ===
+  // Q6 answer can be a string like "business_owners_0" or an object
+  let primaryTargetValue = '';
+  let primaryTargetCustom = '';
+  
+  if (typeof primaryTarget === 'object') {
+    primaryTargetValue = primaryTarget.value || primaryTarget.label || '';
+    primaryTargetCustom = primaryTarget.custom || '';
+  } else if (typeof primaryTarget === 'string') {
+    primaryTargetValue = primaryTarget;
+  }
+  
+  // Clean up the value (remove index suffix like _0, _1)
+  const baseTargetValue = primaryTargetValue.replace(/_\d+$/, '');
+  
+  // Map to human-readable labels
+  const audienceLabels: { [key: string]: string } = {
+    'business_owners': 'small business owners',
+    'professionals': 'corporate professionals',
+    'freelancers': 'freelancers and consultants',
+    'creators': 'content creators',
+    'students': 'students and learners',
+    'parents': 'busy parents',
+    'hobbyists': 'passionate hobbyists',
+    'other': 'people'
+  };
+  
+  // Try to get custom description from Q4 answers if available
+  let whoDescription = audienceLabels[baseTargetValue] || baseTargetValue;
+  
+  // Look for matching Q4 answer with custom text
+  if (Array.isArray(targetWho)) {
+    const matchingAnswer = targetWho.find((tw: any) => {
+      const twValue = typeof tw === 'object' ? tw.value : tw;
+      return twValue === baseTargetValue || primaryTargetValue.startsWith(twValue);
+    });
+    
+    if (matchingAnswer && typeof matchingAnswer === 'object' && matchingAnswer.custom) {
+      // Use the custom description from Q4
+      whoDescription = `${audienceLabels[baseTargetValue] || baseTargetValue} (${matchingAnswer.custom})`;
+    }
+  }
+  
+  // If Q6 itself has custom text, prefer that
+  if (primaryTargetCustom) {
+    whoDescription = primaryTargetCustom;
+  }
+  
+  // === Extract WHAT (Product Type) ===
+  let productValue = '';
+  if (typeof startingProduct === 'object') {
+    productValue = startingProduct.value || '';
+  } else if (typeof startingProduct === 'string') {
+    productValue = startingProduct;
+  }
+  
+  // Map product types to delivery methods
+  const productDelivery: { [key: string]: string } = {
+    'low_ticket': 'a quick-start guide and templates',
+    'mid_ticket': 'a comprehensive course',
+    'high_ticket': 'personalized coaching',
+    'membership': 'an ongoing community and resources'
+  };
+  
+  const deliveryMethod = productDelivery[productValue] || 'step-by-step guidance';
+  
+  // === Extract OUTCOME (from Q5) ===
+  // Clean up and shorten the outcome
+  let outcomeText = targetOutcome.trim();
+  
+  // Remove common prefixes
+  outcomeText = outcomeText
+    .replace(/^(help them |help people |to )/i, '')
+    .replace(/^(get |achieve |reach |attain )/i, '');
+  
+  // Truncate if too long (aim for ~50 chars max)
+  if (outcomeText.length > 80) {
+    // Find a good breaking point
+    const breakPoints = ['. ', ', ', ' - ', ' and ', ' or '];
+    for (const bp of breakPoints) {
+      const idx = outcomeText.indexOf(bp);
+      if (idx > 20 && idx < 80) {
+        outcomeText = outcomeText.substring(0, idx);
+        break;
+      }
+    }
+    // If still too long, just truncate
+    if (outcomeText.length > 80) {
+      outcomeText = outcomeText.substring(0, 77) + '...';
+    }
+  }
+  
+  // Make sure outcome starts lowercase for sentence flow
+  outcomeText = outcomeText.charAt(0).toLowerCase() + outcomeText.slice(1);
+  
+  // === Build the Mission Statement ===
+  // Format: "I help [WHO] [OUTCOME] through [DELIVERY METHOD]."
+  return `I help ${whoDescription} ${outcomeText} through ${deliveryMethod}.`;
+};
 
 // ========================================
 // SMART SUGGESTION GENERATOR
@@ -240,6 +460,10 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
       }
       return '';
       
+    case 'mission_statement':
+      // Generate based on Q4-Q7 answers comprehensively
+      return generateMissionStatementSuggestion(answers);
+      
     default:
       return '';
   }
@@ -307,6 +531,25 @@ Key insight: These are REAL problems people already pay to solve - perfect for p
       });
       
       return `${measurable} - with measurable KPIs and clear success metrics that they can show to stakeholders`;
+
+    case 'mission_statement':
+      // Clean up and make more concise
+      let cleaned = currentAnswer
+        .replace(/\s+/g, ' ')  // Remove extra whitespace
+        .trim();
+      
+      // Ensure it starts with "I help"
+      if (!cleaned.toLowerCase().startsWith('i help')) {
+        cleaned = `I help ${cleaned.toLowerCase()}`;
+      }
+      
+      // Make it more action-oriented
+      cleaned = cleaned
+        .replace(/so that they can/gi, 'to')
+        .replace(/in order to/gi, 'to')
+        .replace(/which allows them to/gi, 'to');
+      
+      return cleaned;
 
     default:
       // Generic improvement: add structure and clarity
@@ -561,7 +804,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true
     },
-    helpText: "💡 'Ideal Customer' criteria: (1) They have PAIN they'll pay to solve, (2) They have MONEY to spend, (3) You can REACH them easily. Pick the one that scores highest on all three.",
+    helpText: "ðŸ’¡ 'Ideal Customer' criteria: (1) They have PAIN they'll pay to solve, (2) They have MONEY to spend, (3) You can REACH them easily. Pick the one that scores highest on all three.",
     showAIHelper: true,
     showAutoGenerate: true
   },
@@ -600,7 +843,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true
     },
-    helpText: "💡 Pro tip: If you're new, start LOW-TICKET ($27-97) to validate demand fast with minimal friction. If you have proven results, MID-TICKET delivers real transformation. HIGH-TICKET works best when you have expertise and want fewer, higher-touch clients.",
+    helpText: "ðŸ’¡ Pro tip: If you're new, start LOW-TICKET ($27-97) to validate demand fast with minimal friction. If you have proven results, MID-TICKET delivers real transformation. HIGH-TICKET works best when you have expertise and want fewer, higher-touch clients.",
     showAIHelper: true,
     showAutoGenerate: true
   },
@@ -673,9 +916,24 @@ export default function ProductIdeaGenerator() {
   const [isGeneratingImprovement, setIsGeneratingImprovement] = useState(false);
   const [hasPreselected, setHasPreselected] = useState<{[key: string]: boolean}>({});
   const [isLoadingAnswers, setIsLoadingAnswers] = useState(true);
+  const [isNavigating, setIsNavigating] = useState(false);
   const [hasResumedSession, setHasResumedSession] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [sessionName, setSessionName] = useState<string>('');
+  
+  // Tier cache: stores AI-generated products by tier to avoid re-generation
+  const [tierCache, setTierCache] = useState<{
+    low?: { name: string; description: string; price: number; valueStack: string[]; guarantees: string[] };
+    mid?: { name: string; description: string; price: number; valueStack: string[]; guarantees: string[] };
+    high?: { name: string; description: string; price: number; valueStack: string[]; guarantees: string[] };
+  }>({});
+  const [isGeneratingTier, setIsGeneratingTier] = useState<string | null>(null); // Track which tier is being generated
+
+  // Edit flow state: track if user is returning from editing answers
+  const [originalAnswersSnapshot, setOriginalAnswersSnapshot] = useState<Answers | null>(null);
+  const [isReturningFromEdit, setIsReturningFromEdit] = useState(false);
+  const [showEditCompleteModal, setShowEditCompleteModal] = useState(false);
+  const [hasAnswersChanged, setHasAnswersChanged] = useState(false);
 
   // Load existing session or create new one on mount
   useEffect(() => {
@@ -700,7 +958,12 @@ export default function ProductIdeaGenerator() {
           const maxIndex = questions.length - 1;
           const savedIndex = session.currentQuestionIndex || 0;
           setCurrentQuestionIndex(Math.min(savedIndex, maxIndex));
-          setHasResumedSession(true);
+          
+          // Only show welcome back banner if not already dismissed this browser session
+          const bannerDismissedKey = `copilot_banner_dismissed_${sessionId}`;
+          if (!sessionStorage.getItem(bannerDismissedKey)) {
+            setHasResumedSession(true);
+          }
           
           // If they already completed, show results and regenerate product
           if (session.status === 'completed' && session.completedAt) {
@@ -727,11 +990,11 @@ export default function ProductIdeaGenerator() {
       {
         id: '1',
         name: 'Quick Win Starter Pack',
-        description: `The fastest path to ${savedAnswers.target_outcome}. Perfect for testing the waters.`,
+        description: generateProductDescription('low', savedAnswers as Answers),
         price: 27,
         priceType: 'low',
         targetAudience: savedAnswers.target_who,
-        mainOutcome: savedAnswers.target_outcome,
+        mainOutcome: extractShortOutcome(savedAnswers.target_outcome, 80),
         timeToResult: '24-48 hours',
         difficultyLevel: 'Beginner friendly',
         valueStack: ['Quick-start guide', 'Cheat sheet or checklist', 'Email support for 7 days'],
@@ -741,11 +1004,11 @@ export default function ProductIdeaGenerator() {
       {
         id: '2',
         name: 'Complete Transformation System',
-        description: `Comprehensive solution for serious action-takers who want ${savedAnswers.dream_outcome}.`,
+        description: generateProductDescription('mid', savedAnswers as Answers),
         price: 197,
         priceType: 'mid',
         targetAudience: savedAnswers.target_who,
-        mainOutcome: savedAnswers.dream_outcome || savedAnswers.target_outcome,
+        mainOutcome: extractShortOutcome(savedAnswers.dream_outcome || savedAnswers.target_outcome, 80),
         timeToResult: '30 days',
         difficultyLevel: 'Some commitment required',
         valueStack: ['Core training program', 'Templates & tools', 'Private community access', 'Email support for 30 days'],
@@ -755,11 +1018,11 @@ export default function ProductIdeaGenerator() {
       {
         id: '3',
         name: 'VIP Implementation Program',
-        description: `Done-with-you intensive with personal guidance.`,
+        description: generateProductDescription('high', savedAnswers as Answers),
         price: 997,
         priceType: 'high',
         targetAudience: savedAnswers.target_who,
-        mainOutcome: savedAnswers.dream_outcome || savedAnswers.target_outcome,
+        mainOutcome: extractShortOutcome(savedAnswers.dream_outcome || savedAnswers.target_outcome, 80),
         timeToResult: '5-7 days',
         difficultyLevel: 'Done with you',
         valueStack: ['1-on-1 kickoff call', 'Daily check-ins for 7 days', 'Custom action plan', 'Everything from lower tiers', 'Lifetime support access'],
@@ -835,6 +1098,32 @@ export default function ProductIdeaGenerator() {
   
   const currentPhase = getCurrentPhase();
 
+  // Helper to compare answers and detect changes
+  const compareAnswers = (original: Answers | null, current: Answers): boolean => {
+    if (!original) return true; // No snapshot means first time, treat as changed
+    
+    const allKeys = new Set([...Object.keys(original), ...Object.keys(current)]);
+    
+    for (const key of allKeys) {
+      const origVal = original[key];
+      const currVal = current[key];
+      
+      // Handle undefined/null cases
+      if (origVal === undefined && currVal === undefined) continue;
+      if (origVal === null && currVal === null) continue;
+      if ((origVal === undefined || origVal === null) !== (currVal === undefined || currVal === null)) {
+        return true; // One is defined, one isn't
+      }
+      
+      // Deep comparison for arrays and objects
+      if (JSON.stringify(origVal) !== JSON.stringify(currVal)) {
+        return true;
+      }
+    }
+    
+    return false; // No changes detected
+  };
+
   // Generate dynamic options for primary_target based on target_who answers
   const getDynamicPrimaryTargetOptions = () => {
     const targetWhoAnswers = answers.target_who || [];
@@ -859,14 +1148,14 @@ export default function ProductIdeaGenerator() {
       const fullLabel = custom ? `${baseLabel}: ${custom}` : baseLabel;
       
       const scoringHints: { [key: string]: { pain: string; money: string; access: string } } = {
-        'business_owners': { pain: '🔥 High pain', money: '💰 Have budget', access: '📧 Easy to reach' },
-        'professionals': { pain: '🔥 Moderate pain', money: '💰 Have income', access: '📧 LinkedIn accessible' },
-        'freelancers': { pain: '🔥 High pain', money: '💵 Variable budget', access: '📧 Online communities' },
-        'creators': { pain: '🔥 High pain', money: '💵 Growing income', access: '📧 Social platforms' },
-        'students': { pain: '😐 Moderate pain', money: '💵 Limited budget', access: '📧 Easy to reach' },
-        'parents': { pain: '🔥 High pain', money: '💰 Have budget', access: '📧 FB groups' },
-        'hobbyists': { pain: '😐 Passion-driven', money: '💵 Discretionary', access: '📧 Niche forums' },
-        'other': { pain: '❓ Varies', money: '❓ Varies', access: '❓ Varies' }
+        'business_owners': { pain: 'ðŸ”¥ High pain', money: 'ðŸ’° Have budget', access: 'ðŸ“§ Easy to reach' },
+        'professionals': { pain: 'ðŸ”¥ Moderate pain', money: 'ðŸ’° Have income', access: 'ðŸ“§ LinkedIn accessible' },
+        'freelancers': { pain: 'ðŸ”¥ High pain', money: 'ðŸ’µ Variable budget', access: 'ðŸ“§ Online communities' },
+        'creators': { pain: 'ðŸ”¥ High pain', money: 'ðŸ’µ Growing income', access: 'ðŸ“§ Social platforms' },
+        'students': { pain: 'ðŸ˜ Moderate pain', money: 'ðŸ’µ Limited budget', access: 'ðŸ“§ Easy to reach' },
+        'parents': { pain: 'ðŸ”¥ High pain', money: 'ðŸ’° Have budget', access: 'ðŸ“§ FB groups' },
+        'hobbyists': { pain: 'ðŸ˜ Passion-driven', money: 'ðŸ’µ Discretionary', access: 'ðŸ“§ Niche forums' },
+        'other': { pain: 'â“ Varies', money: 'â“ Varies', access: 'â“ Varies' }
       };
       
       const hints = scoringHints[value] || scoringHints['other'];
@@ -874,7 +1163,7 @@ export default function ProductIdeaGenerator() {
       return {
         value: `${value}${custom ? `_${index}` : ''}`,
         label: fullLabel,
-        description: `${hints.pain} • ${hints.money} • ${hints.access}`,
+        description: `${hints.pain} â€¢ ${hints.money} â€¢ ${hints.access}`,
         originalSelection: selection
       };
     });
@@ -1088,14 +1377,14 @@ export default function ProductIdeaGenerator() {
               `[OK] We've pre-selected ${preSelected.length} group${preSelected.length > 1 ? 's' : ''} based on who's already asking you for help. Please review and refine the details to be even more specific!`
             );
           } else {
-            console.log('⚠️ No matches found for pre-selection');
+            console.log('âš ï¸ No matches found for pre-selection');
             setHasPreselected(prev => ({ ...prev, target_who: true }));
             setShowSmartSuggestion(
-              `💡 Based on your skills and requests, think about who in your network needs this help most. Are they professionals, business owners, parents, or another specific group?`
+              `ðŸ’¡ Based on your skills and requests, think about who in your network needs this help most. Are they professionals, business owners, parents, or another specific group?`
             );
           }
         } else {
-          console.log('⚠️ No actual_requests found to analyze');
+          console.log('âš ï¸ No actual_requests found to analyze');
           setHasPreselected(prev => ({ ...prev, target_who: true }));
         }
       } else {
@@ -1145,13 +1434,13 @@ export default function ProductIdeaGenerator() {
             'parents': 'Parents',
             'hobbyists': 'Hobbyists'
           };
-          recommendation = `🎯 AI Recommendation: Start with "${targetLabels[bestTarget] || bestTarget}" - they score highest on key success criteria (Pain + Money + Accessibility). But follow your gut if another audience excites you more!`;
+          recommendation = `ðŸŽ¯ AI Recommendation: Start with "${targetLabels[bestTarget] || bestTarget}" - they score highest on key success criteria (Pain + Money + Accessibility). But follow your gut if another audience excites you more!`;
         }
         
         setShowSmartSuggestion(recommendation);
         setHasPreselected(prev => ({ ...prev, primary_target: true }));
       } else {
-        setShowSmartSuggestion('⚠️ Go back and select at least one target audience in the previous step.');
+        setShowSmartSuggestion('âš ï¸ Go back and select at least one target audience in the previous step.');
         setHasPreselected(prev => ({ ...prev, primary_target: true }));
       }
     }
@@ -1159,9 +1448,9 @@ export default function ProductIdeaGenerator() {
     else if (currentQ.id === 'starting_product' && !hasPreselected['starting_product']) {
       const recommendation = getProductRecommendation();
       const messages: { [key: string]: string } = {
-        'low_ticket': '🎯 AI Recommendation: Perfect choice for fast validation! LOW-TICKET ($27-97) lets you test demand quickly with minimal friction.',
-        'mid_ticket': '🎯 AI Recommendation: Great for proven results! MID-TICKET ($197-497) delivers real transformation and builds your reputation.',
-        'high_ticket': '🎯 AI Recommendation: Bold move! HIGH-TICKET ($997+) works best with established expertise - fewer clients, higher touch.'
+        'low_ticket': 'ðŸŽ¯ AI Recommendation: Perfect choice for fast validation! LOW-TICKET ($27-97) lets you test demand quickly with minimal friction.',
+        'mid_ticket': 'ðŸŽ¯ AI Recommendation: Great for proven results! MID-TICKET ($197-497) delivers real transformation and builds your reputation.',
+        'high_ticket': 'ðŸŽ¯ AI Recommendation: Bold move! HIGH-TICKET ($997+) works best with established expertise - fewer clients, higher touch.'
       };
       
       setShowSmartSuggestion(messages[recommendation] || messages['low_ticket']);
@@ -1191,6 +1480,7 @@ export default function ProductIdeaGenerator() {
       setTimeout(() => setShowSmartSuggestion(null), 2000);
     }
 
+    // Clear AI response when answer is empty
     const isEmpty = !answer || (Array.isArray(answer) && answer.length === 0) || answer === '';
     
     if (isEmpty) {
@@ -1200,9 +1490,8 @@ export default function ProductIdeaGenerator() {
         return newResponses;
       });
       setIsProcessingAI(false);
-    } else if (currentQuestion.showAIHelper) {
-      generateAIResponse(currentQuestion.id, answer);
     }
+    // Removed: generateAIResponse call - we don't want the "AI Insight" box below input
   };
 
   const [isGeneratingOptimal, setIsGeneratingOptimal] = useState(false);
@@ -1232,7 +1521,7 @@ export default function ProductIdeaGenerator() {
         const data = result.data as any;
         
         if (data.success && data.generatedAnswer) {
-          console.log('✓ Got optimal answer from Claude!');
+          console.log('âœ“ Got optimal answer from Claude!');
           setSuggestionPreview(data.generatedAnswer);
           setIsGeneratingOptimal(false);
           return;
@@ -1262,10 +1551,12 @@ export default function ProductIdeaGenerator() {
         [currentQuestion.id]: suggestionPreview
       }));
       setSuggestionPreview('');
-      
-      if (currentQuestion.showAIHelper) {
-        generateAIResponse(currentQuestion.id, suggestionPreview);
-      }
+      // Clear any existing AI response to avoid duplicate display
+      setAiResponses(prev => {
+        const newResponses = { ...prev };
+        delete newResponses[currentQuestion.id];
+        return newResponses;
+      });
     }
   };
 
@@ -1274,7 +1565,7 @@ export default function ProductIdeaGenerator() {
   };
 
   const handleImproveAnswer = async (currentAnswer: string) => {
-    console.log('🚀 Starting improvement process...');
+    console.log('ðŸš€ Starting improvement process...');
     setIsGeneratingImprovement(true);
     
     try {
@@ -1336,10 +1627,12 @@ export default function ProductIdeaGenerator() {
         [currentQuestion.id]: improvementSuggestion
       }));
       setImprovementSuggestion('');
-      
-      if (currentQuestion.showAIHelper) {
-        generateAIResponse(currentQuestion.id, improvementSuggestion);
-      }
+      // Clear any existing AI response to avoid duplicate display
+      setAiResponses(prev => {
+        const newResponses = { ...prev };
+        delete newResponses[currentQuestion.id];
+        return newResponses;
+      });
     }
   };
 
@@ -1430,6 +1723,7 @@ export default function ProductIdeaGenerator() {
     setShowSmartSuggestion(null);
     setImprovementSuggestion('');
     setSuggestionPreview('');
+    setIsNavigating(true);
     
     // Auto-save answers to Firebase
     const user = auth.currentUser;
@@ -1446,20 +1740,47 @@ export default function ProductIdeaGenerator() {
       setCurrentQuestionIndex(prev => prev + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
+      // Last question - regenerate product
+      // (User chose "Regenerate Product" button, or first time completing)
+      
+      // Reset edit flow state
+      setIsReturningFromEdit(false);
+      setOriginalAnswersSnapshot(null);
+      
+      // Clear tier cache since answers may have changed
+      if (isReturningFromEdit) {
+        setTierCache({});
+      }
+      
       setShowResults(true);
       generateProductIdeas();
     }
+    
+    setIsNavigating(false);
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
     setShowSmartSuggestion(null);
     setImprovementSuggestion('');
     setSuggestionPreview('');
+    setIsNavigating(true);
+    
+    // Save current progress before going back
+    const user = auth.currentUser;
+    if (user && currentSessionId) {
+      try {
+        await saveProductCoPilotAnswers(user.uid, currentSessionId, answers, currentQuestionIndex);
+      } catch (error) {
+        console.error('Failed to save answers:', error);
+      }
+    }
     
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(prev => prev - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+    
+    setIsNavigating(false);
   };
 
   const handleProgressClick = (step: number) => {
@@ -1471,10 +1792,48 @@ export default function ProductIdeaGenerator() {
     }
   };
 
+  // Edit flow handlers
+  const handleReturnToProductSummary = () => {
+    // No changes detected - just return to product summary
+    setShowEditCompleteModal(false);
+    setShowResults(true);
+    setIsReturningFromEdit(false);
+    setOriginalAnswersSnapshot(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRegenerateProduct = () => {
+    // User wants to regenerate with new answers
+    setShowEditCompleteModal(false);
+    setShowResults(true);
+    setIsReturningFromEdit(false);
+    setOriginalAnswersSnapshot(null);
+    // Clear tier cache since answers changed
+    setTierCache({});
+    generateProductIdeas();
+  };
+
+  const handleKeepPreviousProduct = () => {
+    // User wants to keep their existing product config
+    setShowEditCompleteModal(false);
+    setShowResults(true);
+    setIsReturningFromEdit(false);
+    setOriginalAnswersSnapshot(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Direct return to product summary (from question page, without modal)
+  const handleDirectReturnToProduct = () => {
+    setShowResults(true);
+    setIsReturningFromEdit(false);
+    setOriginalAnswersSnapshot(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const generateProductIdeas = async () => {
     setIsGeneratingIdeas(true);
     
-    // Save complete session to Firebase (no niche score since validation questions removed)
+    // Save complete session to Firebase
     if (auth.currentUser && currentSessionId) {
       try {
         await markProductCoPilotComplete(auth.currentUser.uid, currentSessionId, answers, 0);
@@ -1484,153 +1843,252 @@ export default function ProductIdeaGenerator() {
       }
     }
     
-    setTimeout(() => {
-      const ideas: GeneratedIdea[] = [
-        {
-          id: '1',
-          name: 'Quick Win Starter Pack',
-          description: `The fastest path to ${answers.target_outcome}. Perfect for testing the waters.`,
-          price: 27,
-          priceType: 'low',
-          targetAudience: answers.target_who,
-          mainOutcome: answers.target_outcome,
-          timeToResult: '24-48 hours',
-          difficultyLevel: 'Beginner friendly',
-          valueStack: [
-            'Quick-start guide',
-            'Cheat sheet or checklist',
-            'Email support for 7 days'
-          ],
-          guarantee: '7-day money back guarantee',
-          whyItFits: 'Low-risk entry point to validate your idea and get first customers quickly.'
-        },
-        {
-          id: '2',
-          name: 'Complete Transformation System',
-          description: `Comprehensive solution for serious action-takers who want ${answers.dream_outcome}.`,
-          price: 197,
-          priceType: 'mid',
-          targetAudience: answers.target_who,
-          mainOutcome: answers.dream_outcome || answers.target_outcome,
-          timeToResult: '30 days',
-          difficultyLevel: 'Some commitment required',
-          valueStack: [
-            'Core training program',
-            'Templates & tools',
-            'Private community access',
-            'Email support for 30 days'
-          ],
-          guarantee: '30-day results guarantee',
-          whyItFits: 'Your main offer that delivers full transformation with strong support.'
-        },
-        {
-          id: '3',
-          name: 'VIP Implementation Program',
-          description: `Done-with-you intensive for those who want results NOW with personal guidance.`,
-          price: 997,
-          priceType: 'high',
-          targetAudience: answers.target_who,
-          mainOutcome: `${answers.dream_outcome || answers.target_outcome} with personal support`,
-          timeToResult: '5-7 days',
-          difficultyLevel: 'Done with you',
-          valueStack: [
-            '1-on-1 kickoff call',
-            'Daily check-ins for 7 days',
-            'Custom action plan',
-            'Everything from lower tiers',
-            'Lifetime support access'
-          ],
-          guarantee: 'Results or full refund',
-          whyItFits: 'Premium offer for high-touch support. Start with 3 beta clients.'
-        }
-      ];
-      
-      // Find the idea matching user's selected product type
-      const selectedType = answers.starting_product || 'low_ticket';
-      const typeMap: { [key: string]: string } = {
-        'low_ticket': 'low',
-        'mid_ticket': 'mid',
-        'high_ticket': 'high'
-      };
-      const selectedPriceType = typeMap[selectedType] || 'low';
-      const selectedIdea = ideas.find(idea => idea.priceType === selectedPriceType) || ideas[0];
-      
-      // Set editable product from selected idea
-      setEditableProduct({
-        name: selectedIdea.name,
-        description: selectedIdea.description,
-        price: selectedIdea.price,
-        valueStack: [...selectedIdea.valueStack],
-        guarantees: [selectedIdea.guarantee]
-      });
-      setCurrentTierType(selectedPriceType);
-      
-      setGeneratedIdeas(ideas);
-      setIsGeneratingIdeas(false);
-    }, 2000);
-  };
-
-  const createProduct = async () => {
-    if (!auth.currentUser || !editableProduct) return;
+    // Determine initial tier based on user's product selection
+    const selectedType = answers.starting_product || 'low_ticket';
+    const typeMap: { [key: string]: 'low' | 'mid' | 'high' } = {
+      'low_ticket': 'low',
+      'mid_ticket': 'mid',
+      'high_ticket': 'high',
+      'membership': 'mid' // Map membership to mid tier
+    };
+    const initialTier = typeMap[selectedType] || 'low';
+    
+    // Clear existing cache when generating fresh (answers may have changed)
+    setTierCache({});
     
     try {
-      const productRef = doc(collection(db, 'products'));
-      await setDoc(productRef, {
-        userId: auth.currentUser.uid,
-        createdAt: serverTimestamp(),
-        isDraft: true,
-        salesPage: {
-          coreInfo: {
-            name: editableProduct.name,
-            tagline: editableProduct.description,
-            price: editableProduct.price,
-            priceType: 'one-time',
-            currency: 'USD'
-          },
-          valueProp: {
-            productType: 'custom',
-            description: editableProduct.description,
-            benefits: editableProduct.valueStack,
-            targetAudience: answers.primary_target || '',
-            deliverables: editableProduct.valueStack,
-            guarantees: editableProduct.guarantees
-          }
-        },
-        metadata: {
-          fromQuiz: true,
-          mission: answers.mission_statement,
-          sessionId: currentSessionId
+      const user = auth.currentUser;
+      
+      if (user) {
+        console.log('Calling generateProductIdea Cloud Function for tier:', initialTier);
+        const generateProductFunction = httpsCallable(functions, 'generateProductIdea');
+        
+        const result = await generateProductFunction({
+          userId: user.uid,
+          tier: initialTier,
+          answers: answers
+        });
+        
+        const data = result.data as any;
+        
+        if (data.success && data.product) {
+          console.log('âœ“ Product generated successfully:', data.product.name);
+          
+          const product = data.product;
+          
+          // Set the editable product
+          setEditableProduct({
+            name: product.name,
+            description: product.description,
+            price: product.price,
+            valueStack: product.valueStack || [],
+            guarantees: product.guarantees || []
+          });
+          
+          // Cache this tier
+          setTierCache(prev => ({
+            ...prev,
+            [initialTier]: {
+              name: product.name,
+              description: product.description,
+              price: product.price,
+              valueStack: product.valueStack || [],
+              guarantees: product.guarantees || []
+            }
+          }));
+          
+          setCurrentTierType(initialTier);
+          setIsGeneratingIdeas(false);
+          return;
         }
+      }
+      
+      // Fallback to local generation if Cloud Function fails
+      console.log('Cloud Function failed or no user, using local fallback...');
+      generateLocalFallback(initialTier);
+      
+    } catch (error) {
+      console.error('Error calling generateProductIdea:', error);
+      // Fallback to local generation
+      generateLocalFallback(initialTier);
+    }
+  };
+  
+  // Local fallback generation (used when Cloud Function fails)
+  const generateLocalFallback = (tier: 'low' | 'mid' | 'high') => {
+    const tierConfigs = {
+      low: {
+        name: 'Quick Win Starter Pack',
+        description: generateProductDescription('low', answers),
+        price: 47,
+        valueStack: ['Quick-start guide', 'Cheat sheet or checklist', 'Email support for 7 days'],
+        guarantees: ['7-day money back guarantee']
+      },
+      mid: {
+        name: 'Complete Transformation System',
+        description: generateProductDescription('mid', answers),
+        price: 297,
+        valueStack: ['Core training program', 'Templates & tools', 'Private community access', 'Email support for 30 days'],
+        guarantees: ['30-day results guarantee']
+      },
+      high: {
+        name: 'VIP Implementation Program',
+        description: generateProductDescription('high', answers),
+        price: 997,
+        valueStack: ['1-on-1 kickoff call', 'Daily check-ins for 7 days', 'Custom action plan', 'Everything from lower tiers', 'Lifetime support access'],
+        guarantees: ['Results or full refund']
+      }
+    };
+    
+    const product = tierConfigs[tier];
+    
+    setEditableProduct({
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      valueStack: [...product.valueStack],
+      guarantees: [...product.guarantees]
+    });
+    
+    // Cache the fallback
+    setTierCache(prev => ({
+      ...prev,
+      [tier]: product
+    }));
+    
+    setCurrentTierType(tier);
+    setIsGeneratingIdeas(false);
+  };
+  
+  // Generate product for a specific tier (used when switching tiers)
+  const generateProductForTier = async (tier: 'low' | 'mid' | 'high') => {
+    // Check cache first
+    if (tierCache[tier]) {
+      console.log('Using cached product for tier:', tier);
+      const cached = tierCache[tier]!;
+      setEditableProduct({
+        name: cached.name,
+        description: cached.description,
+        price: cached.price,
+        valueStack: [...cached.valueStack],
+        guarantees: [...cached.guarantees]
+      });
+      setCurrentTierType(tier);
+      setShowOtherTiers(false);
+      setShowTierChangeConfirm(false);
+      setPendingTierChange(null);
+      return;
+    }
+    
+    // Not in cache, generate via Cloud Function
+    setIsGeneratingTier(tier);
+    
+    try {
+      const user = auth.currentUser;
+      
+      if (user) {
+        console.log('Generating product for tier:', tier);
+        const generateProductFunction = httpsCallable(functions, 'generateProductIdea');
+        
+        const result = await generateProductFunction({
+          userId: user.uid,
+          tier: tier,
+          answers: answers
+        });
+        
+        const data = result.data as any;
+        
+        if (data.success && data.product) {
+          const product = data.product;
+          
+          // Cache it
+          setTierCache(prev => ({
+            ...prev,
+            [tier]: {
+              name: product.name,
+              description: product.description,
+              price: product.price,
+              valueStack: product.valueStack || [],
+              guarantees: product.guarantees || []
+            }
+          }));
+          
+          // Set as current
+          setEditableProduct({
+            name: product.name,
+            description: product.description,
+            price: product.price,
+            valueStack: product.valueStack || [],
+            guarantees: product.guarantees || []
+          });
+          
+          setCurrentTierType(tier);
+          setShowOtherTiers(false);
+          setShowTierChangeConfirm(false);
+          setPendingTierChange(null);
+          setIsGeneratingTier(null);
+          return;
+        }
+      }
+      
+      // Fallback
+      generateLocalFallback(tier);
+      setShowOtherTiers(false);
+      setShowTierChangeConfirm(false);
+      setPendingTierChange(null);
+      
+    } catch (error) {
+      console.error('Error generating tier:', error);
+      generateLocalFallback(tier);
+      setShowOtherTiers(false);
+      setShowTierChangeConfirm(false);
+      setPendingTierChange(null);
+    } finally {
+      setIsGeneratingTier(null);
+    }
+  };
+
+  const saveProductIdea = async () => {
+    if (!auth.currentUser || !editableProduct || !currentSessionId) return;
+    
+    try {
+      // Save product configuration to the existing Co-Pilot session
+      await saveProductConfig(auth.currentUser.uid, currentSessionId, {
+        name: editableProduct.name,
+        description: editableProduct.description,
+        price: editableProduct.price,
+        priceType: 'one-time',
+        currency: 'USD',
+        valueStack: editableProduct.valueStack,
+        guarantees: editableProduct.guarantees,
+        targetAudience: answers.primary_target || '',
+        mission: answers.mission_statement || '',
+        tierType: currentTierType as 'low' | 'mid' | 'high',
       });
       
-      navigate(`/products/${productRef.id}/landing/edit`);
+      console.log('Product idea saved to session:', currentSessionId);
+      
+      // Navigate to dashboard to see the saved idea
+      navigate('/dashboard');
     } catch (error) {
-      console.error('Error creating product:', error);
+      console.error('Error saving product idea:', error);
     }
   };
 
   // Switch to a different product tier
-  // Request tier change (shows confirmation)
-  const requestTierChange = (idea: GeneratedIdea) => {
-    setPendingTierChange(idea);
-    setShowTierChangeConfirm(true);
+  // Request tier change - now generates via Cloud Function with caching
+  const requestTierChange = (tier: 'low' | 'mid' | 'high') => {
+    // If we have unsaved edits, show confirmation
+    // For now, just switch directly (user can always go back)
+    generateProductForTier(tier);
   };
 
-  // Actually switch to tier after confirmation
+  // Actually switch to tier after confirmation (legacy - now handled by generateProductForTier)
   const confirmTierChange = () => {
     if (!pendingTierChange) return;
     
-    setEditableProduct({
-      name: pendingTierChange.name,
-      description: pendingTierChange.description,
-      price: pendingTierChange.price,
-      valueStack: [...pendingTierChange.valueStack],
-      guarantees: [pendingTierChange.guarantee]
-    });
-    setCurrentTierType(pendingTierChange.priceType);
-    setShowOtherTiers(false);
-    setShowTierChangeConfirm(false);
-    setPendingTierChange(null);
+    const tier = pendingTierChange.priceType as 'low' | 'mid' | 'high';
+    generateProductForTier(tier);
   };
 
   // Cancel tier change
@@ -1654,7 +2112,13 @@ export default function ProductIdeaGenerator() {
   }
 
   if (showResults) {
-    const otherTiers = generatedIdeas.filter(idea => idea.priceType !== currentTierType);
+    // Define available tiers (excluding current)
+    const allTiers: { id: 'low' | 'mid' | 'high'; label: string; priceRange: string; description: string }[] = [
+      { id: 'low', label: 'Quick Win', priceRange: '$27-97', description: 'Fast validation, low-risk entry point' },
+      { id: 'mid', label: 'Core Offer', priceRange: '$197-497', description: 'Full transformation with support' },
+      { id: 'high', label: 'Premium', priceRange: '$997+', description: 'High-touch, done-with-you experience' }
+    ];
+    const otherTiers = allTiers.filter(tier => tier.id !== currentTierType);
     
     const tierLabels: { [key: string]: string } = {
       'low': 'Quick Win ($27-97)',
@@ -1905,29 +2369,41 @@ export default function ProductIdeaGenerator() {
                   
                   {showOtherTiers && (
                     <div className="mt-3 space-y-3">
-                      {otherTiers.map((idea) => (
+                      {otherTiers.map((tier) => (
                         <div
-                          key={idea.id}
+                          key={tier.id}
                           className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-4"
                         >
                           <div className="flex items-start justify-between">
-                            <div>
+                            <div className="flex-1">
                               <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                                idea.priceType === 'low' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
-                                idea.priceType === 'mid' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                                tier.id === 'low' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                                tier.id === 'mid' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
                                 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
                               }`}>
-                                {tierLabels[idea.priceType]}
+                                {tier.label} ({tier.priceRange})
                               </span>
-                              <h4 className="font-semibold text-neutral-900 dark:text-white mt-2">{idea.name}</h4>
-                              <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">{idea.description}</p>
-                              <p className="text-lg font-bold text-purple-600 dark:text-purple-400 mt-2">${idea.price}</p>
+                              <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-2">{tier.description}</p>
+                              {tierCache[tier.id] && (
+                                <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" />
+                                  Already generated - instant switch
+                                </p>
+                              )}
                             </div>
                             <button
-                              onClick={() => requestTierChange(idea)}
-                              className="px-3 py-1.5 text-sm bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-lg hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
+                              onClick={() => requestTierChange(tier.id)}
+                              disabled={isGeneratingTier !== null}
+                              className="px-3 py-1.5 text-sm bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-lg hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors disabled:opacity-50 flex items-center gap-2"
                             >
-                              Use This
+                              {isGeneratingTier === tier.id ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Generating...
+                                </>
+                              ) : (
+                                'Switch to This'
+                              )}
                             </button>
                           </div>
                         </div>
@@ -1939,12 +2415,30 @@ export default function ProductIdeaGenerator() {
 
               {/* Action Buttons */}
               <div className="flex flex-col gap-3">
+                {/* Back to Edit Answers */}
                 <button
-                  onClick={createProduct}
+                  onClick={() => {
+                    // Save current answers as snapshot for comparison
+                    setOriginalAnswersSnapshot({ ...answers });
+                    setIsReturningFromEdit(true);
+                    setShowResults(false);
+                    setCurrentQuestionIndex(questions.length - 1); // Go to last question
+                  }}
+                  className="w-full px-4 py-3 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg font-medium transition-all flex items-center justify-center gap-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Back to Edit Answers
+                </button>
+                
+                <button
+                  onClick={saveProductIdea}
                   className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-semibold text-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg"
                 >
-                  Create Sales Page
+                  Save Product Idea
                 </button>
+                <p className="text-center text-sm text-neutral-500 dark:text-neutral-400">
+                  Your idea will be saved to your dashboard
+                </p>
                 
                 <div className="flex gap-3">
                   <button
@@ -1967,6 +2461,10 @@ export default function ProductIdeaGenerator() {
                       setGeneratedIdeas([]);
                       setEditableProduct(null);
                       setHasResumedSession(false);
+                      // Reset edit flow state
+                      setOriginalAnswersSnapshot(null);
+                      setIsReturningFromEdit(false);
+                      setTierCache({});
                     }}
                     className="flex-1 px-6 py-3 bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-lg font-medium hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-all"
                   >
@@ -2090,7 +2588,12 @@ export default function ProductIdeaGenerator() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setHasResumedSession(false)}
+                  onClick={() => {
+                    setHasResumedSession(false);
+                    if (currentSessionId) {
+                      sessionStorage.setItem(`copilot_banner_dismissed_${currentSessionId}`, 'true');
+                    }
+                  }}
                   className="text-blue-500 hover:text-blue-700 dark:hover:text-blue-300"
                 >
                   <X className="w-5 h-5" />
@@ -2133,7 +2636,7 @@ export default function ProductIdeaGenerator() {
                           <span>
                             {showSmartSuggestion}<br/>
                             <span className="font-semibold mt-1 block">
-                              ⚠️ Action Required: Add specific details in each text field (e.g., "HR managers at Series A startups" instead of just "professionals")
+                              âš ï¸ Action Required: Add specific details in each text field (e.g., "HR managers at Series A startups" instead of just "professionals")
                             </span>
                           </span>
                         )
@@ -2172,7 +2675,10 @@ export default function ProductIdeaGenerator() {
                 aiResponse={aiResponses[currentQuestion.id]}
                 isProcessingAI={isProcessingAI}
                 isGeneratingOptimal={isGeneratingOptimal} 
-                isGeneratingImprovement={isGeneratingImprovement} 
+                isGeneratingImprovement={isGeneratingImprovement}
+                isNavigating={isNavigating}
+                isReturningFromEdit={isReturningFromEdit}
+                onReturnToProduct={handleDirectReturnToProduct}
               />
             </div>
 

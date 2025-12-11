@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wand2, Sparkles, ChevronRight, MessageCircle, AlertCircle } from 'lucide-react';
+import { Wand2, Sparkles, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 
 
 // Types for different question formats
@@ -55,7 +55,11 @@ interface QuestionStepProps {
   onAcceptImprovement?: () => void;
   onRejectImprovement?: () => void;
   isGeneratingOptimal?: boolean;
-  isGeneratingImprovement?: boolean; 
+  isGeneratingImprovement?: boolean;
+  isNavigating?: boolean;
+  // Edit flow props
+  isReturningFromEdit?: boolean;
+  onReturnToProduct?: () => void;
 }
 
 const QuestionStep: React.FC<QuestionStepProps> = ({
@@ -78,6 +82,9 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
   onRejectImprovement,  
   isGeneratingOptimal = false,      
   isGeneratingImprovement = false,
+  isNavigating = false,
+  isReturningFromEdit = false,
+  onReturnToProduct,
 }) => {
 
   const [error, setError] = useState<string>('');
@@ -86,6 +93,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
   const [showExamples, setShowExamples] = useState(false);
 
   // Initialize customInputs from loaded answer (for resume functionality)
+  // FIXED: Also runs when answer changes (not just question.id)
   useEffect(() => {
     if (question.type === 'checkbox' && Array.isArray(answer)) {
       const loadedCustomInputs: {[key: string]: string} = {};
@@ -98,22 +106,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
         setCustomInputs(loadedCustomInputs);
       }
     }
-  }, [question.id]); // Re-run when question changes
-
-  // Auto-resize custom input textareas after content loads
-  useEffect(() => {
-    if (Object.keys(customInputs).length > 0) {
-      // Small delay to ensure DOM is ready
-      setTimeout(() => {
-        const textareas = document.querySelectorAll('textarea[data-custom-input="true"]');
-        textareas.forEach((textarea) => {
-          const el = textarea as HTMLTextAreaElement;
-          el.style.height = 'auto';
-          el.style.height = el.scrollHeight + 'px';
-        });
-      }, 50);
-    }
-  }, [customInputs]);
+  }, [question.id, answer]); // FIXED: Added 'answer' as dependency
 
   // Auto-resize textarea when answer changes
     useEffect(() => {
@@ -230,94 +223,70 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
         ), value];
       }
     } else {
-      // Remove the value (whether string or object)
       currentAnswers = currentAnswers.filter(a => 
         typeof a === 'string' ? a !== value : a.value !== value
       );
-      // Clear custom input for this option
-      setCustomInputs(prev => {
-        const newInputs = {...prev};
-        delete newInputs[value];
-        return newInputs;
-      });
+      // Also clear custom input when unchecked
+      if (isCustomOption) {
+        setCustomInputs(prev => {
+          const newInputs = { ...prev };
+          delete newInputs[value];
+          return newInputs;
+        });
+      }
     }
     
     onAnswerChange(currentAnswers);
   };
 
-  const handleCustomInputChange = (optionValue: string, text: string) => {
-    setCustomInputs(prev => ({...prev, [optionValue]: text}));
+  const handleCustomInputChange = (optionValue: string, customText: string) => {
+    setCustomInputs(prev => ({ ...prev, [optionValue]: customText }));
     
-    // Update the answer with the custom text
-    let currentAnswers = (answer as any[]) || [];
-    const existingIndex = currentAnswers.findIndex(a => 
-      typeof a === 'object' && a.value === optionValue
-    );
-    
-    if (existingIndex >= 0) {
-      currentAnswers[existingIndex] = { value: optionValue, custom: text };
-      onAnswerChange([...currentAnswers]);
-    }
-  };
-
-  const isOptionChecked = (optionValue: string) => {
+    // Update the answer array with the new custom text
     const currentAnswers = (answer as any[]) || [];
-    return currentAnswers.some(a => 
-      typeof a === 'string' ? a === optionValue : a.value === optionValue
-    );
+    const updatedAnswers = currentAnswers.map(a => {
+      if (typeof a === 'object' && a.value === optionValue) {
+        return { ...a, custom: customText };
+      }
+      if (a === optionValue) {
+        return { value: optionValue, custom: customText };
+      }
+      return a;
+    });
+    
+    onAnswerChange(updatedAnswers);
   };
 
-    // Generate appropriate warning message based on validation state
-    const getValidationWarning = (): string => {
-    if (!question.validation?.required) return '';
+  const getValidationWarning = () => {
+    if (!question.validation) return '';
     
-    // Empty answer
-    if (!answer || (Array.isArray(answer) && answer.length === 0) || answer === '') {
-        return 'Answer is required for this step.';
+    if (question.type === 'textarea' && question.validation.minLength) {
+      const currentLength = answer?.length || 0;
+      const minLength = question.validation.minLength;
+      if (currentLength < minLength) {
+        return `Write at least ${minLength - currentLength} more characters`;
+      }
     }
     
-    // Textarea minimum length
-    if (question.type === 'textarea' && question.validation?.minLength) {
-        const currentLength = (answer || '').length;
-        const minLength = question.validation.minLength;
-        if (currentLength < minLength) {
-        return `Answer needs to be at least ${minLength} characters (currently ${currentLength})`;
-        }
+    if (question.validation.required && (!answer || answer === '' || (Array.isArray(answer) && answer.length === 0))) {
+      return 'This field is required';
     }
     
-    // Text minimum length
-    if (question.type === 'text' && question.validation?.minLength) {
-        const currentLength = (answer || '').length;
-        const minLength = question.validation.minLength;
-        if (currentLength < minLength) {
-        return `Minimum ${minLength} characters required (currently ${currentLength})`;
-        }
-    }
-    
-    // Checkbox - required custom inputs
+    // Check for required custom inputs
     if (question.type === 'checkbox' && Array.isArray(answer)) {
-        for (const selection of answer) {
+      for (const selection of answer) {
         if (typeof selection === 'object' && selection.value) {
-            const option = question.options?.find(opt => opt.value === selection.value);
-            if (option?.customRequired && (!selection.custom || selection.custom.trim() === '')) {
+          const option = question.options?.find(opt => opt.value === selection.value);
+          if (option?.customRequired && (!selection.custom || selection.custom.trim() === '')) {
             return `Please specify details for "${option.label}"`;
-            }
+          }
         }
-        }
+      }
     }
     
-    // Checkbox - minimum selections
-    if (question.type === 'checkbox' && question.validation?.minSelections) {
-        const selections = answer as string[];
-        if (selections.length < question.validation.minSelections) {
-        return `Please select at least ${question.validation.minSelections} option${question.validation.minSelections > 1 ? 's' : ''}`;
-        }
-    }
-    
-    return 'Please complete this field to continue';
-    };
+    return '';
+  };
 
-  // Render different input types
   const renderInput = () => {
     switch (question.type) {
       case 'text':
@@ -326,297 +295,230 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
             type="text"
             value={answer || ''}
             onChange={(e) => onAnswerChange(e.target.value)}
-            placeholder={question.placeholder || 'Type your answer here...'}
-            className="w-full px-4 py-3 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400"
+            placeholder={question.placeholder}
+            className="w-full px-4 py-3 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400"
           />
         );
-
-      case 'textarea':
-        // Debug log to check if showAutoGenerate is set
-        console.log('Question ID:', question.id, 'ShowAutoGenerate:', question.showAutoGenerate);
         
-        case 'textarea':
-            console.log('Rendering textarea - showAutoGenerate:', question.showAutoGenerate, 'Answer:', answer);
-            
-            return (
-                <div className="space-y-3">
-                {/* Generate/Improve Buttons */}
-                <div className="flex gap-2">
-                    {question.showAutoGenerate && !suggestionPreview && !improvementSuggestion && (
-                    <button
-                        type="button"
-                        onClick={() => {
-                        console.log('Generate button clicked!');
-                        if (onAutoGenerate) {
-                            onAutoGenerate();
-                        }
-                        }}
-                        disabled={isGeneratingOptimal}
-                        className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-all ${
-                        isGeneratingOptimal 
-                            ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-400 cursor-not-allowed'
-                            : 'text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 hover:border-purple-300 dark:hover:border-purple-700'
-                        }`}
-                    >
-                        {isGeneratingOptimal ? (
-                        <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-600 border-t-transparent" />
-                            Thinking...
-                        </>
-                        ) : (
-                        <>
-                            <Wand2 className="w-4 h-4" />
-                            Suggest an Answer
-                        </>
-                        )}
-                    </button>
+      case 'textarea':
+        return (
+          <div className="space-y-2">
+            {/* AI Actions Row - Above input */}
+            {(question.showAutoGenerate || question.showAIHelper) && (
+              <div className="flex gap-2 justify-end">
+                {/* Auto-Generate Button */}
+                {question.showAutoGenerate && onAutoGenerate && (
+                  <button
+                    onClick={onAutoGenerate}
+                    disabled={isGeneratingOptimal}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-lg transition-all disabled:opacity-50"
+                  >
+                    {isGeneratingOptimal ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Suggest an answer</span>
+                      </>
                     )}
-                    {answer && answer.length > 10 && !improvementSuggestion && !suggestionPreview && (
-                        <button
-                            type="button"
-                            onClick={() => onImproveAnswer?.(answer)}
-                            disabled={isGeneratingImprovement}
-                            className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-all ${
-                            isGeneratingImprovement
-                                ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-400 cursor-not-allowed'
-                                : 'text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 hover:border-indigo-300 dark:hover:border-indigo-700'
-                            }`}
-                        >
-                            {isGeneratingImprovement ? (
-                                <>
-                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent" />
-                                    Thinking...
-                                </>
-                            ) : (
-                                <>
-                                    <Sparkles className="w-4 h-4" />
-                                    Improve my answer
-                                </>
-                            )}
-                        </button>
-                    )}
-                </div>
-
-                {/* Suggestion Preview (before/after) */}
-                {suggestionPreview && (
-                    <div className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
-                            <Wand2 className="w-4 h-4 inline mr-1" />
-                            AI Suggestion:
-                        </p>
-                        <div className="flex gap-2">
-                            <button
-                            type="button"
-                            onClick={onAcceptSuggestion}
-                            className="text-xs px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors"
-                            >
-                            Accept
-                            </button>
-                            <button
-                            type="button"
-                            onClick={onRejectSuggestion}
-                            className="text-xs px-2 py-1 bg-neutral-500 hover:bg-neutral-600 text-white rounded-md transition-colors"
-                            >
-                            Dismiss
-                            </button>
-                        </div>
-                        </div>
-                        
-                        {/* Show current answer if exists */}
-                        {answer && answer.length > 0 && (
-                        <div className="bg-red-50 dark:bg-red-900/20 rounded-md p-3 border border-red-200 dark:border-red-800">
-                            <p className="text-xs font-medium text-red-700 dark:text-red-300 mb-1">
-                            <AlertCircle className="w-3 h-3 inline mr-1" /> Your current answer (will be replaced):
-                            </p>
-                            <p className="text-sm text-red-800 dark:text-red-200 whitespace-pre-wrap">
-                            {answer.length > 200 ? answer.substring(0, 200) + '...' : answer}
-                            </p>
-                        </div>
-                        )}
-                        
-                        {/* Show suggested answer */}
-                        <div className="bg-green-50 dark:bg-green-900/20 rounded-md p-3 border border-green-200 dark:border-green-800">
-                        <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">
-                            <Sparkles className="w-3 h-3 inline mr-1" /> Suggested answer:
-                        </p>
-                        <p className="text-sm text-green-800 dark:text-green-200 whitespace-pre-wrap">
-                            {suggestionPreview}
-                        </p>
-                        </div>
-                    </div>
-                    </div>
+                  </button>
                 )}
-
-                {/* Improvement Preview (before/after) */}
-                {improvementSuggestion && (
-                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg p-4 border border-indigo-200 dark:border-indigo-800">
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-indigo-900 dark:text-indigo-100">
-                            <Sparkles className="w-4 h-4 inline mr-1" />
-                            AI Improvement:
-                        </p>
-                        <div className="flex gap-2">
-                            <button
-                            type="button"
-                            onClick={onAcceptImprovement}
-                            className="text-xs px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors"
-                            >
-                            Accept
-                            </button>
-                            <button
-                            type="button"
-                            onClick={onRejectImprovement}
-                            className="text-xs px-2 py-1 bg-neutral-500 hover:bg-neutral-600 text-white rounded-md transition-colors"
-                            >
-                            Dismiss
-                            </button>
-                        </div>
-                        </div>
-                        
-                        {/* Show current answer */}
-                        {answer && answer.length > 0 && (
-                        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-md p-3 border border-amber-200 dark:border-amber-800">
-                            <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-1">
-                            Your current answer:
-                            </p>
-                            <p className="text-sm text-amber-800 dark:text-amber-200 whitespace-pre-wrap">
-                            {answer.length > 200 ? answer.substring(0, 200) + '...' : answer}
-                            </p>
-                        </div>
-                        )}
-                        
-                        {/* Show improved answer */}
-                        <div className="bg-green-50 dark:bg-green-900/20 rounded-md p-3 border border-green-200 dark:border-green-800">
-                        <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">
-                            <Sparkles className="w-3 h-3 inline mr-1" /> Improved answer:
-                        </p>
-                        <p className="text-sm text-green-800 dark:text-green-200 whitespace-pre-wrap">
-                            {improvementSuggestion}
-                        </p>
-                        </div>
-                    </div>
-                    </div>
-                )}
-
-                {/* Tip for empty field */}
-                {question.showAutoGenerate && (!answer || answer === '' || answer.length === 0) && (
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 italic">
-                    Tip: Click "Suggest an Answer" to get a suggestion based on your previous answers.
-                    </p>
-                )}
-
-                {/* Textarea */}
-                <textarea
-                ref={(el) => {
-                    if (el && answer) {
-                    // Auto-resize on mount/update
-                    el.style.height = 'auto';
-                    el.style.height = el.scrollHeight + 'px';
-                    }
-                }}
-                value={answer || ''}
-                onChange={(e) => {
-                    onAnswerChange(e.target.value);
-                    // Auto-resize textarea
-                    e.target.style.height = 'auto';
-                    e.target.style.height = e.target.scrollHeight + 'px';
-                }}
-                onInput={(e) => {
-                    // Auto-resize on input as well
-                    const target = e.target as HTMLTextAreaElement;
-                    target.style.height = 'auto';
-                    target.style.height = target.scrollHeight + 'px';
-                }}
-                placeholder={question.placeholder || 'Type your answer here...'}
-                rows={4}
-                maxLength={question.validation?.maxLength}
-                className="w-full px-4 py-3 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 resize-none overflow-hidden transition-all"
-                style={{ minHeight: '120px' }}
-                />
                 
-                {/* Character counter */}
-                {question.validation?.maxLength && (
-                    <div className="text-sm text-neutral-500 dark:text-neutral-400 text-right">
-                    {(answer || '').length} / {question.validation.maxLength}
-                    </div>
+                {/* Improve Answer Button */}
+                {question.showAIHelper && answer && answer.length > 10 && onImproveAnswer && (
+                  <button
+                    onClick={() => onImproveAnswer(answer)}
+                    disabled={isGeneratingImprovement}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-lg transition-all disabled:opacity-50"
+                  >
+                    {isGeneratingImprovement ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Improving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-3.5 h-3.5" />
+                        <span>Improve my answer</span>
+                      </>
+                    )}
+                  </button>
                 )}
+              </div>
+            )}
+            
+            {/* Generated Suggestion Preview - Above input */}
+            {suggestionPreview && (
+              <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <span className="text-sm font-medium text-purple-900 dark:text-purple-100">Generated Answer</span>
                 </div>
-            );
+                <p className="text-sm text-purple-800 dark:text-purple-200 whitespace-pre-wrap mb-3">
+                  {suggestionPreview}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={onAcceptSuggestion}
+                    className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Use this
+                  </button>
+                  <button
+                    onClick={onRejectSuggestion}
+                    className="px-3 py-1.5 text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-lg hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
+                  >
+                    No thanks
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Improvement Suggestion Preview - Above input */}
+            {improvementSuggestion && (
+              <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <Wand2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <span className="text-sm font-medium text-indigo-900 dark:text-indigo-100">Improved Version</span>
+                </div>
+                <p className="text-sm text-indigo-800 dark:text-indigo-200 whitespace-pre-wrap mb-3">
+                  {improvementSuggestion}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={onAcceptImprovement}
+                    className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    Use improved
+                  </button>
+                  <button
+                    onClick={onRejectImprovement}
+                    className="px-3 py-1.5 text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-lg hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
+                  >
+                    Keep original
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <textarea
+              value={answer || ''}
+              onChange={(e) => {
+                onAnswerChange(e.target.value);
+                // Auto-resize on input
+                e.target.style.height = 'auto';
+                e.target.style.height = e.target.scrollHeight + 'px';
+              }}
+              placeholder={question.placeholder}
+              rows={4}
+              className="w-full px-4 py-3 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 resize-none overflow-hidden"
+            />
+            
+            {/* Character count */}
+            <div className="flex justify-end">
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                {answer?.length || 0} characters
+                {question.validation?.minLength && ` (min: ${question.validation.minLength})`}
+              </span>
+            </div>
+          </div>
+        );
+        
       case 'radio':
         return (
           <div className="space-y-3">
-            {question.options?.map((option) => (
-              <label
-                key={option.value}
-                className={`
-                  block p-4 rounded-lg border-2 cursor-pointer transition-all
-                  ${
-                    answer === option.value || (typeof answer === 'object' && answer?.value === option.value)
-                      ? 'border-purple-500 dark:border-purple-400 bg-purple-50 dark:bg-purple-900/20'
-                      : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600'
-                  }
-                `}
-              >
-                <div className="flex items-start gap-3">
-                  <input
-                    type="radio"
-                    name={question.id}
-                    value={option.value}
-                    checked={answer === option.value || (typeof answer === 'object' && answer?.value === option.value)}
-                    onChange={() => handleRadioChange(option.value, option.allowCustom || false)}
-                    className="mt-1 text-purple-600 focus:ring-purple-500"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      {option.icon}
-                      <span className="font-medium text-neutral-900 dark:text-white">
-                        {option.label}
-                      </span>
-                    </div>
-                    {option.description && (
-                      <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
-                        {option.description}
-                      </p>
-                    )}
-                    {option.allowCustom && (answer === option.value || (typeof answer === 'object' && answer?.value === option.value)) && (
-                      <input
-                        type="text"
-                        value={customInput}
-                        onChange={(e) => {
-                          setCustomInput(e.target.value);
-                          handleRadioChange(option.value, true);
-                        }}
-                        placeholder="Please specify..."
-                        className="mt-2 w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-sm"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    )}
-                  </div>
-                </div>
-              </label>
-            ))}
-          </div>
-        );
-
-      case 'checkbox':
-        return (
-          <div className="space-y-3">
             {question.options?.map((option) => {
-              const isChecked = isOptionChecked(option.value);
-              const hasCustomInput = option.allowCustom;
+              const isSelected = typeof answer === 'object' 
+                ? answer?.value === option.value 
+                : answer === option.value;
+              const hasCustomInput = option.allowCustom || option.customRequired;
               
               return (
                 <div key={option.value}>
                   <label
                     className={`
                       block p-4 rounded-lg border-2 cursor-pointer transition-all
-                      ${
-                        isChecked
-                          ? 'border-purple-500 dark:border-purple-400 bg-purple-50 dark:bg-purple-900/20'
-                          : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600'
+                      ${isSelected
+                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                        : 'border-neutral-200 dark:border-neutral-700 hover:border-purple-300 dark:hover:border-purple-700'
+                      }
+                    `}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        name={question.id}
+                        value={option.value}
+                        checked={isSelected}
+                        onChange={() => handleRadioChange(option.value, hasCustomInput || false)}
+                        className="mt-1 text-purple-600 focus:ring-purple-500"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          {option.icon}
+                          <span className="font-medium text-neutral-900 dark:text-white">
+                            {option.label}
+                          </span>
+                        </div>
+                        {option.description && (
+                          <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
+                            {option.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                  
+                  {/* Custom input field */}
+                  {hasCustomInput && isSelected && (
+                    <div className="mt-2 ml-11">
+                      <textarea
+                        value={typeof answer === 'object' ? answer?.custom || '' : customInput}
+                        onChange={(e) => {
+                          setCustomInput(e.target.value);
+                          onAnswerChange({ value: option.value, custom: e.target.value });
+                          // Auto-resize
+                          e.target.style.height = 'auto';
+                          e.target.style.height = e.target.scrollHeight + 'px';
+                        }}
+                        ref={(el) => {
+                          if (el) {
+                            el.style.height = 'auto';
+                            el.style.height = el.scrollHeight + 'px';
+                          }
+                        }}
+                        rows={1}
+                        placeholder={option.customPlaceholder || "Please specify..."}
+                        className="w-full px-3 py-2 rounded-md border border-purple-300 dark:border-purple-600 bg-white dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 placeholder-neutral-400 dark:placeholder-neutral-500 resize-none overflow-hidden"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+        
+      case 'checkbox':
+        return (
+          <div className="space-y-3">
+            {question.options?.map((option) => {
+              const isChecked = Array.isArray(answer) && answer.some(a => 
+                typeof a === 'string' ? a === option.value : a.value === option.value
+              );
+              const hasCustomInput = option.allowCustom || option.customRequired;
+              
+              return (
+                <div key={option.value}>
+                  <label
+                    className={`
+                      block p-4 rounded-lg border-2 cursor-pointer transition-all
+                      ${isChecked
+                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                        : 'border-neutral-200 dark:border-neutral-700 hover:border-purple-300 dark:hover:border-purple-700'
                       }
                     `}
                   >
@@ -648,13 +550,18 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                   {hasCustomInput && isChecked && (
                     <div className="mt-2 ml-11">
                       <textarea
-                        data-custom-input="true"
                         value={customInputs[option.value] || ''}
                         onChange={(e) => {
                           handleCustomInputChange(option.value, e.target.value);
                           // Auto-resize
                           e.target.style.height = 'auto';
                           e.target.style.height = e.target.scrollHeight + 'px';
+                        }}
+                        ref={(el) => {
+                          if (el) {
+                            el.style.height = 'auto';
+                            el.style.height = el.scrollHeight + 'px';
+                          }
                         }}
                         rows={1}
                         placeholder={
@@ -680,6 +587,9 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
     }
   };
   const isNextDisabled = () => {
+    // Disable if navigating
+    if (isNavigating) return true;
+    
     if (!question.validation?.required) return false;
     
     // Check if answer is empty
@@ -767,48 +677,96 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
         )}
       </div>
 
-      {/* AI Response Area */}
-      {question.showAIHelper && aiResponse && (
-        <div className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0">
-              <MessageCircle className="w-4 h-4 text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-purple-900 dark:text-purple-100 mb-1">
-                AI Insight
-              </p>
-              {isProcessingAI ? (
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-600 border-t-transparent" />
-                  <span className="text-sm text-purple-700 dark:text-purple-300">Analyzing...</span>
-                </div>
-              ) : (
-                <p className="text-sm text-purple-800 dark:text-purple-200">
-                  {aiResponse}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Navigation Buttons */}
         <div className="space-y-2">
-        <div className="flex gap-3 justify-between pt-4">
+        {/* Show special buttons when returning from edit on last question */}
+        {isLastQuestion && isReturningFromEdit && onReturnToProduct ? (
+          <div className="flex flex-col gap-2 pt-4">
+            <div className="flex gap-3">
+              <button
+                onClick={onBack}
+                disabled={isFirstQuestion || isNavigating}
+                className={`
+                  px-5 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 text-sm
+                  ${
+                  isFirstQuestion || isNavigating
+                      ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'
+                      : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-white hover:bg-neutral-300 dark:hover:bg-neutral-700'
+                  }
+                `}
+              >
+                {isNavigating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Back'
+                )}
+              </button>
+              
+              <button
+                onClick={onReturnToProduct}
+                disabled={isNavigating}
+                className="flex-1 px-5 py-2.5 rounded-lg font-medium transition-all flex items-center justify-center gap-2 text-sm bg-green-600 text-white hover:bg-green-700"
+              >
+                Back to Product Summary
+              </button>
+            </div>
+            
+            <button
+              onClick={() => {
+                if (window.confirm('Are you sure you want to regenerate?\n\nThis will replace your current product including:\n• Product name & description\n• Pricing\n• Value stack items\n• Guarantees\n\nThis action cannot be undone.')) {
+                  handleNext();
+                }
+              }}
+              disabled={isNextDisabled()}
+              className={`w-full px-5 py-2.5 rounded-lg font-medium transition-all flex items-center justify-center gap-2 text-sm
+                ${isNextDisabled()
+                ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-50'
+                : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 border border-neutral-300 dark:border-neutral-600'
+                }`}
+            >
+              {isNavigating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Regenerating...
+                </>
+              ) : (
+                <>
+                  Regenerate Product
+                  <ChevronRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+            
+            <p className="text-center text-xs text-neutral-500 dark:text-neutral-400">
+              Regenerating will replace your current product with AI-generated content
+            </p>
+          </div>
+        ) : (
+          /* Normal navigation buttons */
+          <div className="flex gap-3 justify-between pt-4">
             <button
             onClick={onBack}
-            disabled={isFirstQuestion}
+            disabled={isFirstQuestion || isNavigating}
             className={`
                 px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2
                 ${
-                isFirstQuestion
+                isFirstQuestion || isNavigating
                     ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'
                     : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-white hover:bg-neutral-300 dark:hover:bg-neutral-700'
                 }
             `}
             >
-            Back
+            {isNavigating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Back'
+            )}
             </button>
             
             <button
@@ -820,13 +778,23 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                     : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700'
                     }`}
                 >
-                {isLastQuestion ? 'See Results' : 'Next'}
-                <ChevronRight className="w-4 h-4" />
+                {isNavigating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    {isLastQuestion ? 'See Results' : 'Next'}
+                    <ChevronRight className="w-4 h-4" />
+                  </>
+                )}
                 </button>
-        </div>
+          </div>
+        )}
         
         {/* Validation Warning Message */}
-        {isNextDisabled() && (
+        {isNextDisabled() && !isNavigating && (
             <div className="flex items-center justify-end gap-2 text-amber-600 dark:text-amber-400 text-sm">
             <AlertCircle className="w-4 h-4" />
             <span>{getValidationWarning()}</span>

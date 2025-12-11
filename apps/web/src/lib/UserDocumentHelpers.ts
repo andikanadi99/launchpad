@@ -677,5 +677,77 @@ export async function setActiveSession(uid: string, sessionId: string) {
     lastActiveDate: serverTimestamp(),
   });
   
-  console.log('✅ Active session set to:', sessionId);
+  console.log('Active session set to:', sessionId);
+}
+
+// Save product configuration to a session
+export async function saveProductConfig(
+  uid: string,
+  sessionId: string,
+  productConfig: {
+    name: string;
+    description: string;
+    price: number;
+    priceType: 'one-time' | 'subscription' | 'payment-plan';
+    currency: string;
+    valueStack: string[];
+    guarantees: string[];
+    targetAudience: string;
+    mission: string;
+    tierType: 'low' | 'mid' | 'high';
+  }
+) {
+  const sessionRef = doc(db, 'users', uid, 'productCoPilotSessions', sessionId);
+  
+  await updateDoc(sessionRef, {
+    productConfig,
+    updatedAt: serverTimestamp(),
+  });
+  
+  console.log('Product config saved to session:', sessionId);
+}
+
+// Update session name (rename product idea)
+export async function updateSessionName(uid: string, sessionId: string, newName: string) {
+  const sessionRef = doc(db, 'users', uid, 'productCoPilotSessions', sessionId);
+  
+  await updateDoc(sessionRef, {
+    name: newName,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Link a sales page to a session
+export async function linkSalesPageToSession(
+  uid: string,
+  sessionId: string,
+  salesPageId: string,
+  status: 'draft' | 'published' = 'draft'
+) {
+  const sessionRef = doc(db, 'users', uid, 'productCoPilotSessions', sessionId);
+  
+  await updateDoc(sessionRef, {
+    salesPageId,
+    salesPageStatus: status,
+    updatedAt: serverTimestamp(),
+  });
+  
+  console.log('Sales page linked to session:', { sessionId, salesPageId, status });
+}
+
+// Get all product ideas (completed sessions with productConfig)
+export async function getProductIdeas(uid: string): Promise<any[]> {
+  const sessionsRef = collection(db, 'users', uid, 'productCoPilotSessions');
+  const q = query(
+    sessionsRef,
+    where('status', '==', 'completed'),
+    orderBy('updatedAt', 'desc')
+  );
+  
+  const snapshot = await getDocs(q);
+  
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
 }

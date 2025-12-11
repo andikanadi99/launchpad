@@ -8,20 +8,35 @@
 @layer base {
   /* Default (Dark Mode) - Purple theme */
   :root {
-    --bg: 270 50% 8%;     /* deep purple/ink */
-    --fg: 270 20% 96%;    /* near-white with purple tint */
+    --bg: 270 50% 8%;           /* deep purple/ink */
+    --fg: 270 20% 96%;          /* near-white with purple tint */
+    --card: 0 0% 12%;           /* neutral-900 equivalent */
+    --card-hover: 0 0% 15%;     /* slightly lighter on hover */
+    --border: 0 0% 20%;         /* neutral-800 equivalent */
+    --muted: 0 0% 60%;          /* neutral-400 equivalent */
+    --muted-fg: 0 0% 40%;       /* neutral-500 equivalent */
   }
 
   /* Light Mode */
   :root.light {
-    --bg: 0 0% 100%;      /* pure white */
-    --fg: 270 47% 11%;    /* dark text with purple tint */
+    --bg: 0 0% 98%;             /* off-white background */
+    --fg: 270 47% 11%;          /* dark text with purple tint */
+    --card: 0 0% 100%;          /* white cards */
+    --card-hover: 0 0% 97%;     /* subtle hover */
+    --border: 0 0% 88%;         /* light gray borders */
+    --muted: 0 0% 45%;          /* medium gray for secondary text */
+    --muted-fg: 0 0% 55%;       /* lighter gray for tertiary text */
   }
 
   /* Ensure dark class also works (for compatibility) */
   :root.dark {
-    --bg: 270 50% 8%;     /* deep purple/ink */
-    --fg: 270 20% 96%;    /* near-white with purple tint */
+    --bg: 270 50% 8%;           /* deep purple/ink */
+    --fg: 270 20% 96%;          /* near-white with purple tint */
+    --card: 0 0% 12%;           /* neutral-900 equivalent */
+    --card-hover: 0 0% 15%;     /* slightly lighter on hover */
+    --border: 0 0% 20%;         /* neutral-800 equivalent */
+    --muted: 0 0% 60%;          /* neutral-400 equivalent */
+    --muted-fg: 0 0% 40%;       /* neutral-500 equivalent */
   }
 
   body {

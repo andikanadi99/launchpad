@@ -1,21 +1,93 @@
 import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
-import { collection, query, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { Link } from 'react-router-dom';
-import { Package, ExternalLink, Info, X, Eye, Settings } from 'lucide-react';
+import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, orderBy, where } from 'firebase/firestore';
+import { Link, useNavigate } from 'react-router-dom';
+import { setActiveSession } from '../lib/UserDocumentHelpers';
+import { 
+  Package, 
+  ExternalLink, 
+  Info, 
+  X, 
+  Eye, 
+  Settings, 
+  Lightbulb, 
+  Plus,
+  Edit2,
+  Trash2,
+  DollarSign,
+  FileText,
+  Rocket,
+  Lock,
+  ChevronRight,
+  Sparkles
+} from 'lucide-react';
+
+interface ProductIdea {
+  id: string;
+  name: string;
+  status: 'in_progress' | 'completed';
+  productConfig?: {
+    name: string;
+    description: string;
+    price: number;
+    priceType: string;
+    currency: string;
+    valueStack: string[];
+    guarantees: string[];
+    targetAudience: string;
+    mission: string;
+    tierType: 'low' | 'mid' | 'high';
+  };
+  salesPageId?: string | null;
+  salesPageStatus?: 'none' | 'draft' | 'published';
+  answers?: Record<string, any>;
+  createdAt?: any;
+  updatedAt?: any;
+  completedAt?: any;
+}
+
+interface Product {
+  id: string;
+  salesPage?: any;
+  published?: boolean;
+  delivery?: any;
+  analytics?: {
+    views: number;
+    sales: number;
+    revenue: number;
+  };
+  createdAt?: any;
+}
 
 export default function Dashboard() {
-  const [products, setProducts] = useState<any[]>([]);
+  const navigate = useNavigate();
+  const [productIdeas, setProductIdeas] = useState<ProductIdea[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft'>('all');
-  const [sortBy, setSortBy] = useState<'newest' | 'sales' | 'views' | 'revenue'>('newest');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'ideas' | 'products'>('ideas');
   const [showInfoBanner, setShowInfoBanner] = useState(() => {
-    // Only show banner for first 3 products
     return localStorage.getItem('hideInfoBanner') !== 'true';
   });
 
+  // Fetch Product Ideas from Co-Pilot sessions
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const sessionsRef = collection(db, 'users', auth.currentUser.uid, 'productCoPilotSessions');
+    const q = query(sessionsRef, orderBy('updatedAt', 'desc'));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const ideas = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as ProductIdea[];
+      setProductIdeas(ideas);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch Products (with sales pages)
   useEffect(() => {
     if (!auth.currentUser) return;
 
@@ -26,7 +98,7 @@ export default function Dashboard() {
       const items = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
+      })) as Product[];
       setProducts(items);
       setLoading(false);
     });
@@ -39,452 +111,498 @@ export default function Dashboard() {
     localStorage.setItem('hideInfoBanner', 'true');
   };
 
-  // Filter products based on search and status
-  const filteredProducts = products.filter(product => {
-    const productName = product.title || product.salesPage?.coreInfo?.name || '';
-    const productDesc = product.description || product.salesPage?.valueProp?.description || '';
-    
-    const matchesSearch = productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          productDesc.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || 
-      (filterStatus === 'published' && product.published) ||
-      (filterStatus === 'draft' && !product.published);
-    return matchesSearch && matchesStatus;
-  });
-
-  // Sort filtered products
-  const sortedProducts = [...filteredProducts].sort((a, b) => {
-    switch(sortBy) {
-      case 'sales': 
-        return (b.analytics?.sales || b.sales || 0) - (a.analytics?.sales || a.sales || 0);
-      case 'views': 
-        return (b.analytics?.views || b.views || 0) - (a.analytics?.views || a.views || 0);
-      case 'revenue':
-        const aRevenue = (a.analytics?.revenue || ((a.sales || 0) * (a.price || 0) / 100));
-        const bRevenue = (b.analytics?.revenue || ((b.sales || 0) * (b.price || 0) / 100));
-        return bRevenue - aRevenue;
-      case 'newest': 
-      default: 
-        return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-    }
-  });
+  // Filter ideas by status
+  const completedIdeas = productIdeas.filter(idea => idea.status === 'completed' && idea.productConfig);
+  const inProgressIdeas = productIdeas.filter(idea => idea.status === 'in_progress');
 
   // Calculate totals
   const totals = {
+    ideas: completedIdeas.length,
     products: products.length,
-    views: products.reduce((sum, p) => sum + (p.analytics?.views || p.views || 0), 0),
-    sales: products.reduce((sum, p) => sum + (p.analytics?.sales || p.sales || 0), 0),
-    revenue: products.reduce((sum, p) => {
-      const revenue = p.analytics?.revenue || ((p.sales || 0) * (p.price || 0) / 100);
-      return sum + revenue;
-    }, 0)
+    published: products.filter(p => p.published).length,
+    views: products.reduce((sum, p) => sum + (p.analytics?.views || 0), 0),
+    sales: products.reduce((sum, p) => sum + (p.analytics?.sales || 0), 0),
+    revenue: products.reduce((sum, p) => sum + (p.analytics?.revenue || 0), 0)
   };
 
-  function copyProductLink(product: any) {
-    const isSalesPage = !!product.salesPage;
-    const slug = product.salesPage?.publish?.slug;
-    
-    let url: string;
-    if (isSalesPage && slug) {
-      url = `https://launchpad.app/p/${slug}`;
-    } else {
-      url = `${window.location.origin}/p/${auth.currentUser?.uid}/${product.id}`;
+  // Get tier label and color
+  const getTierInfo = (tierType: string) => {
+    switch (tierType) {
+      case 'low':
+        return { label: 'Quick Win', color: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30' };
+      case 'mid':
+        return { label: 'Core Offer', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30' };
+      case 'high':
+        return { label: 'Premium', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30' };
+      default:
+        return { label: 'Custom', color: 'bg-[hsl(var(--border))] text-[hsl(var(--muted))] border-[hsl(var(--border))]' };
     }
-    
-    navigator.clipboard.writeText(url);
-    setCopiedId(product.id);
-    setTimeout(() => setCopiedId(null), 2000);
-  }
+  };
 
-  async function togglePublish(productId: string, currentStatus: boolean) {
-    try {
-      const productRef = doc(db, 'users', auth.currentUser!.uid, 'products', productId);
-      await updateDoc(productRef, {
-        published: !currentStatus
-      });
-    } catch (error) {
-      console.error('Error updating publish status:', error);
-    }
-  }
-
-  async function deleteProduct(productId: string, productTitle: string) {
-    if (confirm(`Are you sure you want to delete "${productTitle}"? This cannot be undone.`)) {
+  // Delete a product idea
+  async function deleteIdea(ideaId: string, ideaName: string) {
+    if (confirm(`Are you sure you want to delete "${ideaName}"? This cannot be undone.`)) {
       try {
-        await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'products', productId));
+        await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'productCoPilotSessions', ideaId));
       } catch (error) {
-        console.error('Error deleting product:', error);
-        alert('Failed to delete product');
+        console.error('Error deleting idea:', error);
+        alert('Failed to delete idea');
       }
     }
   }
 
+  // Continue an in-progress idea
+  const continueIdea = async (ideaId: string) => {
+    if (!auth.currentUser) return;
+    
+    try {
+      // Set this session as active
+      await setActiveSession(auth.currentUser.uid, ideaId);
+      // Navigate to co-pilot
+      navigate('/product-idea-copilot');
+    } catch (error) {
+      console.error('Error continuing idea:', error);
+    }
+  };
+
+  // Edit a completed idea
+  const editIdea = async (ideaId: string) => {
+    if (!auth.currentUser) return;
+    
+    try {
+      // Set this session as active
+      await setActiveSession(auth.currentUser.uid, ideaId);
+      // Navigate to co-pilot
+      navigate('/product-idea-copilot');
+    } catch (error) {
+      console.error('Error editing idea:', error);
+    }
+  };
+
+  // Create sales page from idea (PAID FEATURE)
+  const createSalesPage = (idea: ProductIdea) => {
+    // TODO: Check if user has paid subscription
+    const isPaidUser = false; // Replace with actual check
+    
+    if (!isPaidUser) {
+      // Show upgrade modal
+      alert('Creating a Sales Page is a premium feature. Upgrade to unlock!');
+      return;
+    }
+    
+    // Navigate to sales page builder with idea data
+    navigate(`/products/sales?ideaId=${idea.id}`);
+  };
+
   if (loading) return (
-    <div className="min-h-screen bg-[#0B0B0D] flex items-center justify-center">
-      <div className="text-neutral-400">Loading...</div>
+    <div className="min-h-screen bg-[hsl(var(--bg))] flex items-center justify-center">
+      <div className="text-[hsl(var(--fg))]/60">Loading...</div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#0B0B0D] text-neutral-100 p-6">
+    <div className="min-h-screen bg-[hsl(var(--bg))] text-[hsl(var(--fg))] p-6">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold">Dashboard</h1>
-            <p className="text-neutral-400 mt-1">Manage your digital products</p>
+            <p className="text-[hsl(var(--muted))] mt-1">Manage your product ideas and sales pages</p>
           </div>
           <Link
-            to="/products/sales"
-            className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg hover:from-green-500 hover:to-emerald-500 transition-all font-medium"
+            to="/product-idea-copilot"
+            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium flex items-center gap-2 text-white"
           >
-            + Create Sales Page
+            <Sparkles className="w-5 h-5" />
+            New Product Idea
           </Link>
         </div>
 
-        {/* Info Banner - Dismissible */}
-        {showInfoBanner && products.length > 0 && products.length <= 3 && (
-          <div className="mb-6 bg-indigo-950/30 border border-indigo-800/30 rounded-lg p-5">
+        {/* Info Banner */}
+        {showInfoBanner && completedIdeas.length === 0 && (
+          <div className="mb-6 bg-purple-500/10 border border-purple-500/30 rounded-lg p-5">
             <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+              <Lightbulb className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="font-semibold text-indigo-300 mb-2">How Launchpad Works</h3>
-                <div className="text-sm text-indigo-200/80 space-y-2">
+                <h3 className="font-semibold text-purple-700 dark:text-purple-300 mb-2">Welcome to LaunchPad!</h3>
+                <div className="text-sm text-purple-700/80 dark:text-purple-200/80 space-y-2">
                   <p>
-                    <strong className="text-indigo-300">Sales Page</strong> → Where customers discover and buy your product (public page)
+                    <strong className="text-purple-700 dark:text-purple-300">Step 1:</strong> Use the Product Idea Co-Pilot to discover what to sell
                   </p>
                   <p>
-                    <strong className="text-indigo-300">Delivery</strong> → What customers receive after purchase (email, files, redirect, or content)
+                    <strong className="text-purple-700 dark:text-purple-300">Step 2:</strong> Refine your product idea with pricing and details
                   </p>
-                  <p className="text-xs text-indigo-300/60 mt-3">
-                    💡 Tip: You can sell without custom delivery - email confirmation works great for many products!
+                  <p>
+                    <strong className="text-purple-700 dark:text-purple-300">Step 3:</strong> Create a professional sales page (Premium)
+                  </p>
+                  <p className="text-xs text-purple-700 dark:text-purple-600/60 dark:text-purple-300/60 mt-3">
+                    ðŸ’¡ Start with the Product Idea Co-Pilot - it's free and takes just 5 minutes!
                   </p>
                 </div>
               </div>
               <button
                 onClick={dismissInfoBanner}
-                className="p-1 hover:bg-indigo-900/30 rounded transition-colors"
+                className="p-1 hover:bg-purple-500/20 rounded transition-colors"
               >
-                <X className="w-4 h-4 text-indigo-400" />
+                <X className="w-4 h-4 text-purple-600 dark:text-purple-400" />
               </button>
             </div>
           </div>
         )}
-        
+
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
-            <p className="text-neutral-400 text-sm mb-1">Total Products</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-[hsl(var(--card))] rounded-lg p-5 border border-[hsl(var(--border))]">
+            <p className="text-[hsl(var(--muted))] text-sm mb-1">Product Ideas</p>
+            <p className="text-3xl font-bold">{totals.ideas}</p>
+          </div>
+          <div className="bg-[hsl(var(--card))] rounded-lg p-5 border border-[hsl(var(--border))]">
+            <p className="text-[hsl(var(--muted))] text-sm mb-1">Sales Pages</p>
             <p className="text-3xl font-bold">{totals.products}</p>
+            <p className="text-xs text-[hsl(var(--muted-fg))]">{totals.published} published</p>
           </div>
-          <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
-            <p className="text-neutral-400 text-sm mb-1">Total Views</p>
-            <p className="text-3xl font-bold">{totals.views.toLocaleString()}</p>
+          <div className="bg-[hsl(var(--card))] rounded-lg p-5 border border-[hsl(var(--border))]">
+            <p className="text-[hsl(var(--muted))] text-sm mb-1">Total Sales</p>
+            <p className="text-3xl font-bold text-green-500">{totals.sales}</p>
           </div>
-          <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
-            <p className="text-neutral-400 text-sm mb-1">Total Sales</p>
-            <p className="text-3xl font-bold text-green-400">{totals.sales}</p>
-          </div>
-          <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
-            <p className="text-neutral-400 text-sm mb-1">Total Revenue</p>
-            <p className="text-3xl font-bold text-green-400">
+          <div className="bg-[hsl(var(--card))] rounded-lg p-5 border border-[hsl(var(--border))]">
+            <p className="text-[hsl(var(--muted))] text-sm mb-1">Revenue</p>
+            <p className="text-3xl font-bold text-green-500">
               ${totals.revenue.toFixed(2)}
             </p>
           </div>
         </div>
 
-        {/* Filters and Search */}
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 bg-neutral-900 border border-neutral-800 rounded-lg focus:outline-none focus:border-neutral-600 transition-colors"
-            />
-          </div>
-          
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="px-4 py-2 bg-neutral-900 border border-neutral-800 rounded-lg focus:outline-none focus:border-neutral-600"
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 border-b border-[hsl(var(--border))]">
+          <button
+            onClick={() => setActiveTab('ideas')}
+            className={`px-4 py-3 font-medium transition-colors relative ${
+              activeTab === 'ideas' 
+                ? 'text-purple-500' 
+                : 'text-[hsl(var(--muted))] hover:text-[hsl(var(--fg))]'
+            }`}
           >
-            <option value="all">All Products</option>
-            <option value="published">Published</option>
-            <option value="draft">Drafts</option>
-          </select>
-          
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-            className="px-4 py-2 bg-neutral-900 border border-neutral-800 rounded-lg focus:outline-none focus:border-neutral-600"
-          >
-            <option value="newest">Newest First</option>
-            <option value="sales">Most Sales</option>
-            <option value="views">Most Views</option>
-            <option value="revenue">Highest Revenue</option>
-          </select>
-        </div>
-        
-        {/* Products List */}
-        {sortedProducts.length === 0 ? (
-          <div className="text-center py-16 bg-neutral-900/30 rounded-lg border border-neutral-800">
-            {products.length === 0 ? (
-              <>
-                <div className="text-5xl mb-4">📦</div>
-                <p className="text-xl text-neutral-300 mb-2">No products yet</p>
-                <p className="text-neutral-400 mb-6">Create your first sales page to start selling</p>
-                <Link 
-                  to="/products/sales"
-                  className="inline-block px-6 py-3 bg-green-600 rounded-lg hover:bg-green-500 transition-colors"
-                >
-                  Create Your First Sales Page →
-                </Link>
-              </>
-            ) : (
-              <>
-                <p className="text-xl text-neutral-300 mb-2">No products match your filters</p>
-                <button 
-                  onClick={() => {
-                    setSearchQuery('');
-                    setFilterStatus('all');
-                  }}
-                  className="text-green-400 hover:text-green-300"
-                >
-                  Clear filters
-                </button>
-              </>
+            <div className="flex items-center gap-2">
+              <Lightbulb className="w-4 h-4" />
+              Product Ideas
+              {completedIdeas.length > 0 && (
+                <span className="bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">
+                  {completedIdeas.length}
+                </span>
+              )}
+            </div>
+            {activeTab === 'ideas' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />
             )}
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {sortedProducts.map(product => {
-              // Normalize data structure
-              const isSalesPage = !!product.salesPage;
-              const deliveryType = product.delivery?.type || 'none';
-              const deliveryConfigured = product.delivery?.status === 'configured';
-              
-              const displayData = isSalesPage ? {
-                title: product.salesPage.coreInfo.name,
-                description: product.salesPage.valueProp.description,
-                price: product.salesPage.coreInfo.price * 100,
-                published: product.published,
-                views: product.analytics?.views || 0,
-                sales: product.analytics?.sales || 0,
-                revenue: product.analytics?.revenue || 0,
-                videoUrl: product.salesPage.visuals?.videoUrl,
-                slug: product.salesPage.publish?.slug,
-                deliveryType,
-                deliveryConfigured
-              } : {
-                title: product.title,
-                description: product.description,
-                price: product.price,
-                published: product.published,
-                views: product.views || 0,
-                sales: product.sales || 0,
-                revenue: ((product.sales || 0) * (product.price || 0) / 100),
-                videoUrl: product.videoUrl,
-                slug: null,
-                deliveryType: 'none',
-                deliveryConfigured: false
-              };
+          </button>
+          <button
+            onClick={() => setActiveTab('products')}
+            className={`px-4 py-3 font-medium transition-colors relative ${
+              activeTab === 'products' 
+                ? 'text-purple-500' 
+                : 'text-[hsl(var(--muted))] hover:text-[hsl(var(--fg))]'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Sales Pages
+              {products.length > 0 && (
+                <span className="bg-[hsl(var(--border))] text-[hsl(var(--fg))] text-xs px-2 py-0.5 rounded-full">
+                  {products.length}
+                </span>
+              )}
+            </div>
+            {activeTab === 'products' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />
+            )}
+          </button>
+        </div>
 
-              // Determine delivery status label
-              const getDeliveryBadge = () => {
-                if (!isSalesPage) return null;
-                
-                if (deliveryType === 'email-only' && deliveryConfigured) {
-                  return (
-                    <span className="text-xs px-2 py-1 bg-green-950/30 text-green-400 rounded-full border border-green-800/30">
-                      📧 Email Delivery
-                    </span>
-                  );
-                } else if (deliveryType === 'content' && deliveryConfigured) {
-                  return (
-                    <span className="text-xs px-2 py-1 bg-blue-950/30 text-blue-400 rounded-full border border-blue-800/30">
-                      📄 Content Delivery
-                    </span>
-                  );
-                } else if (deliveryType === 'file' && deliveryConfigured) {
-                  return (
-                    <span className="text-xs px-2 py-1 bg-purple-950/30 text-purple-400 rounded-full border border-purple-800/30">
-                      📦 File Delivery
-                    </span>
-                  );
-                } else if (deliveryType === 'redirect' && deliveryConfigured) {
-                  return (
-                    <span className="text-xs px-2 py-1 bg-cyan-950/30 text-cyan-400 rounded-full border border-cyan-800/30">
-                      🔗 Redirect
-                    </span>
-                  );
-                } else {
-                  return (
-                    <span className="text-xs px-2 py-1 bg-amber-950/30 text-amber-400 rounded-full border border-amber-800/30">
-                      ⚠️ No Delivery
-                    </span>
-                  );
-                }
-              };
-
-              return (
-                <div key={product.id} className="border border-neutral-800 rounded-lg p-6 bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors">
-                  <div className="flex flex-col gap-4">
-                    {/* Product Info */}
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="flex-1">
-                          <h3 className="text-xl font-semibold">{displayData.title}</h3>
-                          <p className="text-neutral-400 text-sm mt-1 line-clamp-2">
-                            {displayData.description}
+        {/* Product Ideas Tab */}
+        {activeTab === 'ideas' && (
+          <div>
+            {/* In Progress Ideas */}
+            {inProgressIdeas.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-[hsl(var(--fg))]/80 mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                  In Progress
+                </h3>
+                <div className="grid gap-4">
+                  {inProgressIdeas.map(idea => (
+                    <div 
+                      key={idea.id} 
+                      className="border border-yellow-600/30 bg-yellow-500/10 rounded-lg p-5 hover:bg-yellow-500/20 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium">{idea.name}</h4>
+                          <p className="text-sm text-[hsl(var(--muted-fg))] mt-1">
+                            Started {idea.createdAt?.toDate?.()?.toLocaleDateString() || 'recently'}
                           </p>
                         </div>
-                        
-                        {/* Share Actions (Top Right) */}
-                        <div className="flex gap-2">
+                        <button
+                          onClick={() => continueIdea(idea.id)}
+                          className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                        >
+                          Continue
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Completed Ideas */}
+            {completedIdeas.length > 0 ? (
+              <div className="grid gap-4">
+                {completedIdeas.map(idea => {
+                  const tierInfo = getTierInfo(idea.productConfig?.tierType || 'low');
+                  const hasSalesPage = !!idea.salesPageId;
+                  
+                  return (
+                    <div 
+                      key={idea.id} 
+                      className="border border-[hsl(var(--border))] rounded-lg p-6 bg-[hsl(var(--card))] hover:bg-[hsl(var(--card-hover))] transition-colors"
+                    >
+                      <div className="flex flex-col gap-4">
+                        {/* Header */}
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h3 className="text-xl font-semibold">
+                                {idea.productConfig?.name || idea.name}
+                              </h3>
+                              <span className={`text-xs px-2 py-1 rounded-full border ${tierInfo.color}`}>
+                                {tierInfo.label}
+                              </span>
+                              {hasSalesPage && (
+                                <span className="text-xs px-2 py-1 rounded-full bg-green-500/10 text-green-600 border border-green-500/30">
+                                  Has Sales Page
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[hsl(var(--muted))] text-sm line-clamp-2">
+                              {idea.productConfig?.description}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-bold text-green-500">
+                              ${idea.productConfig?.price || 0}
+                            </p>
+                            <p className="text-xs text-[hsl(var(--muted-fg))]">
+                              {idea.productConfig?.priceType || 'one-time'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Mission Statement */}
+                        {idea.productConfig?.mission && (
+                          <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+                            <p className="text-sm text-purple-600 dark:text-purple-600 dark:text-purple-400 italic">
+                              "{idea.productConfig.mission}"
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex flex-wrap gap-3 pt-3 border-t border-[hsl(var(--border))]">
+                          {!hasSalesPage ? (
+                            <button
+                              onClick={() => createSalesPage(idea)}
+                              className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg font-medium transition-all flex items-center gap-2"
+                            >
+                              <Rocket className="w-4 h-4" />
+                              Create Sales Page
+                              <Lock className="w-3 h-3 opacity-60" />
+                            </button>
+                          ) : (
+                            <Link
+                              to={`/products/${idea.salesPageId}/landing/edit`}
+                              className="px-4 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                            >
+                              <Eye className="w-4 h-4" />
+                              View Sales Page
+                            </Link>
+                          )}
+                          
                           <button
-                            onClick={() => copyProductLink(product)}
-                            className={`px-3 py-1.5 rounded text-sm transition-all whitespace-nowrap ${
-                              copiedId === product.id
-                                ? 'bg-green-600 text-white'
-                                : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300'
-                            }`}
+                            onClick={() => editIdea(idea.id)}
+                            className="px-4 py-2 bg-[hsl(var(--border))] hover:bg-[hsl(var(--muted-fg))]/20 text-[hsl(var(--fg))]/80 rounded-lg transition-colors flex items-center gap-2"
                           >
-                            {copiedId === product.id ? '✓ Copied!' : '🔗 Copy Link'}
+                            <Edit2 className="w-4 h-4" />
+                            Edit Idea
                           </button>
                           
-                          {isSalesPage && displayData.slug && (
-                            <a
-                              href={`https://launchpad.app/p/${displayData.slug}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-1.5 bg-neutral-800 rounded hover:bg-neutral-700 text-sm text-neutral-300 flex items-center gap-1 whitespace-nowrap"
-                            >
-                              View <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
+                          <button
+                            onClick={() => deleteIdea(idea.id, idea.productConfig?.name || idea.name)}
+                            className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete
+                          </button>
                         </div>
                       </div>
-                      
-                      {/* Status Badges */}
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${
-                          displayData.published 
-                            ? 'bg-green-950/30 text-green-400 border border-green-800/30' 
-                            : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
-                        }`}>
-                          {displayData.published ? '🟢 Live' : '⚫ Draft'}
-                        </span>
-                        
-                        <span className="text-xs px-2 py-1 bg-neutral-800 text-neutral-300 rounded-full">
-                          ${(displayData.price / 100).toFixed(2)}
-                        </span>
-                        
-                        {isSalesPage && (
-                          <span className="text-xs px-2 py-1 bg-indigo-950/30 text-indigo-400 rounded-full border border-indigo-800/30">
-                            📄 Sales Page
-                          </span>
-                        )}
-                        
-                        {getDeliveryBadge()}
-                        
-                        {displayData.videoUrl && (
-                          <span className="text-xs px-2 py-1 bg-purple-950/30 text-purple-400 rounded-full border border-purple-800/30">
-                            🎬 Has Video
-                          </span>
-                        )}
-                      </div>
-                      
-                      {/* Analytics */}
-                      <div className="flex gap-6 text-sm">
-                        <span className="flex items-center gap-2">
-                          <span className="text-neutral-500">Views:</span>
-                          <span className="font-medium">{displayData.views}</span>
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <span className="text-neutral-500">Sales:</span>
-                          <span className="font-medium text-green-400">{displayData.sales}</span>
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <span className="text-neutral-500">Revenue:</span>
-                          <span className="font-medium text-green-400">
-                            ${displayData.revenue.toFixed(2)}
-                          </span>
-                        </span>
-                        {displayData.sales > 0 && displayData.views > 0 && (
-                          <span className="flex items-center gap-2">
-                            <span className="text-neutral-500">Conv:</span>
-                            <span className="font-medium">
-                              {((displayData.sales / displayData.views) * 100).toFixed(1)}%
-                            </span>
-                          </span>
-                        )}
-                      </div>
                     </div>
-                    
-                    {/* Primary Action Buttons */}
-                    {isSalesPage && (
-                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-neutral-800">
-                        <Link
-                          to={`/preview/sales/${product.id}`}
-                          target="_blank"
-                          className="px-4 py-3 rounded-lg bg-purple-950/30 border border-purple-800/30 hover:bg-purple-950/50 transition-colors flex flex-col items-center justify-center gap-1 text-center"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Eye className="w-4 h-4 text-purple-400" />
-                            <span className="text-sm font-medium text-purple-300">Preview Sales Page</span>
-                          </div>
-                          <span className="text-xs text-purple-400/70">What customers see before buying</span>
-                        </Link>
-                        
-                        <Link
-                          to={`/products/${product.id}/delivery`}
-                          className="px-4 py-3 rounded-lg bg-blue-950/30 border border-blue-800/30 hover:bg-blue-950/50 transition-colors flex flex-col items-center justify-center gap-1 text-center"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Settings className="w-4 h-4 text-blue-400" />
-                            <span className="text-sm font-medium text-blue-300">
-                              {deliveryConfigured ? 'Edit Delivery' : 'Setup Delivery'}
-                            </span>
-                          </div>
-                          <span className="text-xs text-blue-400/70">
-                            {deliveryConfigured ? 'Change what customers receive' : 'Configure what customers get'}
-                          </span>
-                        </Link>
-                      </div>
-                    )}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-16 bg-[hsl(var(--card))]/50 rounded-lg border border-[hsl(var(--border))]">
+                <div className="text-5xl mb-4">💡</div>
+                <p className="text-xl text-[hsl(var(--fg))]/80 mb-2">No product ideas yet</p>
+                <p className="text-[hsl(var(--muted))] mb-6">Use the Product Idea Co-Pilot to discover what to sell</p>
+                <Link 
+                  to="/product-idea-copilot"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium text-white"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  Start Product Idea Co-Pilot
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
 
-                    {/* Secondary Actions */}
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      <Link
-                        to={isSalesPage ? `/products/${product.id}/landing/edit` : `/products/edit/${product.id}`}
-                        className="px-3 py-1.5 rounded text-xs bg-neutral-800 text-neutral-300 hover:bg-neutral-700 transition-colors"
-                      >
-                        ✏️ Edit
-                      </Link>
-                      
-                      <button
-                        onClick={() => togglePublish(product.id, displayData.published)}
-                        className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                          displayData.published 
-                            ? 'bg-yellow-950/30 text-yellow-400 hover:bg-yellow-950/50' 
-                            : 'bg-green-950/30 text-green-400 hover:bg-green-950/50'
-                        }`}
-                      >
-                        {displayData.published ? '⚠️ Unpublish' : '✓ Publish'}
-                      </button>
-                      
-                      <button
-                        onClick={() => deleteProduct(product.id, displayData.title)}
-                        className="px-3 py-1.5 rounded text-xs bg-red-950/30 text-red-400 hover:bg-red-950/50 transition-colors"
-                      >
-                        🗑️ Delete
-                      </button>
+        {/* Sales Pages Tab */}
+        {activeTab === 'products' && (
+          <div>
+            {products.length > 0 ? (
+              <div className="grid gap-4">
+                {products.map(product => {
+                  const displayData = {
+                    title: product.salesPage?.coreInfo?.name || 'Untitled',
+                    description: product.salesPage?.valueProp?.description || '',
+                    price: product.salesPage?.coreInfo?.price || 0,
+                    published: product.published || false,
+                    views: product.analytics?.views || 0,
+                    sales: product.analytics?.sales || 0,
+                    revenue: product.analytics?.revenue || 0,
+                    slug: product.salesPage?.publish?.slug,
+                    deliveryType: product.delivery?.type || 'none',
+                    deliveryConfigured: product.delivery?.status === 'configured'
+                  };
+
+                  return (
+                    <div key={product.id} className="border border-[hsl(var(--border))] rounded-lg p-6 bg-[hsl(var(--card))] hover:bg-[hsl(var(--card-hover))] transition-colors">
+                      <div className="flex flex-col gap-4">
+                        {/* Product Info */}
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div className="flex-1">
+                              <h3 className="text-xl font-semibold">{displayData.title}</h3>
+                              <p className="text-[hsl(var(--muted))] text-sm mt-1 line-clamp-2">
+                                {displayData.description}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-2xl font-bold text-green-500">${displayData.price}</p>
+                            </div>
+                          </div>
+                          
+                          {/* Status Badges */}
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${
+                              displayData.published 
+                                ? 'bg-green-950/30 text-green-500 border border-green-500/30' 
+                                : 'bg-[hsl(var(--border))] text-[hsl(var(--muted))] border border-[hsl(var(--border))]'
+                            }`}>
+                              {displayData.published ? 'ðŸŸ¢ Live' : 'âš« Draft'}
+                            </span>
+                            
+                            {displayData.deliveryConfigured && (
+                              <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-600 rounded-full border border-blue-500/30">
+                                âœ“ Delivery Setup
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Analytics */}
+                          <div className="flex gap-6 text-sm">
+                            <span className="flex items-center gap-2">
+                              <span className="text-[hsl(var(--muted-fg))]">Views:</span>
+                              <span className="font-medium">{displayData.views}</span>
+                            </span>
+                            <span className="flex items-center gap-2">
+                              <span className="text-[hsl(var(--muted-fg))]">Sales:</span>
+                              <span className="font-medium text-green-500">{displayData.sales}</span>
+                            </span>
+                            <span className="flex items-center gap-2">
+                              <span className="text-[hsl(var(--muted-fg))]">Revenue:</span>
+                              <span className="font-medium text-green-500">
+                                ${displayData.revenue.toFixed(2)}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Actions */}
+                        <div className="flex flex-wrap gap-3 pt-3 border-t border-[hsl(var(--border))]">
+                          <Link
+                            to={`/products/${product.id}/landing/edit`}
+                            className="px-4 py-2 bg-[hsl(var(--border))] hover:bg-[hsl(var(--muted-fg))]/20 text-[hsl(var(--fg))]/80 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                            Edit
+                          </Link>
+                          
+                          {displayData.slug && (
+                            <a
+                              href={`/p/${displayData.slug}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-4 py-2 bg-[hsl(var(--border))] hover:bg-[hsl(var(--muted-fg))]/20 text-[hsl(var(--fg))]/80 rounded-lg transition-colors flex items-center gap-2"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                              View Live
+                            </a>
+                          )}
+                          
+                          <Link
+                            to={`/products/${product.id}/delivery`}
+                            className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <Settings className="w-4 h-4" />
+                            Delivery
+                          </Link>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-16 bg-[hsl(var(--card))]/50 rounded-lg border border-[hsl(var(--border))]">
+                <div className="text-5xl mb-4">ðŸ“„</div>
+                <p className="text-xl text-[hsl(var(--fg))]/80 mb-2">No sales pages yet</p>
+                <p className="text-[hsl(var(--muted))] mb-6">
+                  {completedIdeas.length > 0 
+                    ? 'Create a sales page from one of your product ideas'
+                    : 'Start by creating a product idea first'
+                  }
+                </p>
+                {completedIdeas.length > 0 ? (
+                  <button
+                    onClick={() => setActiveTab('ideas')}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 rounded-lg hover:bg-purple-500 transition-colors font-medium text-white"
+                  >
+                    <Lightbulb className="w-5 h-5" />
+                    View Product Ideas
+                  </button>
+                ) : (
+                  <Link 
+                    to="/product-idea-copilot"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium text-white"
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    Start Product Idea Co-Pilot
+                  </Link>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
