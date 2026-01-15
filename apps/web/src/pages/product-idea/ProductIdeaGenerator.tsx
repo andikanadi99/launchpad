@@ -45,7 +45,8 @@ import {
   ChevronUp,
   ChevronLeft,
   Trash2,
-  Loader2
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 
 import ProgressBar from './ProgressBar';
@@ -804,7 +805,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true
     },
-    helpText: "ðŸ’¡ 'Ideal Customer' criteria: (1) They have PAIN they'll pay to solve, (2) They have MONEY to spend, (3) You can REACH them easily. Pick the one that scores highest on all three.",
+    helpText: "'Ideal Customer' criteria: (1) They have PAIN they'll pay to solve, (2) They have MONEY to spend, (3) You can REACH them easily. Pick the one that scores highest on all three.",
     showAIHelper: true,
     showAutoGenerate: true
   },
@@ -843,7 +844,7 @@ const questions: QuestionData[] = [
     validation: {
       required: true
     },
-    helpText: "ðŸ’¡ Pro tip: If you're new, start LOW-TICKET ($27-97) to validate demand fast with minimal friction. If you have proven results, MID-TICKET delivers real transformation. HIGH-TICKET works best when you have expertise and want fewer, higher-touch clients.",
+    helpText: "Pro tip: If you're new, start LOW-TICKET ($27-97) to validate demand fast with minimal friction. If you have proven results, MID-TICKET delivers real transformation. HIGH-TICKET works best when you have expertise and want fewer, higher-touch clients.",
     showAIHelper: true,
     showAutoGenerate: true
   },
@@ -929,11 +930,19 @@ export default function ProductIdeaGenerator() {
   }>({});
   const [isGeneratingTier, setIsGeneratingTier] = useState<string | null>(null); // Track which tier is being generated
 
-  // Edit flow state: track if user is returning from editing answers
-  const [originalAnswersSnapshot, setOriginalAnswersSnapshot] = useState<Answers | null>(null);
-  const [isReturningFromEdit, setIsReturningFromEdit] = useState(false);
-  const [showEditCompleteModal, setShowEditCompleteModal] = useState(false);
-  const [hasAnswersChanged, setHasAnswersChanged] = useState(false);
+  // Edit mode tracking - for returning from results page
+  const [isEditingFromResults, setIsEditingFromResults] = useState(false);
+  const [answersSnapshot, setAnswersSnapshot] = useState<Answers | null>(null);
+  
+  // Generation progress tracking
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [generationStep, setGenerationStep] = useState('');
+
+  // Check if answers have changed from snapshot
+  const hasAnswersChanged = (): boolean => {
+    if (!answersSnapshot) return false;
+    return JSON.stringify(answers) !== JSON.stringify(answersSnapshot);
+  };
 
   // Load existing session or create new one on mount
   useEffect(() => {
@@ -1098,32 +1107,6 @@ export default function ProductIdeaGenerator() {
   
   const currentPhase = getCurrentPhase();
 
-  // Helper to compare answers and detect changes
-  const compareAnswers = (original: Answers | null, current: Answers): boolean => {
-    if (!original) return true; // No snapshot means first time, treat as changed
-    
-    const allKeys = new Set([...Object.keys(original), ...Object.keys(current)]);
-    
-    for (const key of allKeys) {
-      const origVal = original[key];
-      const currVal = current[key];
-      
-      // Handle undefined/null cases
-      if (origVal === undefined && currVal === undefined) continue;
-      if (origVal === null && currVal === null) continue;
-      if ((origVal === undefined || origVal === null) !== (currVal === undefined || currVal === null)) {
-        return true; // One is defined, one isn't
-      }
-      
-      // Deep comparison for arrays and objects
-      if (JSON.stringify(origVal) !== JSON.stringify(currVal)) {
-        return true;
-      }
-    }
-    
-    return false; // No changes detected
-  };
-
   // Generate dynamic options for primary_target based on target_who answers
   const getDynamicPrimaryTargetOptions = () => {
     const targetWhoAnswers = answers.target_who || [];
@@ -1148,14 +1131,14 @@ export default function ProductIdeaGenerator() {
       const fullLabel = custom ? `${baseLabel}: ${custom}` : baseLabel;
       
       const scoringHints: { [key: string]: { pain: string; money: string; access: string } } = {
-        'business_owners': { pain: 'ðŸ”¥ High pain', money: 'ðŸ’° Have budget', access: 'ðŸ“§ Easy to reach' },
-        'professionals': { pain: 'ðŸ”¥ Moderate pain', money: 'ðŸ’° Have income', access: 'ðŸ“§ LinkedIn accessible' },
-        'freelancers': { pain: 'ðŸ”¥ High pain', money: 'ðŸ’µ Variable budget', access: 'ðŸ“§ Online communities' },
-        'creators': { pain: 'ðŸ”¥ High pain', money: 'ðŸ’µ Growing income', access: 'ðŸ“§ Social platforms' },
-        'students': { pain: 'ðŸ˜ Moderate pain', money: 'ðŸ’µ Limited budget', access: 'ðŸ“§ Easy to reach' },
-        'parents': { pain: 'ðŸ”¥ High pain', money: 'ðŸ’° Have budget', access: 'ðŸ“§ FB groups' },
-        'hobbyists': { pain: 'ðŸ˜ Passion-driven', money: 'ðŸ’µ Discretionary', access: 'ðŸ“§ Niche forums' },
-        'other': { pain: 'â“ Varies', money: 'â“ Varies', access: 'â“ Varies' }
+        'business_owners': { pain: 'High pain', money: 'Have budget', access: 'Easy to reach' },
+        'professionals': { pain: 'Moderate pain', money: 'Have income', access: 'LinkedIn accessible' },
+        'freelancers': { pain: 'High pain', money: 'Variable budget', access: 'Online communities' },
+        'creators': { pain: 'High pain', money: 'Growing income', access: 'Social platforms' },
+        'students': { pain: 'Moderate pain', money: 'Limited budget', access: 'Easy to reach' },
+        'parents': { pain: 'High pain', money: 'Have budget', access: 'FB groups' },
+        'hobbyists': { pain: 'Passion-driven', money: 'Discretionary', access: 'Niche forums' },
+        'other': { pain: 'Varies', money: 'Varies', access: 'Varies' }
       };
       
       const hints = scoringHints[value] || scoringHints['other'];
@@ -1163,7 +1146,7 @@ export default function ProductIdeaGenerator() {
       return {
         value: `${value}${custom ? `_${index}` : ''}`,
         label: fullLabel,
-        description: `${hints.pain} â€¢ ${hints.money} â€¢ ${hints.access}`,
+        description: `${hints.pain} • ${hints.money} • ${hints.access}`,
         originalSelection: selection
       };
     });
@@ -1377,14 +1360,14 @@ export default function ProductIdeaGenerator() {
               `[OK] We've pre-selected ${preSelected.length} group${preSelected.length > 1 ? 's' : ''} based on who's already asking you for help. Please review and refine the details to be even more specific!`
             );
           } else {
-            console.log('âš ï¸ No matches found for pre-selection');
+            console.log(' No matches found for pre-selection');
             setHasPreselected(prev => ({ ...prev, target_who: true }));
             setShowSmartSuggestion(
-              `ðŸ’¡ Based on your skills and requests, think about who in your network needs this help most. Are they professionals, business owners, parents, or another specific group?`
+              `Based on your skills and requests, think about who in your network needs this help most. Are they professionals, business owners, parents, or another specific group?`
             );
           }
         } else {
-          console.log('âš ï¸ No actual_requests found to analyze');
+          console.log(' No actual_requests found to analyze');
           setHasPreselected(prev => ({ ...prev, target_who: true }));
         }
       } else {
@@ -1434,13 +1417,13 @@ export default function ProductIdeaGenerator() {
             'parents': 'Parents',
             'hobbyists': 'Hobbyists'
           };
-          recommendation = `ðŸŽ¯ AI Recommendation: Start with "${targetLabels[bestTarget] || bestTarget}" - they score highest on key success criteria (Pain + Money + Accessibility). But follow your gut if another audience excites you more!`;
+          recommendation = `AI Recommendation: Start with "${targetLabels[bestTarget] || bestTarget}" - they score highest on key success criteria (Pain + Money + Accessibility). But follow your gut if another audience excites you more!`;
         }
         
         setShowSmartSuggestion(recommendation);
         setHasPreselected(prev => ({ ...prev, primary_target: true }));
       } else {
-        setShowSmartSuggestion('âš ï¸ Go back and select at least one target audience in the previous step.');
+        setShowSmartSuggestion(' Go back and select at least one target audience in the previous step.');
         setHasPreselected(prev => ({ ...prev, primary_target: true }));
       }
     }
@@ -1448,9 +1431,9 @@ export default function ProductIdeaGenerator() {
     else if (currentQ.id === 'starting_product' && !hasPreselected['starting_product']) {
       const recommendation = getProductRecommendation();
       const messages: { [key: string]: string } = {
-        'low_ticket': 'ðŸŽ¯ AI Recommendation: Perfect choice for fast validation! LOW-TICKET ($27-97) lets you test demand quickly with minimal friction.',
-        'mid_ticket': 'ðŸŽ¯ AI Recommendation: Great for proven results! MID-TICKET ($197-497) delivers real transformation and builds your reputation.',
-        'high_ticket': 'ðŸŽ¯ AI Recommendation: Bold move! HIGH-TICKET ($997+) works best with established expertise - fewer clients, higher touch.'
+        'low_ticket': 'AI Recommendation: Perfect choice for fast validation! LOW-TICKET ($27-97) lets you test demand quickly with minimal friction.',
+        'mid_ticket': 'AI Recommendation: Great for proven results! MID-TICKET ($197-497) delivers real transformation and builds your reputation.',
+        'high_ticket': 'AI Recommendation: Bold move! HIGH-TICKET ($997+) works best with established expertise - fewer clients, higher touch.'
       };
       
       setShowSmartSuggestion(messages[recommendation] || messages['low_ticket']);
@@ -1521,7 +1504,7 @@ export default function ProductIdeaGenerator() {
         const data = result.data as any;
         
         if (data.success && data.generatedAnswer) {
-          console.log('âœ“ Got optimal answer from Claude!');
+          console.log('Got optimal answer from Claude!');
           setSuggestionPreview(data.generatedAnswer);
           setIsGeneratingOptimal(false);
           return;
@@ -1565,7 +1548,7 @@ export default function ProductIdeaGenerator() {
   };
 
   const handleImproveAnswer = async (currentAnswer: string) => {
-    console.log('ðŸš€ Starting improvement process...');
+    console.log('🚀 Starting improvement process...');
     setIsGeneratingImprovement(true);
     
     try {
@@ -1740,23 +1723,29 @@ export default function ProductIdeaGenerator() {
       setCurrentQuestionIndex(prev => prev + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-      // Last question - regenerate product
-      // (User chose "Regenerate Product" button, or first time completing)
-      
-      // Reset edit flow state
-      setIsReturningFromEdit(false);
-      setOriginalAnswersSnapshot(null);
-      
-      // Clear tier cache since answers may have changed
-      if (isReturningFromEdit) {
-        setTierCache({});
+      // On last question - check if in edit mode
+      if (isEditingFromResults && !hasAnswersChanged()) {
+        // No changes made - just return to results without regenerating
+        setShowResults(true);
+        setIsEditingFromResults(false);
+        setAnswersSnapshot(null);
+      } else {
+        // New generation or changes made - regenerate product
+        setShowResults(true);
+        setIsEditingFromResults(false);
+        setAnswersSnapshot(null);
+        generateProductIdeas();
       }
-      
-      setShowResults(true);
-      generateProductIdeas();
     }
     
     setIsNavigating(false);
+  };
+
+  // Helper to return to product without regenerating (used when no changes in edit mode)
+  const handleReturnToProduct = () => {
+    setShowResults(true);
+    setIsEditingFromResults(false);
+    setAnswersSnapshot(null);
   };
 
   const handleBack = async () => {
@@ -1792,48 +1781,12 @@ export default function ProductIdeaGenerator() {
     }
   };
 
-  // Edit flow handlers
-  const handleReturnToProductSummary = () => {
-    // No changes detected - just return to product summary
-    setShowEditCompleteModal(false);
-    setShowResults(true);
-    setIsReturningFromEdit(false);
-    setOriginalAnswersSnapshot(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleRegenerateProduct = () => {
-    // User wants to regenerate with new answers
-    setShowEditCompleteModal(false);
-    setShowResults(true);
-    setIsReturningFromEdit(false);
-    setOriginalAnswersSnapshot(null);
-    // Clear tier cache since answers changed
-    setTierCache({});
-    generateProductIdeas();
-  };
-
-  const handleKeepPreviousProduct = () => {
-    // User wants to keep their existing product config
-    setShowEditCompleteModal(false);
-    setShowResults(true);
-    setIsReturningFromEdit(false);
-    setOriginalAnswersSnapshot(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Direct return to product summary (from question page, without modal)
-  const handleDirectReturnToProduct = () => {
-    setShowResults(true);
-    setIsReturningFromEdit(false);
-    setOriginalAnswersSnapshot(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   const generateProductIdeas = async () => {
     setIsGeneratingIdeas(true);
+    setGenerationProgress(0);
+    setGenerationStep('Saving your answers...');
     
-    // Save complete session to Firebase
+    // Step 1: Save to Firebase (0-20%)
     if (auth.currentUser && currentSessionId) {
       try {
         await markProductCoPilotComplete(auth.currentUser.uid, currentSessionId, answers, 0);
@@ -1842,6 +1795,8 @@ export default function ProductIdeaGenerator() {
         console.error('Error saving quiz progress:', error);
       }
     }
+    setGenerationProgress(20);
+    setGenerationStep('Analyzing your skills and audience...');
     
     // Determine initial tier based on user's product selection
     const selectedType = answers.starting_product || 'low_ticket';
@@ -1856,10 +1811,24 @@ export default function ProductIdeaGenerator() {
     // Clear existing cache when generating fresh (answers may have changed)
     setTierCache({});
     
+    // Simulate progress while waiting for API
+    const progressInterval = setInterval(() => {
+      setGenerationProgress(prev => {
+        if (prev < 85) return prev + 5;
+        return prev;
+      });
+    }, 500);
+    
+    setGenerationProgress(40);
+    setGenerationStep('Crafting your product idea...');
+    
     try {
       const user = auth.currentUser;
       
       if (user) {
+        setGenerationProgress(50);
+        setGenerationStep('AI is building your offer...');
+        
         console.log('Calling generateProductIdea Cloud Function for tier:', initialTier);
         const generateProductFunction = httpsCallable(functions, 'generateProductIdea');
         
@@ -1869,10 +1838,14 @@ export default function ProductIdeaGenerator() {
           answers: answers
         });
         
+        clearInterval(progressInterval);
+        setGenerationProgress(90);
+        setGenerationStep('Finalizing your product...');
+        
         const data = result.data as any;
         
         if (data.success && data.product) {
-          console.log('âœ“ Product generated successfully:', data.product.name);
+          console.log('Product generated successfully:', data.product.name);
           
           const product = data.product;
           
@@ -1897,18 +1870,28 @@ export default function ProductIdeaGenerator() {
             }
           }));
           
-          setCurrentTierType(initialTier);
-          setIsGeneratingIdeas(false);
+          setGenerationProgress(100);
+          setGenerationStep('Done!');
+          
+          // Small delay to show 100%
+          setTimeout(() => {
+            setCurrentTierType(initialTier);
+            setIsGeneratingIdeas(false);
+          }, 300);
           return;
         }
       }
       
       // Fallback to local generation if Cloud Function fails
+      clearInterval(progressInterval);
       console.log('Cloud Function failed or no user, using local fallback...');
+      setGenerationStep('Using quick generation...');
       generateLocalFallback(initialTier);
       
     } catch (error) {
+      clearInterval(progressInterval);
       console.error('Error calling generateProductIdea:', error);
+      setGenerationStep('Using quick generation...');
       // Fallback to local generation
       generateLocalFallback(initialTier);
     }
@@ -1916,6 +1899,8 @@ export default function ProductIdeaGenerator() {
   
   // Local fallback generation (used when Cloud Function fails)
   const generateLocalFallback = (tier: 'low' | 'mid' | 'high') => {
+    setGenerationProgress(90);
+    
     const tierConfigs = {
       low: {
         name: 'Quick Win Starter Pack',
@@ -1956,8 +1941,14 @@ export default function ProductIdeaGenerator() {
       [tier]: product
     }));
     
-    setCurrentTierType(tier);
-    setIsGeneratingIdeas(false);
+    setGenerationProgress(100);
+    setGenerationStep('Done!');
+    
+    // Small delay to show 100%
+    setTimeout(() => {
+      setCurrentTierType(tier);
+      setIsGeneratingIdeas(false);
+    }, 300);
   };
   
   // Generate product for a specific tier (used when switching tiers)
@@ -2150,9 +2141,63 @@ export default function ProductIdeaGenerator() {
           </div>
 
           {isGeneratingIdeas ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-600 border-t-transparent mb-4" />
-              <p className="text-neutral-600 dark:text-neutral-400">Creating your product idea...</p>
+            <div className="flex flex-col items-center justify-center py-16">
+              {/* Progress Card */}
+              <div className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 p-8 shadow-lg">
+                {/* Animated Icon */}
+                <div className="flex justify-center mb-6">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                      <Sparkles className="w-8 h-8 text-white animate-pulse" />
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center border-2 border-white dark:border-neutral-900">
+                      <div className="w-2 h-2 bg-white rounded-full animate-ping" />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="mb-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                      {generationStep || 'Starting...'}
+                    </span>
+                    <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
+                      {generationProgress}%
+                    </span>
+                  </div>
+                  <div className="w-full h-3 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-purple-500 to-indigo-600 rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${generationProgress}%` }}
+                    />
+                  </div>
+                </div>
+                
+                {/* Status Steps */}
+                <div className="space-y-2 mt-6">
+                  <div className={`flex items-center gap-2 text-sm ${generationProgress >= 20 ? 'text-green-600 dark:text-green-400' : 'text-neutral-400'}`}>
+                    {generationProgress >= 20 ? <CheckCircle className="w-4 h-4" /> : <div className="w-4 h-4 rounded-full border-2 border-current" />}
+                    Saving your answers
+                  </div>
+                  <div className={`flex items-center gap-2 text-sm ${generationProgress >= 40 ? 'text-green-600 dark:text-green-400' : 'text-neutral-400'}`}>
+                    {generationProgress >= 40 ? <CheckCircle className="w-4 h-4" /> : <div className="w-4 h-4 rounded-full border-2 border-current" />}
+                    Analyzing your skills & audience
+                  </div>
+                  <div className={`flex items-center gap-2 text-sm ${generationProgress >= 70 ? 'text-green-600 dark:text-green-400' : 'text-neutral-400'}`}>
+                    {generationProgress >= 70 ? <CheckCircle className="w-4 h-4" /> : <div className="w-4 h-4 rounded-full border-2 border-current" />}
+                    AI crafting your product
+                  </div>
+                  <div className={`flex items-center gap-2 text-sm ${generationProgress >= 100 ? 'text-green-600 dark:text-green-400' : 'text-neutral-400'}`}>
+                    {generationProgress >= 100 ? <CheckCircle className="w-4 h-4" /> : <div className="w-4 h-4 rounded-full border-2 border-current" />}
+                    Finalizing product details
+                  </div>
+                </div>
+              </div>
+              
+              <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-6">
+                This usually takes 5-10 seconds...
+              </p>
             </div>
           ) : editableProduct ? (
             <>
@@ -2418,9 +2463,8 @@ export default function ProductIdeaGenerator() {
                 {/* Back to Edit Answers */}
                 <button
                   onClick={() => {
-                    // Save current answers as snapshot for comparison
-                    setOriginalAnswersSnapshot({ ...answers });
-                    setIsReturningFromEdit(true);
+                    setIsEditingFromResults(true);
+                    setAnswersSnapshot({ ...answers }); // Take snapshot of current answers
                     setShowResults(false);
                     setCurrentQuestionIndex(questions.length - 1); // Go to last question
                   }}
@@ -2461,10 +2505,6 @@ export default function ProductIdeaGenerator() {
                       setGeneratedIdeas([]);
                       setEditableProduct(null);
                       setHasResumedSession(false);
-                      // Reset edit flow state
-                      setOriginalAnswersSnapshot(null);
-                      setIsReturningFromEdit(false);
-                      setTierCache({});
                     }}
                     className="flex-1 px-6 py-3 bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-lg font-medium hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-all"
                   >
@@ -2542,16 +2582,16 @@ export default function ProductIdeaGenerator() {
   return (
     <div className="min-h-screen bg-white dark:bg-[#0B0B0D] py-12">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex gap-8">
-          <div className="hidden lg:block flex-shrink-0" style={{marginTop:'19rem'}}>
+        {/* Main content - always centered */}
+        <div className="max-w-3xl mx-auto relative">
+          {/* Sidebar - positioned to the left of the centered content */}
+          <div className="hidden lg:block absolute right-full mr-8 top-0" style={{marginTop:'19rem'}}>
             <ProgressSummary
               answers={answers}
               currentPhase={currentPhase}
               questions={questions}
             />
           </div>
-
-          <div className="flex-1 max-w-3xl mx-auto">
             <div className="text-center mb-8">
               <button
                 onClick={() => navigate('/onboarding')}
@@ -2636,13 +2676,54 @@ export default function ProductIdeaGenerator() {
                           <span>
                             {showSmartSuggestion}<br/>
                             <span className="font-semibold mt-1 block">
-                              âš ï¸ Action Required: Add specific details in each text field (e.g., "HR managers at Series A startups" instead of just "professionals")
+                               Action Required: Add specific details in each text field (e.g., "HR managers at Series A startups" instead of just "professionals")
                             </span>
                           </span>
                         )
                         : "Feel free to edit or keep as is - this suggestion follows proven frameworks for success."}
                     </p>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Edit Mode Warning Banner */}
+            {isEditingFromResults && (
+              <div className={`mb-4 p-4 rounded-lg border flex items-start gap-3 ${
+                hasAnswersChanged() 
+                  ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                  : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+              }`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  hasAnswersChanged()
+                    ? 'bg-amber-100 dark:bg-amber-800'
+                    : 'bg-blue-100 dark:bg-blue-800'
+                }`}>
+                  {hasAnswersChanged() ? (
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-300" />
+                  ) : (
+                    <Edit2 className="w-4 h-4 text-blue-600 dark:text-blue-300" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className={`font-medium ${
+                    hasAnswersChanged()
+                      ? 'text-amber-900 dark:text-amber-100'
+                      : 'text-blue-900 dark:text-blue-100'
+                  }`}>
+                    {hasAnswersChanged() 
+                      ? 'Changes detected - Product will be regenerated'
+                      : 'Editing mode - No changes yet'}
+                  </p>
+                  <p className={`text-sm mt-1 ${
+                    hasAnswersChanged()
+                      ? 'text-amber-700 dark:text-amber-300'
+                      : 'text-blue-700 dark:text-blue-300'
+                  }`}>
+                    {hasAnswersChanged()
+                      ? 'Clicking "Regenerate Product" will create a new product based on your updated answers. Your previous product edits will be lost.'
+                      : 'Make any changes you need. If you don\'t change anything, you can return to your product without regenerating.'}
+                  </p>
                 </div>
               </div>
             )}
@@ -2677,8 +2758,8 @@ export default function ProductIdeaGenerator() {
                 isGeneratingOptimal={isGeneratingOptimal} 
                 isGeneratingImprovement={isGeneratingImprovement}
                 isNavigating={isNavigating}
-                isReturningFromEdit={isReturningFromEdit}
-                onReturnToProduct={handleDirectReturnToProduct}
+                isReturningFromEdit={isEditingFromResults && currentQuestionIndex === questions.length - 1}
+                onReturnToProduct={handleReturnToProduct}
               />
             </div>
 
@@ -2691,7 +2772,6 @@ export default function ProductIdeaGenerator() {
               </button>
             </div>
           </div>
-        </div>
 
         <div className="lg:hidden">
           <ProgressSummary

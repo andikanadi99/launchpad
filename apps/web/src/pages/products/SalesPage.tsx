@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -28,14 +28,18 @@ interface SalesPageData {
     billingFrequency?: 'monthly' | 'yearly' | 'weekly';
     numberOfPayments?: number;
     paymentFrequency?: 'weekly' | 'biweekly' | 'monthly';
+    tierType?: 'low' | 'mid' | 'high'; // From Co-Pilot
   };
   valueProp: {
     productType?: 'course' | 'ebook' | 'coaching' | 'templates' | 'community' | 'custom';
     description: string;
     benefits: string[];
     targetAudience: string;
+    targetAudiencePrefix?: string;
     deliverables: string[];
     isUsingTemplate: boolean;
+    guarantees: string[]; // NEW: From Co-Pilot - risk reversals
+    mission: string; // NEW: From Co-Pilot - mission statement
   };
   visuals: {
     headerImage?: string;
@@ -110,6 +114,8 @@ interface SalesPageData {
       instagram?: string;
     };
   };
+  // Metadata for tracking source
+  sourceSessionId?: string; // Links to Co-Pilot session if created from there
 }
 
 // Unified Product Interface
@@ -161,6 +167,9 @@ const STEPS = [
 export default function SalesPage() {
   const navigate = useNavigate();
   const params = useParams();
+  const [searchParams] = useSearchParams();
+  const ideaId = searchParams.get('ideaId'); // From Co-Pilot: /products/sales?ideaId=xxx
+  
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -169,6 +178,7 @@ export default function SalesPage() {
   const [userId, setUserId] = useState<string>('');
   const [showTemplateWarning, setShowTemplateWarning] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
+  const [isPrefilledFromCoPilot, setIsPrefilledFromCoPilot] = useState(false); // Track if data came from Co-Pilot
 
   const [salesPageData, setSalesPageData] = useState<SalesPageData>({
     coreInfo: {
@@ -181,14 +191,18 @@ export default function SalesPage() {
       billingFrequency: 'monthly',
       numberOfPayments: 3,
       paymentFrequency: 'monthly',
+      tierType: undefined,
     },
     valueProp: {
       productType: undefined,
       description: '',
       benefits: [],
       targetAudience: '',
+      targetAudiencePrefix: 'Perfect for',
       deliverables: [],
       isUsingTemplate: false,
+      guarantees: [],
+      mission: '',
     },
     visuals: {
       headerImage: undefined,
@@ -207,7 +221,7 @@ export default function SalesPage() {
       buttonStyle: 'rounded',
       cardStyle: 'shadow',
       spacing: 'comfortable',
-      sectionOrder: ['hero', 'video', 'benefits', 'description', 'audience', 'gallery', 'pricing'],
+      sectionOrder: ['hero', 'video', 'benefits', 'guarantees', 'description', 'mission', 'audience', 'gallery', 'pricing'],
       hiddenSections: [],
       ctaButtonText: 'Buy Now',
       animations: true
@@ -218,6 +232,7 @@ export default function SalesPage() {
       metaDescription: '',
       status: 'draft',
     },
+    sourceSessionId: undefined,
   });
 
   // Product metadata state
@@ -259,6 +274,60 @@ Thanks!`,
     return obj;
   };
 
+  // Fetch Co-Pilot session data and map to SalesPageData format
+  const fetchCoPilotData = async (userId: string, sessionId: string): Promise<Partial<SalesPageData> | null> => {
+    try {
+      const sessionRef = doc(db, 'users', userId, 'productCoPilotSessions', sessionId);
+      const sessionSnap = await getDoc(sessionRef);
+      
+      if (!sessionSnap.exists()) {
+        console.error('Co-Pilot session not found:', sessionId);
+        return null;
+      }
+      
+      const sessionData = sessionSnap.data();
+      const productConfig = sessionData.productConfig;
+      
+      if (!productConfig) {
+        console.error('No product config in session:', sessionId);
+        return null;
+      }
+      
+      console.log('Loaded Co-Pilot data:', productConfig);
+      
+      // Map Co-Pilot productConfig to SalesPageData format
+      return {
+        coreInfo: {
+          name: productConfig.name || '',
+          tagline: '', // Not in Co-Pilot, user will add
+          price: productConfig.price || 0,
+          priceType: productConfig.priceType || 'one-time',
+          currency: productConfig.currency || 'USD',
+          compareAtPrice: undefined,
+          billingFrequency: 'monthly',
+          numberOfPayments: 3,
+          paymentFrequency: 'monthly',
+          tierType: productConfig.tierType,
+        },
+        valueProp: {
+          productType: undefined, // User can select in Step 2
+          description: productConfig.description || '',
+          benefits: productConfig.valueStack || [],
+          targetAudience: productConfig.targetAudience || '',
+          targetAudiencePrefix: 'Perfect for',
+          deliverables: [],
+          isUsingTemplate: false,
+          guarantees: productConfig.guarantees || [],
+          mission: productConfig.mission || '',
+        },
+        sourceSessionId: sessionId,
+      };
+    } catch (error) {
+      console.error('Error fetching Co-Pilot data:', error);
+      return null;
+    }
+  };
+
   // Initialize product and load data
   useEffect(() => {
     const init = async () => {
@@ -275,16 +344,45 @@ Thanks!`,
           let prodId = params?.productId as string;
 
           if (!prodId) {
-            // Create new product with unified structure
+            // Creating NEW sales page
             prodId = `product_${Date.now()}`;
             const productRef = doc(db, 'users', user.uid, 'products', prodId);
+            
+            // Check if we have Co-Pilot data to pre-fill
+            let initialSalesPageData = salesPageData;
+            
+            if (ideaId) {
+              console.log('Loading Co-Pilot data for ideaId:', ideaId);
+              const coPilotData = await fetchCoPilotData(user.uid, ideaId);
+              
+              if (coPilotData) {
+                // Merge Co-Pilot data with defaults
+                initialSalesPageData = {
+                  ...salesPageData,
+                  coreInfo: {
+                    ...salesPageData.coreInfo,
+                    ...coPilotData.coreInfo,
+                  },
+                  valueProp: {
+                    ...salesPageData.valueProp,
+                    ...coPilotData.valueProp,
+                  },
+                  sourceSessionId: coPilotData.sourceSessionId,
+                };
+                
+                setIsPrefilledFromCoPilot(true);
+                setSalesPageData(initialSalesPageData);
+                console.log('Pre-filled from Co-Pilot:', initialSalesPageData);
+              }
+            }
             
             await setDoc(productRef, cleanData({
               type: 'sales-page',
               createdAt: new Date(),
               lastUpdated: new Date(),
               published: false,
-              salesPage: salesPageData,
+              salesPage: initialSalesPageData,
+              sourceSessionId: ideaId || null, // Track origin at product level too
               delivery: {
               type: 'email-only',
               status: 'configured',
@@ -305,7 +403,7 @@ Thanks!`,
               }
             }));
 
-            console.log('Created new product:', prodId);
+            console.log('Created new product:', prodId, ideaId ? '(from Co-Pilot)' : '(blank)');
             navigate(`/products/${prodId}/landing/edit`, { replace: true });
           } else {
             // Load existing product
@@ -318,6 +416,11 @@ Thanks!`,
               // Load sales page data
               if (data.salesPage) {
                 setSalesPageData(data.salesPage);
+                
+                // Check if this was from Co-Pilot
+                if (data.sourceSessionId) {
+                  setIsPrefilledFromCoPilot(true);
+                }
               }
               
               // Load product metadata
@@ -357,7 +460,7 @@ Thanks!`
     };
 
     init();
-  }, [params?.productId, navigate]);
+  }, [params?.productId, ideaId, navigate]);
 
   // Auto-save functionality
   useEffect(() => {
@@ -435,11 +538,11 @@ Thanks!`
     // Validate required fields
     if (!canPublish) {
       alert('Please complete all required fields before publishing:\n\n' +
-        '✓ Product name and price\n' +
-        '✓ Product description\n' +
-        '✓ Header image\n' +
-        '✓ URL slug (Step 5)\n' +
-        '✓ SEO title and description (Step 5)'
+        'âœ“ Product name and price\n' +
+        'âœ“ Product description\n' +
+        'âœ“ Header image\n' +
+        'âœ“ URL slug (Step 5)\n' +
+        'âœ“ SEO title and description (Step 5)'
       );
       return;
     }
@@ -511,7 +614,7 @@ Thanks!`
         lastUpdated: new Date()
       }));
 
-      console.log('✅ Successfully published!');
+      console.log('âœ… Successfully published!');
       
       // Show success banner
       setPublishSuccess(true);
@@ -542,7 +645,7 @@ Thanks!`
     }
   };
 
-  // ✅ UPDATED: Removed thankYouMessage validation
+  // âœ… UPDATED: Removed thankYouMessage validation
   const canPublish = 
     salesPageData.coreInfo.name && 
     salesPageData.coreInfo.name.trim().length > 0 &&
@@ -654,7 +757,7 @@ Thanks!`
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-green-500" />
             <p className="text-sm text-green-500">
-              ✅ Successfully published! Redirecting to dashboard...
+              âœ… Successfully published! Redirecting to dashboard...
             </p>
           </div>
         </div>
@@ -667,6 +770,18 @@ Thanks!`
             <AlertCircle className="w-4 h-4 text-amber-500" />
             <p className="text-sm text-amber-500">
               You're moving forward with template content. Remember to customize it before publishing!
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Co-Pilot Pre-fill Banner */}
+      {isPrefilledFromCoPilot && currentStep === 1 && (
+        <div className="bg-purple-500/10 border-b border-purple-500/30 px-6 py-3">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-purple-400" />
+            <p className="text-sm text-purple-400">
+              Pre-filled from your Product Idea Co-Pilot. Review and customize as needed!
             </p>
           </div>
         </div>

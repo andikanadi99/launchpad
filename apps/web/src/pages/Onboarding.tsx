@@ -110,7 +110,7 @@ export default function Onboarding() {
       <div className="max-w-4xl mx-auto px-4 py-12">
         
         {/* Welcome Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-12" style={{marginBottom:'1rem'}}>
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20 dark:from-indigo-500/30 dark:to-purple-500/30 mb-6">
             <Rocket className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
           </div>
@@ -123,10 +123,6 @@ export default function Onboarding() {
             You're minutes away from launching your first digital product.
           </p>
           
-          <div className="inline-flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-2 rounded-full">
-            <Sparkles className="w-4 h-4" />
-            <span>Free account • No credit card required</span>
-          </div>
         </div>
 
         {/* Path Selection or Confirmation */}

@@ -32,7 +32,7 @@ function stripMarkdownFormatting(text: string): string {
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/_([^_]+)_/g, '$1')
     // Remove any remaining standalone asterisks at line starts (bullet points)
-    .replace(/^\s*\*\s+/gm, '• ')
+    .replace(/^\s*\*\s+/gm, '- ')
     // Clean up any double spaces
     .replace(/  +/g, ' ')
     .trim();
@@ -304,7 +304,7 @@ CRITICAL FORMATTING RULES (NEVER VIOLATE):
 - NEVER use asterisks (*) for any purpose - not for bold, not for bullets, not for emphasis
 - NEVER use markdown formatting of any kind
 - Write in plain text only
-- Use "•" if you need bullet points, never "*"
+- Use "-" if you need bullet points, never "*"
 - Use labels like "At work:" instead of bold headers`;
 
       let improvePrompt = `Original Answer: ${originalAnswer}
@@ -613,7 +613,7 @@ CRITICAL FORMATTING RULES (NEVER VIOLATE):
 - NEVER use asterisks (*) for any purpose - not for bold, not for bullets, not for emphasis
 - NEVER use markdown formatting of any kind (**bold**, *italic*, etc.)
 - Write in plain text only
-- Use "•" if you need bullet points, never "*"
+- Use "-" if you need bullet points, never "*"
 - Use labels like "At work:" or "For beginners:" instead of bold headers
 
 Avoid:
@@ -898,7 +898,7 @@ RULES:
 /* 
   Purpose: Generates optimized product idea using Claude AI based on Co-Pilot answers.
   Uses $100M Offers principles (without mentioning the book):
-  - Value = Dream Outcome × Perceived Likelihood / Time Delay × Effort
+  - Value = Dream Outcome x Perceived Likelihood / Time Delay x Effort
   - Value stacking
   - Risk reversal guarantees
   - Specificity beats vagueness
@@ -1031,7 +1031,7 @@ export const generateProductIdea = onRequest(
 
 Your approach to creating valuable products:
 
-1. VALUE EQUATION: Value = (Dream Outcome × Perceived Likelihood) / (Time Delay × Effort Required)
+1. VALUE EQUATION: Value = (Dream Outcome x Perceived Likelihood) / (Time Delay x Effort Required)
    - Maximize the dream outcome and likelihood of success
    - Minimize time to results and effort required from customer
 
@@ -1236,6 +1236,584 @@ Return ONLY the JSON object, nothing else.`;
       res.status(500).json({ 
         data: {
           error: 'Failed to generate product idea. Please try again.',
+          details: (error as any).message 
+        }
+      });
+    }
+  }
+);
+
+/*
+  ============================================================================
+  AI SALES COPYWRITER
+  ============================================================================
+  Purpose: Generates and enhances sales copy for product pages.
+  Uses value-focused principles to maximize perceived value.
+  
+  Actions:
+  - generateHeadline: Creates compelling headline from product info
+  - generateTagline: Creates subheadline with time/effort focus
+  - generateDescription: Concise product description (what it is, who it's for, key outcome)
+  - enhanceBenefits: Transforms features into outcomes
+  - suggestGuarantees: Generates risk reversal options
+  - suggestCTA: Suggests call-to-action button text
+  - generateAll: Complete copy package in one call
+*/
+export const generateSalesCopy = onRequest(
+  { 
+    secrets: [claudeApiKey], 
+    cors: true,
+    region: "us-central1",
+    maxInstances: 10,
+  },
+  async (req, res) => {
+    console.log('generateSalesCopy function called');
+    
+    // Handle CORS preflight
+    if (req.method === 'OPTIONS') {
+      res.set('Access-Control-Allow-Origin', '*');
+      res.set('Access-Control-Allow-Methods', 'POST');
+      res.set('Access-Control-Allow-Headers', 'Content-Type');
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    try {
+      // Extract request data (handle callable function wrapper)
+      let requestData = req.body;
+      if (req.body.data) {
+        requestData = req.body.data;
+      }
+
+      const { 
+        action,           // Which generation to perform
+        productConfig,    // Full product config from Co-Pilot or form
+        // Individual fields for specific actions
+        name,
+        description,
+        price,
+        benefits,
+        targetAudience,
+        productType,
+        guarantees,
+      } = requestData;
+
+      if (!action) {
+        res.status(400).json({ 
+          data: { error: 'Missing required field: action' }
+        });
+        return;
+      }
+
+      console.log('Action requested:', action);
+
+      // Initialize Anthropic client
+      const anthropic = new Anthropic({
+        apiKey: claudeApiKey.value(),
+      });
+
+      // ========================================
+      // SYSTEM PROMPT: Value-Focused Copywriting
+      // ========================================
+      const systemPrompt = `You are an expert sales copywriter who creates high-converting product descriptions. Your copy focuses on VALUE and TRANSFORMATION, not features.
+
+CORE PRINCIPLES:
+1. Lead with the DREAM OUTCOME - what transformation will they achieve?
+2. Minimize perceived TIME - how fast will they get results?
+3. Minimize perceived EFFORT - how easy is the process?
+4. Maximize BELIEVABILITY - why should they trust this works?
+
+WRITING RULES:
+- Write in second person ("you" not "they")
+- Be specific with numbers and timeframes when possible
+- Focus on outcomes, not features
+- Use plain, conversational language
+- Be professional but not corporate
+- Never use hype words like "amazing", "incredible", "revolutionary"
+- Never use markdown formatting (no asterisks, no bold, no headers)
+- Keep sentences punchy and scannable
+
+TRANSFORMATION FORMULA:
+- Feature: What it IS → Outcome: What it DOES → Dream: What they BECOME
+
+Example:
+- Feature: "50 video lessons"
+- Outcome: "Learn step-by-step at your own pace"
+- Dream: "Become job-ready in 90 days"
+
+Always write the DREAM version, not the feature.`;
+
+      let result: any = {};
+
+      // ========================================
+      // ACTION: generateHeadline
+      // ========================================
+      if (action === 'generateHeadline' || action === 'generateAll') {
+        const headlinePrompt = `Create a compelling headline for this product:
+
+Product Name: ${productConfig?.name || name}
+Target Audience: ${productConfig?.targetAudience || targetAudience || 'Not specified'}
+Product Type: ${productConfig?.productType || productType || 'digital product'}
+Price: $${productConfig?.price || price || 0}
+Description: ${productConfig?.description || description || 'Not provided'}
+
+Write a headline that:
+1. Calls out the dream outcome (what they'll achieve)
+2. Is specific about the result
+3. Is 10 words or less
+4. Does NOT mention the product name directly
+
+Return ONLY the headline text, nothing else.`;
+
+        const headlineResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 100,
+          messages: [
+            { role: 'user', content: headlinePrompt }
+          ],
+          system: systemPrompt,
+        });
+
+        const headline = (headlineResponse.content[0] as any).text?.trim();
+        result.headline = stripMarkdownFormatting(headline);
+      }
+
+      // ========================================
+      // ACTION: generateTagline
+      // ========================================
+      if (action === 'generateTagline' || action === 'generateAll') {
+        const taglinePrompt = `Create a tagline for this product:
+
+Product: ${productConfig?.name || name}
+Audience: ${productConfig?.targetAudience || targetAudience || 'Not specified'}
+
+Format: "[Result] in [time] - without [struggle]"
+LIMIT: Under 80 characters. Be punchy.
+
+Return ONLY the tagline, nothing else.`;
+
+        const taglineResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 50,
+          messages: [
+            { role: 'user', content: taglinePrompt }
+          ],
+          system: systemPrompt,
+        });
+
+        const tagline = (taglineResponse.content[0] as any).text?.trim();
+        result.tagline = stripMarkdownFormatting(tagline);
+      }
+
+      // ========================================
+      // ACTION: generateDescription
+      // ========================================
+      if (action === 'generateDescription' || action === 'generateAll') {
+        const descPrompt = `Write a short product description (MAXIMUM 200 characters):
+
+Product: ${productConfig?.name || name}
+Audience: ${productConfig?.targetAudience || targetAudience || 'Not specified'}
+
+Write 2 sentences max:
+1. What it is and who it's for
+2. The key outcome
+
+HARD LIMIT: 200 characters. Count carefully. Be concise.
+
+Return ONLY the description, nothing else.`;
+
+        const descResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 100,
+          messages: [
+            { role: 'user', content: descPrompt }
+          ],
+          system: systemPrompt,
+        });
+
+        const desc = (descResponse.content[0] as any).text?.trim();
+        result.description = stripMarkdownFormatting(desc);
+      }
+
+      // ========================================
+      // ACTION: enhanceBenefits
+      // ========================================
+      if (action === 'enhanceBenefits' || action === 'generateAll') {
+        const benefitsToEnhance = productConfig?.valueStack || benefits || [];
+        
+        if (benefitsToEnhance.length > 0) {
+          const benefitsPrompt = `Improve these product benefits to be more compelling:
+
+Current Benefits:
+${benefitsToEnhance.map((b: string, i: number) => `${i + 1}. ${b}`).join('\n')}
+
+Product: ${productConfig?.name || name}
+
+Rules:
+1. Make each outcome-focused (what they GET, not what's included)
+2. STRICT LIMIT: Each benefit must be under 80 characters
+3. Be specific but concise
+4. No fluff or filler words
+
+Return ONLY a JSON array with the same number of benefits:
+["Benefit 1", "Benefit 2", ...]
+
+No explanation, just the JSON array.`;
+
+          const benefitsResponse = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 400,
+            messages: [
+              { role: 'user', content: benefitsPrompt }
+            ],
+            system: systemPrompt,
+          });
+
+          const benefitsText = (benefitsResponse.content[0] as any).text?.trim();
+          try {
+            // Extract JSON array from response
+            const jsonMatch = benefitsText.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              result.benefits = JSON.parse(jsonMatch[0]);
+            } else {
+              result.benefits = benefitsToEnhance; // Fallback to original
+            }
+          } catch {
+            result.benefits = benefitsToEnhance; // Fallback to original
+          }
+        } else {
+          result.benefits = [];
+        }
+      }
+
+      // ========================================
+      // ACTION: suggestBenefits
+      // ========================================
+      if (action === 'suggestBenefits') {
+        const existingBenefits = productConfig?.valueStack || benefits || [];
+        
+        const benefitPrompt = `Suggest 3 things to include in this product:
+
+Product: ${productConfig?.name || name}
+
+Rules:
+1. Each benefit under 60 characters
+2. Be specific (add numbers if relevant)
+3. Different from: ${existingBenefits.length > 0 ? existingBenefits.join(', ') : 'N/A'}
+
+Examples: "50+ video lessons", "Downloadable templates", "Private community access"
+
+Return ONLY a JSON array:
+["Benefit 1", "Benefit 2", "Benefit 3"]`;
+
+        const benefitResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 200,
+          messages: [
+            { role: 'user', content: benefitPrompt }
+          ],
+          system: systemPrompt,
+        });
+
+        const benefitText = (benefitResponse.content[0] as any).text?.trim();
+        try {
+          const jsonMatch = benefitText.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            result.benefits = JSON.parse(jsonMatch[0]);
+          } else {
+            result.benefits = ['Step-by-step training videos', 'Downloadable resources', 'Lifetime access'];
+          }
+        } catch {
+          result.benefits = ['Step-by-step training videos', 'Downloadable resources', 'Lifetime access'];
+        }
+      }
+
+      // ========================================
+      // ACTION: suggestGuarantees
+      // ========================================
+      if (action === 'suggestGuarantees' || action === 'generateAll') {
+        const existingGuarantees = productConfig?.guarantees || guarantees || [];
+        
+        const guaranteePrompt = `Suggest 3 guarantees for this product:
+
+Product: ${productConfig?.name || name}
+Price: $${productConfig?.price || price || 0}
+
+Rules:
+1. Each guarantee under 80 characters
+2. Be specific with timeframes
+3. Different from: ${existingGuarantees.length > 0 ? existingGuarantees.join(', ') : 'N/A'}
+
+Examples: "30-day full refund, no questions", "Lifetime access + free updates", "1-on-1 support until you succeed"
+
+Return ONLY a JSON array:
+["Guarantee 1", "Guarantee 2", "Guarantee 3"]`;
+
+        const guaranteeResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 200,
+          messages: [
+            { role: 'user', content: guaranteePrompt }
+          ],
+          system: systemPrompt,
+        });
+
+        const guaranteeText = (guaranteeResponse.content[0] as any).text?.trim();
+        try {
+          const jsonMatch = guaranteeText.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            result.guarantees = JSON.parse(jsonMatch[0]);
+          } else {
+            result.guarantees = ['30-day money-back guarantee', 'Lifetime access included', 'Free updates forever'];
+          }
+        } catch {
+          result.guarantees = ['30-day money-back guarantee', 'Lifetime access included', 'Free updates forever'];
+        }
+      }
+
+      // ========================================
+      // ACTION: enhanceGuarantees
+      // ========================================
+      if (action === 'enhanceGuarantees') {
+        const existingGuarantees = guarantees || productConfig?.guarantees || [];
+        
+        if (existingGuarantees.length === 0) {
+          result.guarantees = [];
+        } else {
+          const enhancePrompt = `Improve these guarantees to be more compelling:
+
+Product: ${productConfig?.name || name}
+
+Current Guarantees:
+${existingGuarantees.map((g: string, i: number) => `${i + 1}. ${g}`).join('\n')}
+
+Rules:
+1. Add specific timeframes or outcomes
+2. Be confident and bold
+3. STRICT LIMIT: Each guarantee must be under 100 characters
+4. No fluff - be direct
+
+Return ONLY a JSON array with the same number of guarantees:
+["Guarantee 1", "Guarantee 2"]
+
+No explanation, just the JSON array.`;
+
+          const enhanceResponse = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 300,
+            messages: [
+              { role: 'user', content: enhancePrompt }
+            ],
+            system: systemPrompt,
+          });
+
+          const enhanceText = (enhanceResponse.content[0] as any).text?.trim();
+          try {
+            const jsonMatch = enhanceText.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              result.guarantees = JSON.parse(jsonMatch[0]);
+            } else {
+              result.guarantees = existingGuarantees;
+            }
+          } catch {
+            result.guarantees = existingGuarantees;
+          }
+        }
+      }
+
+      // ========================================
+      // ACTION: suggestCTA
+      // ========================================
+      if (action === 'suggestCTA' || action === 'generateAll') {
+        const ctaPrompt = `Suggest call-to-action button text for this product:
+
+Product: ${productConfig?.name || name}
+Price: $${productConfig?.price || price || 0}
+Product Type: ${productConfig?.productType || productType || 'digital product'}
+Is Free: ${(productConfig?.price || price || 0) === 0 ? 'Yes' : 'No'}
+
+Create 5 CTA options that:
+1. Create urgency or excitement
+2. Focus on what they GET (not what they pay)
+3. Are 2-4 words each
+4. Match the product type
+
+Return ONLY a JSON array of 5 CTAs, like:
+["CTA 1", "CTA 2", "CTA 3", "CTA 4", "CTA 5"]
+
+No explanation, just the JSON array.`;
+
+        const ctaResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 200,
+          messages: [
+            { role: 'user', content: ctaPrompt }
+          ],
+          system: systemPrompt,
+        });
+
+        const ctaText = (ctaResponse.content[0] as any).text?.trim();
+        try {
+          const jsonMatch = ctaText.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            result.ctaSuggestions = JSON.parse(jsonMatch[0]);
+          } else {
+            result.ctaSuggestions = ['Get Instant Access', 'Start Now', 'Get Started', 'Join Now', 'Download Now'];
+          }
+        } catch {
+          result.ctaSuggestions = ['Get Instant Access', 'Start Now', 'Get Started', 'Join Now', 'Download Now'];
+        }
+      }
+
+      // ========================================
+      // ACTION: enhanceSingle (for individual benefit/guarantee improvement)
+      // ========================================
+      if (action === 'enhanceSingle') {
+        const { textToEnhance, fieldType } = requestData;
+        
+        if (!textToEnhance) {
+          res.status(400).json({ 
+            data: { error: 'Missing required field: textToEnhance' }
+          });
+          return;
+        }
+
+        const fieldConfig = {
+          benefit: { 
+            instruction: 'Make it outcome-focused - what specific result will they get?',
+            maxLength: '80 characters max'
+          },
+          guarantee: { 
+            instruction: 'Make it bold, specific with timeframes, and show confidence',
+            maxLength: '100 characters max'
+          },
+          headline: { 
+            instruction: 'Make it attention-grabbing and benefit-driven',
+            maxLength: '60 characters max'
+          },
+          tagline: { 
+            instruction: 'Make it memorable and value-focused',
+            maxLength: '80 characters max'
+          },
+          description: { 
+            instruction: 'Make it clear about what they get and why it matters',
+            maxLength: '250 characters max (2-3 sentences)'
+          },
+        };
+
+        const config = fieldConfig[fieldType as keyof typeof fieldConfig] || { 
+          instruction: 'Make it more compelling', 
+          maxLength: '100 characters max' 
+        };
+
+        const enhancePrompt = `Improve this ${fieldType || 'text'} for a sales page:
+
+Original: "${textToEnhance}"
+Product: ${productConfig?.name || name || 'Not specified'}
+
+Make it: ${config.instruction}
+
+CRITICAL LENGTH LIMIT: ${config.maxLength}. Do NOT exceed this. Be concise.
+
+Return ONLY the improved text, nothing else.`;
+
+        const enhanceResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 150,
+          messages: [
+            { role: 'user', content: enhancePrompt }
+          ],
+          system: systemPrompt,
+        });
+
+        const enhanced = (enhanceResponse.content[0] as any).text?.trim();
+        result.enhanced = stripMarkdownFormatting(enhanced);
+      }
+
+      // ========================================
+      // ACTION: improveSeoTitle
+      // ========================================
+      if (action === 'improveSeoTitle') {
+        const { currentTitle } = requestData;
+        
+        const seoTitlePrompt = `Optimize this SEO meta title for better search rankings:
+
+Current: "${currentTitle}"
+Product: ${productConfig?.name || name}
+
+Rules:
+1. STRICT LIMIT: 60 characters max
+2. Include main keyword near the start
+3. Make it compelling to click
+4. No clickbait or ALL CAPS
+
+Return ONLY the optimized title, nothing else.`;
+
+        const titleResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 50,
+          messages: [
+            { role: 'user', content: seoTitlePrompt }
+          ],
+          system: systemPrompt,
+        });
+
+        const title = (titleResponse.content[0] as any).text?.trim();
+        result.title = stripMarkdownFormatting(title).substring(0, 60);
+      }
+
+      // ========================================
+      // ACTION: improveSeoDescription
+      // ========================================
+      if (action === 'improveSeoDescription') {
+        const { currentDescription } = requestData;
+        
+        const seoDescPrompt = `Optimize this SEO meta description for better click-through rates:
+
+Current: "${currentDescription}"
+Product: ${productConfig?.name || name}
+
+Rules:
+1. STRICT LIMIT: 160 characters max
+2. Include a clear value proposition
+3. Add a subtle call-to-action
+4. Make searchers want to click
+
+Return ONLY the optimized description, nothing else.`;
+
+        const descResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 80,
+          messages: [
+            { role: 'user', content: seoDescPrompt }
+          ],
+          system: systemPrompt,
+        });
+
+        const desc = (descResponse.content[0] as any).text?.trim();
+        result.description = stripMarkdownFormatting(desc).substring(0, 160);
+      }
+
+      console.log('Sales copy generated successfully for action:', action);
+
+      res.json({
+        data: {
+          success: true,
+          action,
+          ...result,
+        }
+      });
+
+    } catch (error) {
+      console.error("Error generating sales copy:", error);
+      res.status(500).json({ 
+        data: {
+          error: 'Failed to generate sales copy. Please try again.',
           details: (error as any).message 
         }
       });

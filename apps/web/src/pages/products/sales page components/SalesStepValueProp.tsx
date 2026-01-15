@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { AlertCircle, Plus, X, Sparkles, RotateCcw, GripVertical, Edit2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { AlertCircle, Plus, X, Sparkles, RotateCcw, GripVertical, Edit2, Loader, Wand2, GraduationCap, BookOpen, Target, LayoutTemplate, Users, FileEdit } from 'lucide-react';
+
+// Import AI Copywriter
+import { aiCopywriter, ProductConfig } from '../../../lib/aiSalesCopyWriter';
 
 // Data interface
 interface ValuePropData {
@@ -149,6 +152,26 @@ export default function SalesStepValueProp({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [editingPrefix, setEditingPrefix] = useState<boolean>(false);
   const [customPrefix, setCustomPrefix] = useState<string | null>(null);
+
+  // AI Loading States
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  const [isEnhancingAllBenefits, setIsEnhancingAllBenefits] = useState(false);
+  const [enhancingBenefitIndex, setEnhancingBenefitIndex] = useState<number | null>(null);
+
+  // Ref for auto-expanding textarea
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize description textarea when content changes
+  useEffect(() => {
+    const textarea = descriptionRef.current;
+    if (textarea) {
+      // Temporarily set to auto to get true scrollHeight
+      textarea.style.height = 'auto';
+      // Calculate new height (minimum 120px, add padding for comfort)
+      const newHeight = Math.max(120, textarea.scrollHeight + 4);
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, [localData.description]);
 
   // Update placeholder status whenever data changes
   useEffect(() => {
@@ -343,6 +366,103 @@ export default function SalesStepValueProp({
     setDraggedIndex(null);
   };
 
+  // ============================================
+  // AI HANDLERS
+  // ============================================
+  
+  // Helper to build ProductConfig for AI calls
+  const getProductConfig = (): ProductConfig => ({
+    name: productName,
+    description: localData.description,
+    valueStack: localData.benefits.filter(b => b.trim().length > 0),
+    targetAudience: localData.targetAudience,
+    productType: localData.productType,
+  });
+
+  // Generate Description with AI
+  const handleGenerateDescription = async () => {
+    if (!productName) {
+      alert('Please enter a product name in Step 1 first');
+      return;
+    }
+    
+    setIsGeneratingDescription(true);
+    try {
+      const result = await aiCopywriter.generateDescription(getProductConfig());
+      if (result.success && result.description) {
+        setLocalData(prev => ({
+          ...prev,
+          description: result.description!,
+          placeholderStatus: {
+            ...prev.placeholderStatus!,
+            description: false,
+          }
+        }));
+      } else {
+        console.error('Failed to generate description:', result.error);
+      }
+    } catch (error) {
+      console.error('Error generating description:', error);
+    } finally {
+      setIsGeneratingDescription(false);
+    }
+  };
+
+  // Enhance All Benefits with AI
+  const handleEnhanceAllBenefits = async () => {
+    const validBenefits = localData.benefits.filter(b => b.trim().length > 0);
+    if (validBenefits.length === 0) {
+      alert('Please add some benefits first');
+      return;
+    }
+    
+    setIsEnhancingAllBenefits(true);
+    try {
+      const result = await aiCopywriter.enhanceBenefits(validBenefits, getProductConfig());
+      if (result.success && result.benefits) {
+        setLocalData(prev => ({
+          ...prev,
+          benefits: result.benefits!,
+          placeholderStatus: {
+            ...prev.placeholderStatus!,
+            benefits: false,
+          }
+        }));
+      } else {
+        console.error('Failed to enhance benefits:', result.error);
+      }
+    } catch (error) {
+      console.error('Error enhancing benefits:', error);
+    } finally {
+      setIsEnhancingAllBenefits(false);
+    }
+  };
+
+  // Enhance Single Benefit with AI
+  const handleEnhanceSingleBenefit = async (index: number) => {
+    const benefit = localData.benefits[index];
+    if (!benefit || benefit.trim().length === 0) return;
+    
+    setEnhancingBenefitIndex(index);
+    try {
+      const result = await aiCopywriter.enhanceSingle(benefit, 'benefit', getProductConfig());
+      if (result.success && result.enhanced) {
+        const newBenefits = [...localData.benefits];
+        newBenefits[index] = result.enhanced;
+        setLocalData(prev => ({
+          ...prev,
+          benefits: newBenefits
+        }));
+      } else {
+        console.error('Failed to enhance benefit:', result.error);
+      }
+    } catch (error) {
+      console.error('Error enhancing benefit:', error);
+    } finally {
+      setEnhancingBenefitIndex(null);
+    }
+  };
+
   // Check if we should show warnings
   const showPlaceholderWarnings = localData.placeholderStatus?.hasAny || false;
 
@@ -362,12 +482,12 @@ export default function SalesStepValueProp({
         </label>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { id: 'course', label: 'Online Course', icon: '🎓' },
-            { id: 'ebook', label: 'Ebook/Guide', icon: '📚' },
-            { id: 'coaching', label: 'Coaching', icon: '🎯' },
-            { id: 'templates', label: 'Templates', icon: '📋' },
-            { id: 'community', label: 'Community', icon: '👥' },
-            { id: 'custom', label: 'Start Blank', icon: '✨' }
+            { id: 'course', label: 'Online Course', Icon: GraduationCap },
+            { id: 'ebook', label: 'Ebook/Guide', Icon: BookOpen },
+            { id: 'coaching', label: 'Coaching', Icon: Target },
+            { id: 'templates', label: 'Templates', Icon: LayoutTemplate },
+            { id: 'community', label: 'Community', Icon: Users },
+            { id: 'custom', label: 'Start Blank', Icon: FileEdit }
           ].map((type) => (
             <button
               key={type.id}
@@ -378,8 +498,8 @@ export default function SalesStepValueProp({
                   : 'border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900/50'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{type.icon}</span>
+            <div className="flex items-center gap-3">
+                <type.Icon className="w-6 h-6" />
                 <span className="text-sm font-medium">{type.label}</span>
               </div>
             </button>
@@ -399,49 +519,82 @@ export default function SalesStepValueProp({
 
       {/* Description - REQUIRED */}
       <div>
-        <label className="block text-sm font-medium mb-2">
-          Product Description
-          <span className="text-red-500 ml-1">*</span>
-          {localData.placeholderStatus?.description && (
-            <span className="ml-3 text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
-              Has placeholders
-            </span>
-          )}
-        </label>
-        <div className="relative">
+        <div className="flex justify-between items-center mb-2">
+          <label className="block text-sm font-medium">
+            Product Description
+            <span className="text-red-500 ml-1">*</span>
+            {localData.placeholderStatus?.description && (
+              <span className="ml-3 text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
+                Has placeholders
+              </span>
+            )}
+          </label>
+          <button
+            onClick={handleGenerateDescription}
+            disabled={isGeneratingDescription || !productName}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isGeneratingDescription ? (
+              <Loader className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            Generate
+          </button>
+        </div>
+        <div>
           <textarea
+            ref={descriptionRef}
             value={localData.description}
             onChange={(e) => updateField('description', e.target.value)}
             placeholder={`Describe what ${productName || 'your product'} is and the main outcome customers will achieve...`}
-            rows={3}
-            className="w-full px-4 py-3 bg-neutral-900 rounded-lg border border-neutral-800 focus:border-blue-500 focus:outline-none resize-none"
+            className="w-full px-4 py-3 bg-neutral-900 rounded-lg border border-neutral-800 focus:border-blue-500 focus:outline-none resize-none overflow-y-auto"
+            style={{ minHeight: '120px' }}
             maxLength={1000}
           />
-          <div className="absolute bottom-2 right-2 text-xs text-neutral-500">
-            {localData.description.length}/1000
+          <div className="flex justify-between items-center mt-1">
+            <p className="text-xs text-neutral-500">
+              2-3 sentences. What is it + who it helps + main outcome
+            </p>
+            <span className="text-xs text-neutral-500">
+              {localData.description.length}/1000
+            </span>
           </div>
         </div>
-        <p className="text-xs text-neutral-500 mt-1">
-          2-3 sentences. What is it + who it helps + main outcome
-        </p>
       </div>
 
       {/* Benefits - RECOMMENDED */}
       <div id="benefits-section">
-        <label className="block text-sm font-medium mb-2">
-          Key Benefits
-          <span className="text-neutral-500 ml-2 text-xs font-normal">(Recommended - what customers get)</span>
-          {localData.placeholderStatus?.benefits && (
-            <span className="ml-3 text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
-              Has placeholders
-            </span>
+        <div className="flex justify-between items-center mb-2">
+          <label className="block text-sm font-medium">
+            Key Benefits
+            <span className="text-neutral-500 ml-2 text-xs font-normal">(Recommended - what customers get)</span>
+            {localData.placeholderStatus?.benefits && (
+              <span className="ml-3 text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded">
+                Has placeholders
+              </span>
+            )}
+            {localData.benefits.length > 0 && (
+              <span className="ml-3 text-xs text-neutral-400">
+                {localData.benefits.length}/10
+              </span>
+            )}
+          </label>
+          {localData.benefits.filter(b => b.trim().length > 0).length > 0 && (
+            <button
+              onClick={handleEnhanceAllBenefits}
+              disabled={isEnhancingAllBenefits}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isEnhancingAllBenefits ? (
+                <Loader className="w-4 h-4 animate-spin" />
+              ) : (
+                <Wand2 className="w-4 h-4" />
+              )}
+              Improve All
+            </button>
           )}
-          {localData.benefits.length > 0 && (
-            <span className="ml-3 text-xs text-neutral-400">
-              {localData.benefits.length}/10
-            </span>
-          )}
-        </label>
+        </div>
         
         {localData.benefits.length === 0 ? (
           <div className="text-center py-8 border-2 border-dashed border-neutral-800 rounded-lg">
@@ -480,6 +633,19 @@ export default function SalesStepValueProp({
                   } focus:border-blue-500 focus:outline-none text-sm`}
                   maxLength={200}
                 />
+                {/* AI Improve Single Benefit */}
+                <button
+                  onClick={() => handleEnhanceSingleBenefit(index)}
+                  disabled={enhancingBenefitIndex === index || !benefit.trim()}
+                  className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-purple-600/20 text-purple-400 rounded transition-all disabled:opacity-50"
+                  title="Improve"
+                >
+                  {enhancingBenefitIndex === index ? (
+                    <Loader className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                </button>
                 <button
                   onClick={() => removeBenefit(index)}
                   className="opacity-0 group-hover:opacity-100 p-1 hover:bg-neutral-800 rounded transition-all"
@@ -646,13 +812,13 @@ export default function SalesStepValueProp({
           </p>
           <ul className="text-xs text-neutral-400 mt-2 space-y-1">
             {localData.placeholderStatus?.description && (
-              <li>• Description has placeholders</li>
+              <li>â€¢ Description has placeholders</li>
             )}
             {localData.placeholderStatus?.benefits && (
-              <li>• Some benefits have placeholders</li>
+              <li>â€¢ Some benefits have placeholders</li>
             )}
             {localData.placeholderStatus?.targetAudience && (
-              <li>• Target audience has placeholders</li>
+              <li>â€¢ Target audience has placeholders</li>
             )}
           </ul>
         </div>

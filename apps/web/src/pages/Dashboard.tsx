@@ -17,7 +17,6 @@ import {
   DollarSign,
   FileText,
   Rocket,
-  Lock,
   ChevronRight,
   Sparkles
 } from 'lucide-react';
@@ -129,13 +128,13 @@ export default function Dashboard() {
   const getTierInfo = (tierType: string) => {
     switch (tierType) {
       case 'low':
-        return { label: 'Quick Win', color: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30' };
+        return { label: 'Quick Win', color: 'bg-green-950/30 text-green-400 border-green-800/30' };
       case 'mid':
-        return { label: 'Core Offer', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30' };
+        return { label: 'Core Offer', color: 'bg-blue-950/30 text-blue-400 border-blue-800/30' };
       case 'high':
-        return { label: 'Premium', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30' };
+        return { label: 'Premium', color: 'bg-purple-950/30 text-purple-400 border-purple-800/30' };
       default:
-        return { label: 'Custom', color: 'bg-[hsl(var(--border))] text-[hsl(var(--muted))] border-[hsl(var(--border))]' };
+        return { label: 'Custom', color: 'bg-neutral-800 text-neutral-400 border-neutral-700' };
     }
   };
 
@@ -179,39 +178,30 @@ export default function Dashboard() {
     }
   };
 
-  // Create sales page from idea (PAID FEATURE)
+  // Create sales page from idea
   const createSalesPage = (idea: ProductIdea) => {
-    // TODO: Check if user has paid subscription
-    const isPaidUser = false; // Replace with actual check
-    
-    if (!isPaidUser) {
-      // Show upgrade modal
-      alert('Creating a Sales Page is a premium feature. Upgrade to unlock!');
-      return;
-    }
-    
     // Navigate to sales page builder with idea data
     navigate(`/products/sales?ideaId=${idea.id}`);
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[hsl(var(--bg))] flex items-center justify-center">
-      <div className="text-[hsl(var(--fg))]/60">Loading...</div>
+    <div className="min-h-screen bg-[#0B0B0D] flex items-center justify-center">
+      <div className="text-neutral-400">Loading...</div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--bg))] text-[hsl(var(--fg))] p-6">
+    <div className="min-h-screen bg-[#0B0B0D] text-neutral-100 p-6">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold">Dashboard</h1>
-            <p className="text-[hsl(var(--muted))] mt-1">Manage your product ideas and sales pages</p>
+            <p className="text-neutral-400 mt-1">Manage your product ideas and sales pages</p>
           </div>
           <Link
             to="/product-idea-copilot"
-            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium flex items-center gap-2 text-white"
+            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium flex items-center gap-2"
           >
             <Sparkles className="w-5 h-5" />
             New Product Idea
@@ -220,31 +210,31 @@ export default function Dashboard() {
 
         {/* Info Banner */}
         {showInfoBanner && completedIdeas.length === 0 && (
-          <div className="mb-6 bg-purple-500/10 border border-purple-500/30 rounded-lg p-5">
+          <div className="mb-6 bg-purple-950/30 border border-purple-800/30 rounded-lg p-5">
             <div className="flex items-start gap-3">
-              <Lightbulb className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
+              <Lightbulb className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="font-semibold text-purple-700 dark:text-purple-300 mb-2">Welcome to LaunchPad!</h3>
-                <div className="text-sm text-purple-700/80 dark:text-purple-200/80 space-y-2">
+                <h3 className="font-semibold text-purple-300 mb-2">Welcome to LaunchPad!</h3>
+                <div className="text-sm text-purple-200/80 space-y-2">
                   <p>
-                    <strong className="text-purple-700 dark:text-purple-300">Step 1:</strong> Use the Product Idea Co-Pilot to discover what to sell
+                    <strong className="text-purple-300">Step 1:</strong> Use the Product Idea Co-Pilot to discover what to sell
                   </p>
                   <p>
-                    <strong className="text-purple-700 dark:text-purple-300">Step 2:</strong> Refine your product idea with pricing and details
+                    <strong className="text-purple-300">Step 2:</strong> Refine your product idea with pricing and details
                   </p>
                   <p>
-                    <strong className="text-purple-700 dark:text-purple-300">Step 3:</strong> Create a professional sales page (Premium)
+                    <strong className="text-purple-300">Step 3:</strong> Create a professional sales page and start selling
                   </p>
-                  <p className="text-xs text-purple-700 dark:text-purple-600/60 dark:text-purple-300/60 mt-3">
-                    ðŸ’¡ Start with the Product Idea Co-Pilot - it's free and takes just 5 minutes!
+                  <p className="text-xs text-purple-300/60 mt-3">
+                    Start with the Product Idea Co-Pilot - it's free and takes just 5 minutes!
                   </p>
                 </div>
               </div>
               <button
                 onClick={dismissInfoBanner}
-                className="p-1 hover:bg-purple-500/20 rounded transition-colors"
+                className="p-1 hover:bg-purple-900/30 rounded transition-colors"
               >
-                <X className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <X className="w-4 h-4 text-purple-400" />
               </button>
             </div>
           </div>
@@ -252,35 +242,35 @@ export default function Dashboard() {
 
         {/* Stats Overview */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-[hsl(var(--card))] rounded-lg p-5 border border-[hsl(var(--border))]">
-            <p className="text-[hsl(var(--muted))] text-sm mb-1">Product Ideas</p>
+          <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
+            <p className="text-neutral-400 text-sm mb-1">Product Ideas</p>
             <p className="text-3xl font-bold">{totals.ideas}</p>
           </div>
-          <div className="bg-[hsl(var(--card))] rounded-lg p-5 border border-[hsl(var(--border))]">
-            <p className="text-[hsl(var(--muted))] text-sm mb-1">Sales Pages</p>
+          <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
+            <p className="text-neutral-400 text-sm mb-1">Sales Pages</p>
             <p className="text-3xl font-bold">{totals.products}</p>
-            <p className="text-xs text-[hsl(var(--muted-fg))]">{totals.published} published</p>
+            <p className="text-xs text-neutral-500">{totals.published} published</p>
           </div>
-          <div className="bg-[hsl(var(--card))] rounded-lg p-5 border border-[hsl(var(--border))]">
-            <p className="text-[hsl(var(--muted))] text-sm mb-1">Total Sales</p>
-            <p className="text-3xl font-bold text-green-500">{totals.sales}</p>
+          <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
+            <p className="text-neutral-400 text-sm mb-1">Total Sales</p>
+            <p className="text-3xl font-bold text-green-400">{totals.sales}</p>
           </div>
-          <div className="bg-[hsl(var(--card))] rounded-lg p-5 border border-[hsl(var(--border))]">
-            <p className="text-[hsl(var(--muted))] text-sm mb-1">Revenue</p>
-            <p className="text-3xl font-bold text-green-500">
+          <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
+            <p className="text-neutral-400 text-sm mb-1">Revenue</p>
+            <p className="text-3xl font-bold text-green-400">
               ${totals.revenue.toFixed(2)}
             </p>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-[hsl(var(--border))]">
+        <div className="flex gap-2 mb-6 border-b border-neutral-800">
           <button
             onClick={() => setActiveTab('ideas')}
             className={`px-4 py-3 font-medium transition-colors relative ${
               activeTab === 'ideas' 
-                ? 'text-purple-500' 
-                : 'text-[hsl(var(--muted))] hover:text-[hsl(var(--fg))]'
+                ? 'text-purple-400' 
+                : 'text-neutral-400 hover:text-neutral-300'
             }`}
           >
             <div className="flex items-center gap-2">
@@ -300,15 +290,15 @@ export default function Dashboard() {
             onClick={() => setActiveTab('products')}
             className={`px-4 py-3 font-medium transition-colors relative ${
               activeTab === 'products' 
-                ? 'text-purple-500' 
-                : 'text-[hsl(var(--muted))] hover:text-[hsl(var(--fg))]'
+                ? 'text-purple-400' 
+                : 'text-neutral-400 hover:text-neutral-300'
             }`}
           >
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4" />
               Sales Pages
               {products.length > 0 && (
-                <span className="bg-[hsl(var(--border))] text-[hsl(var(--fg))] text-xs px-2 py-0.5 rounded-full">
+                <span className="bg-neutral-700 text-neutral-300 text-xs px-2 py-0.5 rounded-full">
                   {products.length}
                 </span>
               )}
@@ -325,7 +315,7 @@ export default function Dashboard() {
             {/* In Progress Ideas */}
             {inProgressIdeas.length > 0 && (
               <div className="mb-8">
-                <h3 className="text-lg font-semibold text-[hsl(var(--fg))]/80 mb-4 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-neutral-300 mb-4 flex items-center gap-2">
                   <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
                   In Progress
                 </h3>
@@ -333,12 +323,12 @@ export default function Dashboard() {
                   {inProgressIdeas.map(idea => (
                     <div 
                       key={idea.id} 
-                      className="border border-yellow-600/30 bg-yellow-500/10 rounded-lg p-5 hover:bg-yellow-500/20 transition-colors"
+                      className="border border-yellow-800/30 bg-yellow-950/10 rounded-lg p-5 hover:bg-yellow-950/20 transition-colors"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="font-medium">{idea.name}</h4>
-                          <p className="text-sm text-[hsl(var(--muted-fg))] mt-1">
+                          <h4 className="font-medium text-neutral-200">{idea.name}</h4>
+                          <p className="text-sm text-neutral-500 mt-1">
                             Started {idea.createdAt?.toDate?.()?.toLocaleDateString() || 'recently'}
                           </p>
                         </div>
@@ -366,7 +356,7 @@ export default function Dashboard() {
                   return (
                     <div 
                       key={idea.id} 
-                      className="border border-[hsl(var(--border))] rounded-lg p-6 bg-[hsl(var(--card))] hover:bg-[hsl(var(--card-hover))] transition-colors"
+                      className="border border-neutral-800 rounded-lg p-6 bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors"
                     >
                       <div className="flex flex-col gap-4">
                         {/* Header */}
@@ -380,36 +370,52 @@ export default function Dashboard() {
                                 {tierInfo.label}
                               </span>
                               {hasSalesPage && (
-                                <span className="text-xs px-2 py-1 rounded-full bg-green-500/10 text-green-600 border border-green-500/30">
+                                <span className="text-xs px-2 py-1 rounded-full bg-green-950/30 text-green-400 border border-green-800/30">
                                   Has Sales Page
                                 </span>
                               )}
                             </div>
-                            <p className="text-[hsl(var(--muted))] text-sm line-clamp-2">
+                            <p className="text-neutral-400 text-sm line-clamp-2">
                               {idea.productConfig?.description}
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="text-2xl font-bold text-green-500">
+                            <p className="text-2xl font-bold text-green-400">
                               ${idea.productConfig?.price || 0}
                             </p>
-                            <p className="text-xs text-[hsl(var(--muted-fg))]">
+                            <p className="text-xs text-neutral-500">
                               {idea.productConfig?.priceType || 'one-time'}
                             </p>
                           </div>
                         </div>
 
+                        {/* Details */}
+                        <div className="flex flex-wrap gap-4 text-sm">
+                          <div>
+                            <span className="text-neutral-500">Target: </span>
+                            <span className="text-neutral-300">{idea.productConfig?.targetAudience || 'Not set'}</span>
+                          </div>
+                          <div>
+                            <span className="text-neutral-500">Includes: </span>
+                            <span className="text-neutral-300">{idea.productConfig?.valueStack?.length || 0} items</span>
+                          </div>
+                          <div>
+                            <span className="text-neutral-500">Guarantees: </span>
+                            <span className="text-neutral-300">{idea.productConfig?.guarantees?.length || 0}</span>
+                          </div>
+                        </div>
+
                         {/* Mission Statement */}
                         {idea.productConfig?.mission && (
-                          <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
-                            <p className="text-sm text-purple-600 dark:text-purple-600 dark:text-purple-400 italic">
+                          <div className="bg-purple-950/20 border border-purple-800/30 rounded-lg p-3">
+                            <p className="text-sm text-purple-300 italic">
                               "{idea.productConfig.mission}"
                             </p>
                           </div>
                         )}
 
                         {/* Actions */}
-                        <div className="flex flex-wrap gap-3 pt-3 border-t border-[hsl(var(--border))]">
+                        <div className="flex flex-wrap gap-3 pt-3 border-t border-neutral-800">
                           {!hasSalesPage ? (
                             <button
                               onClick={() => createSalesPage(idea)}
@@ -417,7 +423,6 @@ export default function Dashboard() {
                             >
                               <Rocket className="w-4 h-4" />
                               Create Sales Page
-                              <Lock className="w-3 h-3 opacity-60" />
                             </button>
                           ) : (
                             <Link
@@ -431,7 +436,7 @@ export default function Dashboard() {
                           
                           <button
                             onClick={() => editIdea(idea.id)}
-                            className="px-4 py-2 bg-[hsl(var(--border))] hover:bg-[hsl(var(--muted-fg))]/20 text-[hsl(var(--fg))]/80 rounded-lg transition-colors flex items-center gap-2"
+                            className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
                           >
                             <Edit2 className="w-4 h-4" />
                             Edit Idea
@@ -439,7 +444,7 @@ export default function Dashboard() {
                           
                           <button
                             onClick={() => deleteIdea(idea.id, idea.productConfig?.name || idea.name)}
-                            className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg transition-colors flex items-center gap-2"
+                            className="px-4 py-2 bg-red-950/30 hover:bg-red-950/50 text-red-400 rounded-lg transition-colors flex items-center gap-2"
                           >
                             <Trash2 className="w-4 h-4" />
                             Delete
@@ -451,13 +456,13 @@ export default function Dashboard() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-16 bg-[hsl(var(--card))]/50 rounded-lg border border-[hsl(var(--border))]">
-                <div className="text-5xl mb-4">💡</div>
-                <p className="text-xl text-[hsl(var(--fg))]/80 mb-2">No product ideas yet</p>
-                <p className="text-[hsl(var(--muted))] mb-6">Use the Product Idea Co-Pilot to discover what to sell</p>
+              <div className="text-center py-16 bg-neutral-900/30 rounded-lg border border-neutral-800">
+                <div className="text-5xl mb-4"></div>
+                <p className="text-xl text-neutral-300 mb-2">No product ideas yet</p>
+                <p className="text-neutral-400 mb-6">Use the Product Idea Co-Pilot to discover what to sell</p>
                 <Link 
                   to="/product-idea-copilot"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium text-white"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium"
                 >
                   <Sparkles className="w-5 h-5" />
                   Start Product Idea Co-Pilot
@@ -487,19 +492,19 @@ export default function Dashboard() {
                   };
 
                   return (
-                    <div key={product.id} className="border border-[hsl(var(--border))] rounded-lg p-6 bg-[hsl(var(--card))] hover:bg-[hsl(var(--card-hover))] transition-colors">
+                    <div key={product.id} className="border border-neutral-800 rounded-lg p-6 bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors">
                       <div className="flex flex-col gap-4">
                         {/* Product Info */}
                         <div className="flex-1">
                           <div className="flex items-start justify-between gap-3 mb-3">
                             <div className="flex-1">
                               <h3 className="text-xl font-semibold">{displayData.title}</h3>
-                              <p className="text-[hsl(var(--muted))] text-sm mt-1 line-clamp-2">
+                              <p className="text-neutral-400 text-sm mt-1 line-clamp-2">
                                 {displayData.description}
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="text-2xl font-bold text-green-500">${displayData.price}</p>
+                              <p className="text-2xl font-bold text-green-400">${displayData.price}</p>
                             </div>
                           </div>
                           
@@ -507,15 +512,15 @@ export default function Dashboard() {
                           <div className="flex flex-wrap gap-2 mb-3">
                             <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${
                               displayData.published 
-                                ? 'bg-green-950/30 text-green-500 border border-green-500/30' 
-                                : 'bg-[hsl(var(--border))] text-[hsl(var(--muted))] border border-[hsl(var(--border))]'
+                                ? 'bg-green-950/30 text-green-400 border border-green-800/30' 
+                                : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
                             }`}>
-                              {displayData.published ? 'ðŸŸ¢ Live' : 'âš« Draft'}
+                              {displayData.published ? 'Live' : 'Draft'}
                             </span>
                             
                             {displayData.deliveryConfigured && (
-                              <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-600 rounded-full border border-blue-500/30">
-                                âœ“ Delivery Setup
+                              <span className="text-xs px-2 py-1 bg-blue-950/30 text-blue-400 rounded-full border border-blue-800/30">
+                                Delivery Setup
                               </span>
                             )}
                           </div>
@@ -523,16 +528,16 @@ export default function Dashboard() {
                           {/* Analytics */}
                           <div className="flex gap-6 text-sm">
                             <span className="flex items-center gap-2">
-                              <span className="text-[hsl(var(--muted-fg))]">Views:</span>
+                              <span className="text-neutral-500">Views:</span>
                               <span className="font-medium">{displayData.views}</span>
                             </span>
                             <span className="flex items-center gap-2">
-                              <span className="text-[hsl(var(--muted-fg))]">Sales:</span>
-                              <span className="font-medium text-green-500">{displayData.sales}</span>
+                              <span className="text-neutral-500">Sales:</span>
+                              <span className="font-medium text-green-400">{displayData.sales}</span>
                             </span>
                             <span className="flex items-center gap-2">
-                              <span className="text-[hsl(var(--muted-fg))]">Revenue:</span>
-                              <span className="font-medium text-green-500">
+                              <span className="text-neutral-500">Revenue:</span>
+                              <span className="font-medium text-green-400">
                                 ${displayData.revenue.toFixed(2)}
                               </span>
                             </span>
@@ -540,10 +545,10 @@ export default function Dashboard() {
                         </div>
                         
                         {/* Actions */}
-                        <div className="flex flex-wrap gap-3 pt-3 border-t border-[hsl(var(--border))]">
+                        <div className="flex flex-wrap gap-3 pt-3 border-t border-neutral-800">
                           <Link
                             to={`/products/${product.id}/landing/edit`}
-                            className="px-4 py-2 bg-[hsl(var(--border))] hover:bg-[hsl(var(--muted-fg))]/20 text-[hsl(var(--fg))]/80 rounded-lg transition-colors flex items-center gap-2"
+                            className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
                           >
                             <Edit2 className="w-4 h-4" />
                             Edit
@@ -554,7 +559,7 @@ export default function Dashboard() {
                               href={`/p/${displayData.slug}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="px-4 py-2 bg-[hsl(var(--border))] hover:bg-[hsl(var(--muted-fg))]/20 text-[hsl(var(--fg))]/80 rounded-lg transition-colors flex items-center gap-2"
+                              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
                             >
                               <ExternalLink className="w-4 h-4" />
                               View Live
@@ -563,7 +568,7 @@ export default function Dashboard() {
                           
                           <Link
                             to={`/products/${product.id}/delivery`}
-                            className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 rounded-lg transition-colors flex items-center gap-2"
+                            className="px-4 py-2 bg-blue-950/30 hover:bg-blue-950/50 text-blue-400 rounded-lg transition-colors flex items-center gap-2"
                           >
                             <Settings className="w-4 h-4" />
                             Delivery
@@ -575,10 +580,10 @@ export default function Dashboard() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-16 bg-[hsl(var(--card))]/50 rounded-lg border border-[hsl(var(--border))]">
-                <div className="text-5xl mb-4">ðŸ“„</div>
-                <p className="text-xl text-[hsl(var(--fg))]/80 mb-2">No sales pages yet</p>
-                <p className="text-[hsl(var(--muted))] mb-6">
+              <div className="text-center py-16 bg-neutral-900/30 rounded-lg border border-neutral-800">
+                <div className="text-5xl mb-4"></div>
+                <p className="text-xl text-neutral-300 mb-2">No sales pages yet</p>
+                <p className="text-neutral-400 mb-6">
                   {completedIdeas.length > 0 
                     ? 'Create a sales page from one of your product ideas'
                     : 'Start by creating a product idea first'
@@ -587,7 +592,7 @@ export default function Dashboard() {
                 {completedIdeas.length > 0 ? (
                   <button
                     onClick={() => setActiveTab('ideas')}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 rounded-lg hover:bg-purple-500 transition-colors font-medium text-white"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 rounded-lg hover:bg-purple-500 transition-colors font-medium"
                   >
                     <Lightbulb className="w-5 h-5" />
                     View Product Ideas
@@ -595,7 +600,7 @@ export default function Dashboard() {
                 ) : (
                   <Link 
                     to="/product-idea-copilot"
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium text-white"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium"
                   >
                     <Sparkles className="w-5 h-5" />
                     Start Product Idea Co-Pilot

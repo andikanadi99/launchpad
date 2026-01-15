@@ -7,45 +7,97 @@ import {
   ArrowLeft, ArrowRight, Save, Check, Loader
 } from 'lucide-react';
 
-// Step components (we'll create these next)
-import DeliveryTypeSelector from './delivery page components/DeliveryTypeSelector';
-import DeliveryContentForm from './delivery page components/DeliveryContentForm';
+// Step components
+import DeliveryStep2 from './deliveryStep2';
 import DeliveryPreview from './delivery page components/DeliveryPreview';
 
-// Delivery data type
+// ============================================
+// DELIVERY DATA INTERFACE
+// ============================================
 export interface DeliveryData {
-  type: 'email-only' | 'content' | 'file' | 'redirect';
   status: 'pending' | 'configured';
   
-  // Email-only fields
-  emailSubject?: string;
-  emailBody?: string;
+  // SECTION 1: Confirmation Email (always required)
+  email: {
+    subject: string;
+    body: string;
+    includeAccessButton: boolean;
+  };
   
-  // Content delivery fields
-  content?: string;
+  // SECTION 2: Delivery Method
+  deliveryMethod: 'email-only' | 'hosted' | 'redirect';
   
-  // File delivery fields (future)
-  files?: Array<{
+  // Hosted Content (when deliveryMethod === 'hosted')
+  hosted: {
+    files: Array<{
+      id: string;
+      url: string;
+      name: string;
+      size: number;
+      type: string;
+      uploadedAt: Date;
+    }>;
+    videos: Array<{
+      id: string;
+      url: string;
+      title: string;
+      platform: 'youtube' | 'vimeo' | 'loom' | 'other';
+    }>;
+    notionUrl: string;
+    hasCustomContent: boolean;
+    contentBlocks: string;
+  };
+  
+  // Redirect (when deliveryMethod === 'redirect')
+  redirect: {
     url: string;
-    name: string;
-    size: number;
-    uploadedAt: Date;
-  }>;
+    delay: number;
+    showThankYou: boolean;
+  };
   
-  // Redirect delivery fields
-  redirectUrl?: string;
-  redirectDelay?: number;
-  showThankYouFirst?: boolean;
-  
-  // Common fields
-  accessInstructions?: string;
   configuredAt?: Date;
 }
 
+// Default delivery data
+export const DEFAULT_DELIVERY_DATA: DeliveryData = {
+  status: 'pending',
+  
+  email: {
+    subject: 'Your purchase is confirmed! 🎉',
+    body: `Hi {{customer_name}}!
+
+Thank you for purchasing {{product_name}}.
+
+Your order is confirmed and you now have access to your product.
+
+{{access_button}}
+
+If you have any questions, just reply to this email.
+
+Cheers!`,
+    includeAccessButton: true,
+  },
+  
+  deliveryMethod: 'email-only',
+  
+  hosted: {
+    files: [],
+    videos: [],
+    notionUrl: '',
+    hasCustomContent: false,
+    contentBlocks: '[]',
+  },
+  
+  redirect: {
+    url: '',
+    delay: 0,
+    showThankYou: true,
+  },
+};
+
 const STEPS = [
-  { id: 1, name: 'Delivery Type' },
-  { id: 2, name: 'Configure' },
-  { id: 3, name: 'Preview & Save' }
+  { id: 1, name: 'Delivery Setup' },
+  { id: 2, name: 'Preview & Save' }
 ];
 
 export default function DeliveryBuilder() {
@@ -59,20 +111,8 @@ export default function DeliveryBuilder() {
   const [productName, setProductName] = useState<string>('');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Default delivery data
-  const [deliveryData, setDeliveryData] = useState<DeliveryData>({
-    type: 'email-only',
-    status: 'pending',
-    emailSubject: 'Thank you for your purchase!',
-    emailBody: `Hi there! Thank you for purchasing {{product_name}}.
-
-Your order is confirmed. We're working on your product and will send access details to this email soon.
-
-Questions? Reply to this email.
-
-Thanks!`,
-    accessInstructions: undefined
-  });
+  // Delivery data state
+  const [deliveryData, setDeliveryData] = useState<DeliveryData>(DEFAULT_DELIVERY_DATA);
 
   // Initialize - load product data
   useEffect(() => {
@@ -102,12 +142,15 @@ Thanks!`,
             // Get product name for preview
             setProductName(data.salesPage?.coreInfo?.name || 'Your Product');
             
-            // Load existing delivery data if any
+            // Load existing delivery data if any (merge with defaults)
             if (data.delivery) {
-              setDeliveryData({
-                ...deliveryData,
-                ...data.delivery
-              });
+              setDeliveryData(prev => ({
+                ...prev,
+                ...data.delivery,
+                email: { ...prev.email, ...data.delivery.email },
+                hosted: { ...prev.hosted, ...data.delivery.hosted },
+                redirect: { ...prev.redirect, ...data.delivery.redirect },
+              }));
             }
           } else {
             alert('Product not found');
@@ -127,9 +170,33 @@ Thanks!`,
     init();
   }, [productId, navigate]);
 
-  // Update delivery data
+  // Update delivery data (supports nested updates)
   const updateData = (updates: Partial<DeliveryData>) => {
     setDeliveryData(prev => ({ ...prev, ...updates }));
+  };
+
+  // Update nested email data
+  const updateEmail = (updates: Partial<DeliveryData['email']>) => {
+    setDeliveryData(prev => ({
+      ...prev,
+      email: { ...prev.email, ...updates }
+    }));
+  };
+
+  // Update nested hosted data
+  const updateHosted = (updates: Partial<DeliveryData['hosted']>) => {
+    setDeliveryData(prev => ({
+      ...prev,
+      hosted: { ...prev.hosted, ...updates }
+    }));
+  };
+
+  // Update nested redirect data
+  const updateRedirect = (updates: Partial<DeliveryData['redirect']>) => {
+    setDeliveryData(prev => ({
+      ...prev,
+      redirect: { ...prev.redirect, ...updates }
+    }));
   };
 
   // Navigation handlers
@@ -148,31 +215,59 @@ Thanks!`,
   // Validation for "Next" button
   const canProceedToNext = () => {
     if (currentStep === 1) {
-      return deliveryData.type !== undefined;
-    }
-    if (currentStep === 2) {
-      // Validate based on delivery type
-      if (deliveryData.type === 'email-only') {
-        return deliveryData.emailSubject && deliveryData.emailBody;
+      // Email is always required
+      if (!deliveryData.email.subject.trim() || !deliveryData.email.body.trim()) {
+        return false;
       }
-      if (deliveryData.type === 'content') {
-        // Check if content has at least one block
-        try {
-          const blocks = JSON.parse(deliveryData.content || '[]');
-          return blocks.length > 0;
-        } catch {
-          // Fallback to plain text check
-          return deliveryData.content && deliveryData.content.trim().length > 0;
-        }
+      
+      // Validate based on delivery method
+      if (deliveryData.deliveryMethod === 'redirect') {
+        return deliveryData.redirect.url.trim().length > 0;
       }
-      if (deliveryData.type === 'redirect') {
-        return deliveryData.redirectUrl && deliveryData.redirectUrl.trim().length > 0;
+      
+      if (deliveryData.deliveryMethod === 'hosted') {
+        // At least one hosted content type must be configured
+        const hasFiles = deliveryData.hosted.files.length > 0;
+        const hasVideos = deliveryData.hosted.videos.length > 0;
+        const hasNotion = deliveryData.hosted.notionUrl.trim().length > 0;
+        const hasContent = deliveryData.hosted.hasCustomContent;
+        return hasFiles || hasVideos || hasNotion || hasContent;
       }
-      if (deliveryData.type === 'file') {
-        return deliveryData.files && deliveryData.files.length > 0;
-      }
+      
+      // email-only just needs the email configured
+      return true;
     }
     return true;
+  };
+
+  // Get validation message
+  const getValidationMessage = (): string | null => {
+    if (canProceedToNext()) return null;
+    
+    if (currentStep === 1) {
+      const missing: string[] = [];
+      
+      if (!deliveryData.email.subject.trim()) missing.push('Email Subject');
+      if (!deliveryData.email.body.trim()) missing.push('Email Body');
+      
+      if (deliveryData.deliveryMethod === 'redirect' && !deliveryData.redirect.url.trim()) {
+        missing.push('Redirect URL');
+      }
+      
+      if (deliveryData.deliveryMethod === 'hosted') {
+        const hasFiles = deliveryData.hosted.files.length > 0;
+        const hasVideos = deliveryData.hosted.videos.length > 0;
+        const hasNotion = deliveryData.hosted.notionUrl.trim().length > 0;
+        const hasContent = deliveryData.hosted.hasCustomContent;
+        if (!hasFiles && !hasVideos && !hasNotion && !hasContent) {
+          missing.push('At least one hosted content item');
+        }
+      }
+      
+      return missing.length > 0 ? `Required: ${missing.join(', ')}` : null;
+    }
+    
+    return null;
   };
 
   // Save to Firestore
@@ -288,24 +383,21 @@ Thanks!`,
         </div>
       )}
 
-      {/* Main Content - Render Step Components */}
-      <div className="max-w-3xl mx-auto p-8">
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto p-8">
         {currentStep === 1 && (
-          <DeliveryTypeSelector 
+          <DeliveryStep2 
             data={deliveryData}
             updateData={updateData}
+            updateEmail={updateEmail}
+            updateHosted={updateHosted}
+            updateRedirect={updateRedirect}
+            productName={productName}
+            productId={productId || ''}
           />
         )}
         
         {currentStep === 2 && (
-          <DeliveryContentForm 
-            data={deliveryData}
-            updateData={updateData}
-            productName={productName}
-          />
-        )}
-        
-        {currentStep === 3 && (
           <DeliveryPreview 
             data={deliveryData}
             productName={productName}
@@ -329,25 +421,37 @@ Thanks!`,
             </span>
           </div>
 
-          {currentStep < STEPS.length ? (
-            <button
-              onClick={handleNext}
-              disabled={!canProceedToNext()}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded-lg flex items-center gap-2 transition-colors"
-            >
-              Next
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="px-6 py-2 bg-green-600 hover:bg-green-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded-lg font-medium transition-colors flex items-center gap-2"
-            >
-              <Save className="w-4 h-4" />
-              Save Configuration
-            </button>
-          )}
+          <div className="flex flex-col items-end gap-1">
+            {/* Validation message */}
+            {getValidationMessage() && (
+              <span className="text-xs text-amber-400 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                {getValidationMessage()}
+              </span>
+            )}
+            
+            {currentStep < STEPS.length ? (
+              <button
+                onClick={handleNext}
+                disabled={!canProceedToNext()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded-lg flex items-center gap-2 transition-colors"
+              >
+                Next
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-6 py-2 bg-green-600 hover:bg-green-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Save Configuration
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
