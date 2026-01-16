@@ -63,9 +63,10 @@ export default function App() {
         <Route path="preview/product/:productId" element={<ProductPagePreview />} />
         
         <Route path="products">
-        <Route path="sales" element={<SalesPageSimplified />} />
-        <Route path=":productId/landing/edit" element={<SalesPageSimplified />} />  
-        <Route path=":productId/edit" element={<SalesPageSimplified />} /> 
+          <Route path="sales" element={<SalesPageSimplified />} />
+          <Route path=":productId/landing/edit" element={<SalesPageSimplified />} />  
+          <Route path=":productId/edit" element={<SalesPageSimplified />} /> 
+          <Route path=":productId/preview" element={<SalesPagePreview />} />
           <Route path=":productId/success" element={<Success />} /> 
           <Route path=":productId/delivery" element={<DeliveryBuilder />} />
         </Route>
@@ -79,7 +80,7 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Auth area: outside layout → no header/nav */}
+      {/* Auth area: outside layout â†’ no header/nav */}
       <Route path="/auth">
         <Route path="signin" element={<SignIn />} />
         <Route path="signup" element={<SignUp />} />

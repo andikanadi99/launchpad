@@ -511,6 +511,10 @@ Cheers!`,
   const [isImprovingSeoDescription, setIsImprovingSeoDescription] = useState(false);
   const [seoTitleSuggestion, setSeoTitleSuggestion] = useState<string | null>(null);
   const [seoDescriptionSuggestion, setSeoDescriptionSuggestion] = useState<string | null>(null);
+  const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isAlreadyPublished, setIsAlreadyPublished] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
@@ -560,7 +564,42 @@ Cheers!`,
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
       .substring(0, 50);
+  };
+
+  // Generate a unique slug by checking Firebase for availability
+  const generateUniqueSlug = async (name: string, currentProductId?: string): Promise<string> => {
+    const baseSlug = generateSlug(name);
+    if (!baseSlug) return '';
+    
+    let slug = baseSlug;
+    let suffix = 1;
+    
+    // Try up to 100 variations
+    while (suffix <= 100) {
+      try {
+        const slugRef = doc(db, 'slugs', slug);
+        const slugDoc = await getDoc(slugRef);
+        
+        // If slug doesn't exist, or belongs to current product, it's available
+        if (!slugDoc.exists() || slugDoc.data()?.productId === currentProductId) {
+          return slug;
+        }
+        
+        // Try next variation
+        suffix++;
+        slug = `${baseSlug}-${suffix}`;
+      } catch (error) {
+        console.error('Error checking slug availability:', error);
+        // On error, return with timestamp to ensure uniqueness
+        return `${baseSlug}-${Date.now().toString(36)}`;
+      }
+    }
+    
+    // Fallback: add timestamp
+    return `${baseSlug}-${Date.now().toString(36)}`;
   };
 
   const getProductConfig = (): ProductConfig => ({
@@ -704,6 +743,16 @@ Cheers!`,
               delivery: initialData.delivery,
             }));
 
+            // Mark the original idea as "graduated" to a sales page
+            if (ideaId) {
+              const sessionRef = doc(db, 'users', user.uid, 'productCoPilotSessions', ideaId);
+              await updateDoc(sessionRef, {
+                salesPageId: prodId,
+                salesPageStatus: 'draft',
+                graduatedAt: new Date(),
+              });
+            }
+
             navigate(`/products/${prodId}/edit`, { replace: true });
           } else {
             // Load existing product
@@ -736,10 +785,15 @@ Cheers!`,
                   design: { ...prev.design, ...sp.design },
                   publish: { ...prev.publish, ...sp.publish },
                   delivery: existingData.delivery || sp.delivery || prev.delivery,
+                  sourceSessionId: existingData.sourceSessionId || sp.sourceSessionId || prev.sourceSessionId,
                 }));
               }
               if (existingData.sourceSessionId) {
                 setIsPrefilledFromCoPilot(true);
+              }
+              // Track if already published
+              if (existingData.published) {
+                setIsAlreadyPublished(true);
               }
             }
           }
@@ -790,13 +844,16 @@ Cheers!`,
     if (currentStep === 3) {
       // Auto-generate slug if empty
       if (!data.publish.slug && data.coreInfo.name) {
-        setData(prev => ({
-          ...prev,
-          publish: {
-            ...prev.publish,
-            slug: generateSlug(data.coreInfo.name),
-          }
-        }));
+        // Use async function to generate unique slug
+        generateUniqueSlug(data.coreInfo.name, productId).then(uniqueSlug => {
+          setData(prev => ({
+            ...prev,
+            publish: {
+              ...prev.publish,
+              slug: uniqueSlug,
+            }
+          }));
+        });
       }
       // Auto-generate meta title if empty
       if (!data.publish.metaTitle && data.coreInfo.name) {
@@ -819,7 +876,43 @@ Cheers!`,
         }));
       }
     }
-  }, [currentStep, data.coreInfo.name, data.valueProp.description]);
+  }, [currentStep, data.coreInfo.name, data.valueProp.description, productId]);
+
+  // ============================================
+  // CHECK SLUG AVAILABILITY (DEBOUNCED)
+  // ============================================
+  useEffect(() => {
+    const slug = data.publish.slug?.trim();
+    
+    // Reset status if slug is empty or too short
+    if (!slug || slug.length < 3) {
+      setSlugStatus('idle');
+      return;
+    }
+    
+    // Set checking status
+    setSlugStatus('checking');
+    
+    // Debounce the check
+    const timer = setTimeout(async () => {
+      try {
+        const slugRef = doc(db, 'slugs', slug);
+        const slugDoc = await getDoc(slugRef);
+        
+        // Available if doesn't exist or belongs to current product
+        if (!slugDoc.exists() || slugDoc.data()?.productId === productId) {
+          setSlugStatus('available');
+        } else {
+          setSlugStatus('taken');
+        }
+      } catch (error) {
+        console.error('Error checking slug:', error);
+        setSlugStatus('idle');
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [data.publish.slug, productId]);
 
   // ============================================
   // AI HANDLERS
@@ -1247,7 +1340,9 @@ Cheers!`,
            (data.coreInfo.priceType === 'free' || data.coreInfo.price > 0) &&
            data.valueProp.description.trim().length > 0 &&
            data.publish.slug.trim().length >= 3 &&
-           data.publish.metaTitle.trim().length > 0;
+           data.publish.metaTitle.trim().length > 0 &&
+           slugStatus !== 'taken' &&
+           slugStatus !== 'checking';
   };
 
   // Get all missing fields for publishing (combines all steps)
@@ -1262,6 +1357,7 @@ Cheers!`,
     // Step 3 requirements
     if (!data.publish.slug.trim() || data.publish.slug.trim().length < 3) missing.push('URL Slug');
     if (!data.publish.metaTitle.trim()) missing.push('Page Title');
+    if (slugStatus === 'taken') missing.push('Available URL (current is taken)');
     
     return missing;
   };
@@ -1276,25 +1372,34 @@ Cheers!`,
       return;
     }
 
-    setIsSaving(true);
+    setIsPublishing(true);
     try {
       const slug = data.publish.slug.toLowerCase().trim();
       
       // Validate slug
       if (!/^[a-z0-9-]{3,50}$/.test(slug)) {
         alert('URL must be 3-50 characters, lowercase letters, numbers, and hyphens only');
+        setIsPublishing(false);
         return;
       }
 
-      // Check slug availability
+      // Check slug availability (only if different from current or new)
       const slugRef = doc(db, 'slugs', slug);
       const slugDoc = await getDoc(slugRef);
       if (slugDoc.exists() && slugDoc.data().productId !== productId) {
         alert('This URL is already taken');
+        setIsPublishing(false);
         return;
       }
 
-      // Register slug
+      // Check if there's an existing published page for this product
+      const publishedRef = doc(db, 'published_pages', slug);
+      const existingPublished = await getDoc(publishedRef);
+      const originalPublishedAt = existingPublished.exists() 
+        ? existingPublished.data().publishedAt 
+        : new Date();
+
+      // Register/update slug
       await setDoc(slugRef, {
         productId,
         userId,
@@ -1302,14 +1407,13 @@ Cheers!`,
         lastUpdated: new Date(),
       });
 
-      // Create public page
-      const publishedRef = doc(db, 'published_pages', slug);
+      // Create or update public page (preserve original publishedAt)
       await setDoc(publishedRef, cleanData({
         userId,
         productId,
         slug,
         salesPage: data,
-        publishedAt: new Date(),
+        publishedAt: originalPublishedAt, // Preserve original publish date
         lastUpdated: new Date(),
         productName: data.coreInfo.name,
         price: data.coreInfo.price,
@@ -1318,24 +1422,40 @@ Cheers!`,
         metaDescription: data.publish.metaDescription,
       }));
 
-      // Update product
+      // Update product document
       const productRef = doc(db, 'users', userId, 'products', productId);
       await updateDoc(productRef, cleanData({
         'salesPage.publish.status': 'published',
-        'salesPage.publish.publishedAt': new Date(),
+        'salesPage.publish.publishedAt': isAlreadyPublished ? data.publish.publishedAt : new Date(),
         published: true,
         lastUpdated: new Date(),
       }));
 
-      setPublishSuccess(true);
-      setTimeout(() => navigate('/dashboard'), 2000);
+      // Update the original idea's status if this came from Co-Pilot (only on first publish)
+      if (data.sourceSessionId && !isAlreadyPublished) {
+        try {
+          const sessionRef = doc(db, 'users', userId, 'productCoPilotSessions', data.sourceSessionId);
+          await updateDoc(sessionRef, {
+            salesPageStatus: 'published',
+            publishedAt: new Date(),
+          });
+        } catch (error) {
+          // Non-critical error, don't block publish
+          console.error('Error updating idea status:', error);
+        }
+      }
+
+      setIsAlreadyPublished(true);
+      
+      // Navigate immediately - the dashboard will show the updated state
+      navigate('/dashboard');
 
     } catch (error) {
       console.error('Publish error:', error);
       alert('Failed to publish. Please try again.');
-    } finally {
-      setIsSaving(false);
+      setIsPublishing(false);
     }
+    // Note: Don't set isPublishing to false on success - we're navigating away
   };
 
   // ============================================
@@ -1354,6 +1474,103 @@ Cheers!`,
   // ============================================
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-neutral-950 text-gray-900 dark:text-neutral-100">
+      {/* PUBLISHING OVERLAY */}
+      {isPublishing && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 max-w-sm mx-4">
+            <div className="w-16 h-16 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+              <Loader className="w-8 h-8 animate-spin text-purple-600 dark:text-purple-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+              {isAlreadyPublished ? 'Updating Your Page...' : 'Publishing Your Page...'}
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-neutral-400 text-center">
+              {isAlreadyPublished 
+                ? 'Saving your changes to the live page'
+                : 'Making your sales page live for the world to see'
+              }
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* PREVIEW CONFIRMATION MODAL */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950">
+          {/* Preview Header */}
+          <div className="sticky top-0 z-10 bg-purple-600 text-white shadow-lg">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Eye className="w-5 h-5" />
+                <div>
+                  <div className="font-semibold">Preview Your Sales Page</div>
+                  <div className="text-xs text-purple-200">
+                    Review how customers will see your page before publishing
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowPreviewModal(false)}
+                  className="px-4 py-2 bg-purple-700 hover:bg-purple-800 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to Edit
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPreviewModal(false);
+                    handlePublish();
+                  }}
+                  className="px-6 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                >
+                  <Rocket className="w-4 h-4" />
+                  Confirm & Publish
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview Content */}
+          <div className="flex-1 overflow-auto">
+            <SalesPageContent 
+              data={data}
+              onCtaClick={() => {
+                alert('Preview Mode\n\nButtons will work after publishing.');
+              }}
+            />
+          </div>
+
+          {/* Bottom Sticky Bar */}
+          <div className="sticky bottom-0 bg-neutral-900 border-t border-neutral-800 px-4 py-3">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+              <p className="text-sm text-neutral-400">
+                Scroll through to review your entire sales page
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowPreviewModal(false)}
+                  className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Back to Edit
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPreviewModal(false);
+                    handlePublish();
+                  }}
+                  className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                >
+                  <Rocket className="w-4 h-4" />
+                  Confirm & Publish
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* HEADER */}
       <header className="border-b border-gray-200 dark:border-gray-200 dark:border-neutral-800 bg-white/50 dark:bg-neutral-900/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="px-6 py-4">
@@ -1366,9 +1583,16 @@ Cheers!`,
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <div>
-                <h1 className="text-lg font-semibold">
-                  {data.coreInfo.name || 'New Product'}
-                </h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-semibold">
+                    {data.coreInfo.name || 'New Product'}
+                  </h1>
+                  {isAlreadyPublished && (
+                    <span className="px-2 py-0.5 text-xs font-medium bg-green-500/20 text-green-600 dark:text-green-400 rounded-full border border-green-500/30">
+                      Live
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-gray-500 dark:text-gray-500 dark:text-neutral-400">
                   Step {currentStep} of {STEPS.length}: {STEPS[currentStep - 1].name}
                 </p>
@@ -1431,7 +1655,7 @@ Cheers!`,
         <div className="bg-green-500/10 border-b border-green-500/30 px-6 py-3">
           <div className="flex items-center gap-2">
             <Check className="w-5 h-5 text-green-500" />
-            <p className="text-green-400">Published! Redirecting to dashboard...</p>
+            <p className="text-green-400">Your page is live! Redirecting to dashboard...</p>
           </div>
         </div>
       )}
@@ -2946,18 +3170,47 @@ Cheers!`,
                   </label>
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400 dark:text-neutral-500">launchpad.com/p/</span>
-                    <input
-                      type="text"
-                      value={data.publish.slug}
-                      onChange={(e) => setData(prev => ({
-                        ...prev,
-                        publish: { ...prev.publish, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }
-                      }))}
-                      placeholder="your-product"
-                      className="flex-1 px-4 py-3 bg-white dark:bg-neutral-900 border border-gray-300 dark:border-gray-300 dark:border-neutral-700 rounded-lg focus:border-purple-500 focus:outline-none"
-                    />
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={data.publish.slug}
+                        onChange={(e) => setData(prev => ({
+                          ...prev,
+                          publish: { ...prev.publish, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }
+                        }))}
+                        placeholder="your-product"
+                        className={`w-full px-4 py-3 bg-white dark:bg-neutral-900 border rounded-lg focus:outline-none pr-10 ${
+                          slugStatus === 'taken' 
+                            ? 'border-red-500 focus:border-red-500' 
+                            : slugStatus === 'available' 
+                              ? 'border-green-500 focus:border-green-500'
+                              : 'border-gray-300 dark:border-neutral-700 focus:border-purple-500'
+                        }`}
+                      />
+                      {/* Status indicator */}
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {slugStatus === 'checking' && (
+                          <Loader className="w-4 h-4 animate-spin text-gray-400" />
+                        )}
+                        {slugStatus === 'available' && (
+                          <Check className="w-4 h-4 text-green-500" />
+                        )}
+                        {slugStatus === 'taken' && (
+                          <X className="w-4 h-4 text-red-500" />
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1">Lowercase letters, numbers, and hyphens only</p>
+                  {/* Status message */}
+                  <div className="mt-1 flex justify-between items-center">
+                    <p className="text-xs text-gray-400 dark:text-neutral-500">Lowercase letters, numbers, and hyphens only</p>
+                    {slugStatus === 'taken' && (
+                      <p className="text-xs text-red-400">This URL is already taken</p>
+                    )}
+                    {slugStatus === 'available' && data.publish.slug.length >= 3 && (
+                      <p className="text-xs text-green-400">URL is available</p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Google Search Preview */}
@@ -3147,16 +3400,26 @@ Cheers!`,
                   </div>
                 )}
                 <button
-                  onClick={handlePublish}
-                  disabled={!canPublish() || isSaving}
+                  onClick={() => {
+                    if (isAlreadyPublished) {
+                      // Direct publish for updates
+                      handlePublish();
+                    } else {
+                      // Show preview modal for first publish
+                      setShowPreviewModal(true);
+                    }
+                  }}
+                  disabled={!canPublish() || isPublishing}
                   className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg font-semibold text-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSaving ? (
+                  {isPublishing ? (
                     <Loader className="w-5 h-5 animate-spin" />
-                  ) : (
+                  ) : isAlreadyPublished ? (
                     <Rocket className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
                   )}
-                  Publish Now
+                  {isAlreadyPublished ? 'Update Page' : 'Preview & Publish'}
                 </button>
               </div>
             )}

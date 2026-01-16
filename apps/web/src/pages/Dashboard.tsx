@@ -1,24 +1,26 @@
 import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
-import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, orderBy, where } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { Link, useNavigate } from 'react-router-dom';
 import { setActiveSession } from '../lib/UserDocumentHelpers';
 import { 
   Package, 
   ExternalLink, 
-  Info, 
   X, 
   Eye, 
   Settings, 
   Lightbulb, 
-  Plus,
   Edit2,
   Trash2,
-  DollarSign,
   FileText,
   Rocket,
   ChevronRight,
-  Sparkles
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  Copy,
+  Clock,
+  Plus
 } from 'lucide-react';
 
 interface ProductIdea {
@@ -50,12 +52,23 @@ interface Product {
   salesPage?: any;
   published?: boolean;
   delivery?: any;
+  sourceSessionId?: string;
   analytics?: {
     views: number;
     sales: number;
     revenue: number;
   };
   createdAt?: any;
+  lastUpdated?: any;
+}
+
+// Combined item for unified display
+interface UnifiedProduct {
+  type: 'in_progress' | 'idea_only' | 'with_sales_page';
+  idea?: ProductIdea;
+  product?: Product;
+  name: string;
+  updatedAt: Date;
 }
 
 export default function Dashboard() {
@@ -63,7 +76,9 @@ export default function Dashboard() {
   const [productIdeas, setProductIdeas] = useState<ProductIdea[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'ideas' | 'products'>('ideas');
+  const [copiedProductId, setCopiedProductId] = useState<string | null>(null);
+  const [expandedIdeaId, setExpandedIdeaId] = useState<string | null>(null);
+  const [showNewProductModal, setShowNewProductModal] = useState(false);
   const [showInfoBanner, setShowInfoBanner] = useState(() => {
     return localStorage.getItem('hideInfoBanner') !== 'true';
   });
@@ -110,14 +125,67 @@ export default function Dashboard() {
     localStorage.setItem('hideInfoBanner', 'true');
   };
 
-  // Filter ideas by status
-  const completedIdeas = productIdeas.filter(idea => idea.status === 'completed' && idea.productConfig);
-  const inProgressIdeas = productIdeas.filter(idea => idea.status === 'in_progress');
+  // Create unified list of all products
+  const createUnifiedList = (): UnifiedProduct[] => {
+    const unified: UnifiedProduct[] = [];
+    
+    // Track which ideas have been linked to products
+    const linkedIdeaIds = new Set(
+      products
+        .filter(p => p.sourceSessionId || p.salesPage?.sourceSessionId)
+        .map(p => p.sourceSessionId || p.salesPage?.sourceSessionId)
+    );
+    
+    // Add in-progress ideas
+    productIdeas
+      .filter(idea => idea.status === 'in_progress')
+      .forEach(idea => {
+        unified.push({
+          type: 'in_progress',
+          idea,
+          name: idea.name || 'Untitled Idea',
+          updatedAt: idea.updatedAt?.toDate?.() || new Date(idea.updatedAt) || new Date(),
+        });
+      });
+    
+    // Add completed ideas WITHOUT sales pages
+    productIdeas
+      .filter(idea => idea.status === 'completed' && idea.productConfig && !idea.salesPageId && !linkedIdeaIds.has(idea.id))
+      .forEach(idea => {
+        unified.push({
+          type: 'idea_only',
+          idea,
+          name: idea.productConfig?.name || idea.name || 'Untitled',
+          updatedAt: idea.updatedAt?.toDate?.() || new Date(idea.updatedAt) || new Date(),
+        });
+      });
+    
+    // Add products with sales pages (and link their original ideas)
+    products.forEach(product => {
+      const sourceId = product.sourceSessionId || product.salesPage?.sourceSessionId;
+      const linkedIdea = sourceId ? productIdeas.find(i => i.id === sourceId) : undefined;
+      
+      unified.push({
+        type: 'with_sales_page',
+        product,
+        idea: linkedIdea,
+        name: product.salesPage?.coreInfo?.name || 'Untitled',
+        updatedAt: product.lastUpdated?.toDate?.() || new Date(product.lastUpdated) || new Date(),
+      });
+    });
+    
+    // Sort by most recently updated
+    return unified.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  };
+
+  const unifiedProducts = createUnifiedList();
 
   // Calculate totals
   const totals = {
-    ideas: completedIdeas.length,
-    products: products.length,
+    total: unifiedProducts.length,
+    inProgress: unifiedProducts.filter(p => p.type === 'in_progress').length,
+    ideasOnly: unifiedProducts.filter(p => p.type === 'idea_only').length,
+    withSalesPage: unifiedProducts.filter(p => p.type === 'with_sales_page').length,
     published: products.filter(p => p.published).length,
     views: products.reduce((sum, p) => sum + (p.analytics?.views || 0), 0),
     sales: products.reduce((sum, p) => sum + (p.analytics?.sales || 0), 0),
@@ -138,8 +206,8 @@ export default function Dashboard() {
     }
   };
 
-  // Delete a product idea
-  async function deleteIdea(ideaId: string, ideaName: string) {
+  // Delete just the idea
+  const deleteIdea = async (ideaId: string, ideaName: string) => {
     if (confirm(`Are you sure you want to delete "${ideaName}"? This cannot be undone.`)) {
       try {
         await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'productCoPilotSessions', ideaId));
@@ -148,16 +216,66 @@ export default function Dashboard() {
         alert('Failed to delete idea');
       }
     }
-  }
+  };
+
+  // Delete just the sales page (keep the idea)
+  const deleteSalesPageOnly = async (productId: string, sourceSessionId: string | undefined, productName: string) => {
+    if (confirm(`Delete the sales page for "${productName}"? The original idea will be restored to your backlog.`)) {
+      try {
+        // Delete the product
+        await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'products', productId));
+        
+        // If there was a linked idea, clear its salesPageId to restore it
+        if (sourceSessionId) {
+          const sessionRef = doc(db, 'users', auth.currentUser!.uid, 'productCoPilotSessions', sourceSessionId);
+          await updateDoc(sessionRef, {
+            salesPageId: null,
+            salesPageStatus: 'none',
+            graduatedAt: null,
+          });
+        }
+      } catch (error) {
+        console.error('Error deleting sales page:', error);
+        alert('Failed to delete sales page');
+      }
+    }
+  };
+
+  // Delete everything (sales page + idea)
+  const deleteEverything = async (productId: string, sourceSessionId: string | undefined, productName: string) => {
+    if (confirm(`Delete "${productName}" completely? This will remove both the sales page AND the original idea. This cannot be undone.`)) {
+      try {
+        // Delete the product
+        await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'products', productId));
+        
+        // Delete the linked idea too
+        if (sourceSessionId) {
+          await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'productCoPilotSessions', sourceSessionId));
+        }
+      } catch (error) {
+        console.error('Error deleting:', error);
+        alert('Failed to delete');
+      }
+    }
+  };
+
+  // Delete product without linked idea
+  const deleteProduct = async (productId: string, productName: string) => {
+    if (confirm(`Are you sure you want to delete "${productName}"? This cannot be undone.`)) {
+      try {
+        await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'products', productId));
+      } catch (error) {
+        console.error('Error deleting product:', error);
+        alert('Failed to delete product');
+      }
+    }
+  };
 
   // Continue an in-progress idea
   const continueIdea = async (ideaId: string) => {
     if (!auth.currentUser) return;
-    
     try {
-      // Set this session as active
       await setActiveSession(auth.currentUser.uid, ideaId);
-      // Navigate to co-pilot
       navigate('/product-idea-copilot');
     } catch (error) {
       console.error('Error continuing idea:', error);
@@ -167,11 +285,8 @@ export default function Dashboard() {
   // Edit a completed idea
   const editIdea = async (ideaId: string) => {
     if (!auth.currentUser) return;
-    
     try {
-      // Set this session as active
       await setActiveSession(auth.currentUser.uid, ideaId);
-      // Navigate to co-pilot
       navigate('/product-idea-copilot');
     } catch (error) {
       console.error('Error editing idea:', error);
@@ -179,9 +294,25 @@ export default function Dashboard() {
   };
 
   // Create sales page from idea
-  const createSalesPage = (idea: ProductIdea) => {
-    // Navigate to sales page builder with idea data
-    navigate(`/products/sales?ideaId=${idea.id}`);
+  const createSalesPage = (ideaId: string) => {
+    navigate(`/products/sales?ideaId=${ideaId}`);
+  };
+
+  // Copy product link to clipboard
+  const copyProductLink = async (slug: string, productId: string) => {
+    const url = `${window.location.origin}/p/${slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedProductId(productId);
+      setTimeout(() => setCopiedProductId(null), 2000);
+    } catch (error) {
+      console.error('Error copying link:', error);
+    }
+  };
+
+  // Format date
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   if (loading) return (
@@ -197,19 +328,19 @@ export default function Dashboard() {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold">Dashboard</h1>
-            <p className="text-neutral-400 mt-1">Manage your product ideas and sales pages</p>
+            <p className="text-neutral-400 mt-1">Manage your products from idea to launch</p>
           </div>
-          <Link
-            to="/product-idea-copilot"
+          <button
+            onClick={() => setShowNewProductModal(true)}
             className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium flex items-center gap-2"
           >
-            <Sparkles className="w-5 h-5" />
-            New Product Idea
-          </Link>
+            <Plus className="w-5 h-5" />
+            New Product
+          </button>
         </div>
 
         {/* Info Banner */}
-        {showInfoBanner && completedIdeas.length === 0 && (
+        {showInfoBanner && unifiedProducts.length === 0 && (
           <div className="mb-6 bg-purple-950/30 border border-purple-800/30 rounded-lg p-5">
             <div className="flex items-start gap-3">
               <Lightbulb className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
@@ -243,13 +374,16 @@ export default function Dashboard() {
         {/* Stats Overview */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
-            <p className="text-neutral-400 text-sm mb-1">Product Ideas</p>
-            <p className="text-3xl font-bold">{totals.ideas}</p>
+            <p className="text-neutral-400 text-sm mb-1">Total Products</p>
+            <p className="text-3xl font-bold">{totals.total}</p>
+            <p className="text-xs text-neutral-500 mt-1">
+              {totals.ideasOnly} idea{totals.ideasOnly !== 1 ? 's' : ''} · {totals.withSalesPage} sales page{totals.withSalesPage !== 1 ? 's' : ''}
+            </p>
           </div>
           <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
-            <p className="text-neutral-400 text-sm mb-1">Sales Pages</p>
-            <p className="text-3xl font-bold">{totals.products}</p>
-            <p className="text-xs text-neutral-500">{totals.published} published</p>
+            <p className="text-neutral-400 text-sm mb-1">Published</p>
+            <p className="text-3xl font-bold text-green-400">{totals.published}</p>
+            <p className="text-xs text-neutral-500 mt-1">live and selling</p>
           </div>
           <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
             <p className="text-neutral-400 text-sm mb-1">Total Sales</p>
@@ -263,307 +397,264 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-neutral-800">
-          <button
-            onClick={() => setActiveTab('ideas')}
-            className={`px-4 py-3 font-medium transition-colors relative ${
-              activeTab === 'ideas' 
-                ? 'text-purple-400' 
-                : 'text-neutral-400 hover:text-neutral-300'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Lightbulb className="w-4 h-4" />
-              Product Ideas
-              {completedIdeas.length > 0 && (
-                <span className="bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">
-                  {completedIdeas.length}
-                </span>
-              )}
-            </div>
-            {activeTab === 'ideas' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('products')}
-            className={`px-4 py-3 font-medium transition-colors relative ${
-              activeTab === 'products' 
-                ? 'text-purple-400' 
-                : 'text-neutral-400 hover:text-neutral-300'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              Sales Pages
-              {products.length > 0 && (
-                <span className="bg-neutral-700 text-neutral-300 text-xs px-2 py-0.5 rounded-full">
-                  {products.length}
-                </span>
-              )}
-            </div>
-            {activeTab === 'products' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />
-            )}
-          </button>
+        {/* Products Section Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold flex items-center gap-2">
+            <Package className="w-5 h-5 text-purple-400" />
+            Products
+          </h2>
         </div>
 
-        {/* Product Ideas Tab */}
-        {activeTab === 'ideas' && (
-          <div>
-            {/* In Progress Ideas */}
-            {inProgressIdeas.length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold text-neutral-300 mb-4 flex items-center gap-2">
-                  <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                  In Progress
-                </h3>
-                <div className="grid gap-4">
-                  {inProgressIdeas.map(idea => (
-                    <div 
-                      key={idea.id} 
-                      className="border border-yellow-800/30 bg-yellow-950/10 rounded-lg p-5 hover:bg-yellow-950/20 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
+        {/* Unified Products List */}
+        {unifiedProducts.length > 0 ? (
+          <div className="space-y-4">
+            {unifiedProducts.map((item) => {
+              // IN PROGRESS IDEA
+              if (item.type === 'in_progress' && item.idea) {
+                return (
+                  <div key={`idea-${item.idea.id}`} className="border border-neutral-800 rounded-lg p-5 bg-neutral-900/30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-amber-950/30 border border-amber-800/30 flex items-center justify-center">
+                          <Clock className="w-5 h-5 text-amber-400" />
+                        </div>
                         <div>
-                          <h4 className="font-medium text-neutral-200">{idea.name}</h4>
-                          <p className="text-sm text-neutral-500 mt-1">
-                            Started {idea.createdAt?.toDate?.()?.toLocaleDateString() || 'recently'}
+                          <h3 className="font-medium">{item.name}</h3>
+                          <p className="text-sm text-neutral-500">
+                            Started {formatDate(item.updatedAt)}
                           </p>
                         </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs px-2 py-1 bg-amber-950/30 text-amber-400 rounded-full border border-amber-800/30">
+                          In Progress
+                        </span>
                         <button
-                          onClick={() => continueIdea(idea.id)}
-                          className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                          onClick={() => continueIdea(item.idea!.id)}
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
                         >
                           Continue
                           <ChevronRight className="w-4 h-4" />
                         </button>
+                        <button
+                          onClick={() => deleteIdea(item.idea!.id, item.name)}
+                          className="p-2 text-neutral-500 hover:text-red-400 hover:bg-red-950/30 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  </div>
+                );
+              }
 
-            {/* Completed Ideas */}
-            {completedIdeas.length > 0 ? (
-              <div className="grid gap-4">
-                {completedIdeas.map(idea => {
-                  const tierInfo = getTierInfo(idea.productConfig?.tierType || 'low');
-                  const hasSalesPage = !!idea.salesPageId;
-                  
-                  return (
-                    <div 
-                      key={idea.id} 
-                      className="border border-neutral-800 rounded-lg p-6 bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors"
-                    >
-                      <div className="flex flex-col gap-4">
-                        {/* Header */}
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-xl font-semibold">
-                                {idea.productConfig?.name || idea.name}
-                              </h3>
+              // IDEA ONLY (no sales page yet)
+              if (item.type === 'idea_only' && item.idea) {
+                const idea = item.idea;
+                const tierInfo = getTierInfo(idea.productConfig?.tierType || '');
+                
+                return (
+                  <div key={`idea-${idea.id}`} className="border border-neutral-800 rounded-lg p-6 bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors">
+                    <div className="flex flex-col gap-4">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-yellow-950/30 border border-yellow-800/30 flex items-center justify-center flex-shrink-0">
+                            <Lightbulb className="w-5 h-5 text-yellow-400" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="text-xl font-semibold">{idea.productConfig?.name}</h3>
                               <span className={`text-xs px-2 py-1 rounded-full border ${tierInfo.color}`}>
                                 {tierInfo.label}
                               </span>
-                              {hasSalesPage && (
-                                <span className="text-xs px-2 py-1 rounded-full bg-green-950/30 text-green-400 border border-green-800/30">
-                                  Has Sales Page
-                                </span>
-                              )}
+                              <span className="text-xs px-2 py-1 bg-yellow-950/30 text-yellow-400 rounded-full border border-yellow-800/30">
+                                Idea Only
+                              </span>
                             </div>
-                            <p className="text-neutral-400 text-sm line-clamp-2">
+                            <p className="text-neutral-400 text-sm mt-1 line-clamp-2">
                               {idea.productConfig?.description}
                             </p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-2xl font-bold text-green-400">
-                              ${idea.productConfig?.price || 0}
-                            </p>
-                            <p className="text-xs text-neutral-500">
-                              {idea.productConfig?.priceType || 'one-time'}
-                            </p>
-                          </div>
                         </div>
-
-                        {/* Details */}
-                        <div className="flex flex-wrap gap-4 text-sm">
-                          <div>
-                            <span className="text-neutral-500">Target: </span>
-                            <span className="text-neutral-300">{idea.productConfig?.targetAudience || 'Not set'}</span>
-                          </div>
-                          <div>
-                            <span className="text-neutral-500">Includes: </span>
-                            <span className="text-neutral-300">{idea.productConfig?.valueStack?.length || 0} items</span>
-                          </div>
-                          <div>
-                            <span className="text-neutral-500">Guarantees: </span>
-                            <span className="text-neutral-300">{idea.productConfig?.guarantees?.length || 0}</span>
-                          </div>
-                        </div>
-
-                        {/* Mission Statement */}
-                        {idea.productConfig?.mission && (
-                          <div className="bg-purple-950/20 border border-purple-800/30 rounded-lg p-3">
-                            <p className="text-sm text-purple-300 italic">
-                              "{idea.productConfig.mission}"
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Actions */}
-                        <div className="flex flex-wrap gap-3 pt-3 border-t border-neutral-800">
-                          {!hasSalesPage ? (
-                            <button
-                              onClick={() => createSalesPage(idea)}
-                              className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg font-medium transition-all flex items-center gap-2"
-                            >
-                              <Rocket className="w-4 h-4" />
-                              Create Sales Page
-                            </button>
-                          ) : (
-                            <Link
-                              to={`/products/${idea.salesPageId}/landing/edit`}
-                              className="px-4 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-                            >
-                              <Eye className="w-4 h-4" />
-                              View Sales Page
-                            </Link>
-                          )}
-                          
-                          <button
-                            onClick={() => editIdea(idea.id)}
-                            className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                            Edit Idea
-                          </button>
-                          
-                          <button
-                            onClick={() => deleteIdea(idea.id, idea.productConfig?.name || idea.name)}
-                            className="px-4 py-2 bg-red-950/30 hover:bg-red-950/50 text-red-400 rounded-lg transition-colors flex items-center gap-2"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Delete
-                          </button>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-2xl font-bold text-green-400">
+                            ${idea.productConfig?.price || 0}
+                          </p>
+                          <p className="text-xs text-neutral-500">{idea.productConfig?.priceType || 'one-time'}</p>
                         </div>
                       </div>
+
+                      {/* Details */}
+                      <div className="flex flex-wrap gap-4 text-sm text-neutral-400">
+                        <span>Target: <span className="text-neutral-300">{idea.productConfig?.targetAudience}</span></span>
+                        <span>Includes: <span className="text-neutral-300">{idea.productConfig?.valueStack?.length || 0} items</span></span>
+                        <span>Guarantees: <span className="text-neutral-300">{idea.productConfig?.guarantees?.length || 0}</span></span>
+                      </div>
+
+                      {/* Mission */}
+                      {idea.productConfig?.mission && (
+                        <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-700">
+                          <p className="text-sm italic text-neutral-300">"{idea.productConfig.mission}"</p>
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div className="flex flex-wrap gap-3 pt-3 border-t border-neutral-800">
+                        <button
+                          onClick={() => createSalesPage(idea.id)}
+                          className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg font-medium transition-all flex items-center gap-2"
+                        >
+                          <Rocket className="w-4 h-4" />
+                          Create Sales Page
+                        </button>
+                        <button
+                          onClick={() => editIdea(idea.id)}
+                          className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          Edit Idea
+                        </button>
+                        <div className="flex-1" />
+                        <button
+                          onClick={() => deleteIdea(idea.id, idea.productConfig?.name || idea.name)}
+                          className="px-4 py-2 bg-red-950/30 hover:bg-red-950/50 text-red-400 rounded-lg transition-colors flex items-center gap-2"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-16 bg-neutral-900/30 rounded-lg border border-neutral-800">
-                <div className="text-5xl mb-4"></div>
-                <p className="text-xl text-neutral-300 mb-2">No product ideas yet</p>
-                <p className="text-neutral-400 mb-6">Use the Product Idea Co-Pilot to discover what to sell</p>
-                <Link 
-                  to="/product-idea-copilot"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium"
-                >
-                  <Sparkles className="w-5 h-5" />
-                  Start Product Idea Co-Pilot
-                </Link>
-              </div>
-            )}
-          </div>
-        )}
+                  </div>
+                );
+              }
 
-        {/* Sales Pages Tab */}
-        {activeTab === 'products' && (
-          <div>
-            {products.length > 0 ? (
-              <div className="grid gap-4">
-                {products.map(product => {
-                  const displayData = {
-                    title: product.salesPage?.coreInfo?.name || 'Untitled',
-                    description: product.salesPage?.valueProp?.description || '',
-                    price: product.salesPage?.coreInfo?.price || 0,
-                    published: product.published || false,
-                    views: product.analytics?.views || 0,
-                    sales: product.analytics?.sales || 0,
-                    revenue: product.analytics?.revenue || 0,
-                    slug: product.salesPage?.publish?.slug,
-                    deliveryType: product.delivery?.type || 'none',
-                    deliveryConfigured: product.delivery?.status === 'configured'
-                  };
+              // WITH SALES PAGE
+              if (item.type === 'with_sales_page' && item.product) {
+                const product = item.product;
+                const idea = item.idea;
+                const sourceId = product.sourceSessionId || product.salesPage?.sourceSessionId;
+                const hasLinkedIdea = !!idea;
+                const tierInfo = idea?.productConfig?.tierType ? getTierInfo(idea.productConfig.tierType) : null;
+                
+                const displayData = {
+                  title: product.salesPage?.coreInfo?.name || 'Untitled',
+                  description: product.salesPage?.valueProp?.description || '',
+                  price: product.salesPage?.coreInfo?.price || 0,
+                  priceType: product.salesPage?.coreInfo?.priceType || 'one-time',
+                  published: product.published || false,
+                  views: product.analytics?.views || 0,
+                  sales: product.analytics?.sales || 0,
+                  revenue: product.analytics?.revenue || 0,
+                  slug: product.salesPage?.publish?.slug,
+                };
 
-                  return (
-                    <div key={product.id} className="border border-neutral-800 rounded-lg p-6 bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors">
+                const isExpanded = expandedIdeaId === product.id;
+
+                return (
+                  <div key={`product-${product.id}`} className="border border-neutral-800 rounded-lg bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors overflow-hidden">
+                    <div className="p-6">
                       <div className="flex flex-col gap-4">
-                        {/* Product Info */}
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between gap-3 mb-3">
-                            <div className="flex-1">
-                              <h3 className="text-xl font-semibold">{displayData.title}</h3>
+                        {/* Header */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                              displayData.published 
+                                ? 'bg-green-950/30 border border-green-800/30' 
+                                : 'bg-neutral-800 border border-neutral-700'
+                            }`}>
+                              <FileText className={`w-5 h-5 ${displayData.published ? 'text-green-400' : 'text-neutral-400'}`} />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="text-xl font-semibold">{displayData.title}</h3>
+                                <span className={`text-xs px-2 py-1 rounded-full border ${
+                                  displayData.published 
+                                    ? 'bg-green-950/30 text-green-400 border-green-800/30' 
+                                    : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                                }`}>
+                                  {displayData.published ? 'Live' : 'Draft'}
+                                </span>
+                                {tierInfo && (
+                                  <span className={`text-xs px-2 py-1 rounded-full border ${tierInfo.color}`}>
+                                    {tierInfo.label}
+                                  </span>
+                                )}
+                                {hasLinkedIdea && (
+                                  <span className="text-xs px-2 py-1 rounded-full bg-purple-950/30 text-purple-400 border border-purple-800/30 flex items-center gap-1">
+                                    <Sparkles className="w-3 h-3" />
+                                    From Co-Pilot
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-neutral-400 text-sm mt-1 line-clamp-2">
                                 {displayData.description}
                               </p>
                             </div>
-                            <div className="text-right">
-                              <p className="text-2xl font-bold text-green-400">${displayData.price}</p>
-                            </div>
                           </div>
-                          
-                          {/* Status Badges */}
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${
-                              displayData.published 
-                                ? 'bg-green-950/30 text-green-400 border border-green-800/30' 
-                                : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
-                            }`}>
-                              {displayData.published ? 'Live' : 'Draft'}
-                            </span>
-                            
-                            {displayData.deliveryConfigured && (
-                              <span className="text-xs px-2 py-1 bg-blue-950/30 text-blue-400 rounded-full border border-blue-800/30">
-                                Delivery Setup
-                              </span>
-                            )}
-                          </div>
-                          
-                          {/* Analytics */}
-                          <div className="flex gap-6 text-sm">
-                            <span className="flex items-center gap-2">
-                              <span className="text-neutral-500">Views:</span>
-                              <span className="font-medium">{displayData.views}</span>
-                            </span>
-                            <span className="flex items-center gap-2">
-                              <span className="text-neutral-500">Sales:</span>
-                              <span className="font-medium text-green-400">{displayData.sales}</span>
-                            </span>
-                            <span className="flex items-center gap-2">
-                              <span className="text-neutral-500">Revenue:</span>
-                              <span className="font-medium text-green-400">
-                                ${displayData.revenue.toFixed(2)}
-                              </span>
-                            </span>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-2xl font-bold text-green-400">${displayData.price}</p>
+                            <p className="text-xs text-neutral-500">{displayData.priceType}</p>
                           </div>
                         </div>
-                        
+
+                        {/* Analytics */}
+                        <div className="flex gap-6 text-sm">
+                          <span className="flex items-center gap-2">
+                            <span className="text-neutral-500">Views:</span>
+                            <span className="font-medium">{displayData.views}</span>
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <span className="text-neutral-500">Sales:</span>
+                            <span className="font-medium text-green-400">{displayData.sales}</span>
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <span className="text-neutral-500">Revenue:</span>
+                            <span className="font-medium text-green-400">${displayData.revenue.toFixed(2)}</span>
+                          </span>
+                        </div>
+
                         {/* Actions */}
-                        <div className="flex flex-wrap gap-3 pt-3 border-t border-neutral-800">
+                        <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-neutral-800">
                           <Link
-                            to={`/products/${product.id}/landing/edit`}
+                            to={`/products/${product.id}/edit`}
                             className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
                           >
                             <Edit2 className="w-4 h-4" />
                             Edit
                           </Link>
                           
-                          {displayData.slug && (
+                          {/* Smart Preview/View Live Button */}
+                          {displayData.published && displayData.slug ? (
                             <a
                               href={`/p/${displayData.slug}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
+                              className="px-4 py-2 bg-green-950/30 hover:bg-green-950/50 text-green-400 rounded-lg transition-colors flex items-center gap-2"
                             >
                               <ExternalLink className="w-4 h-4" />
                               View Live
                             </a>
+                          ) : (
+                            <Link
+                              to={`/products/${product.id}/preview`}
+                              target="_blank"
+                              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
+                            >
+                              <Eye className="w-4 h-4" />
+                              Preview
+                            </Link>
+                          )}
+                          
+                          {/* Copy Link - only when published */}
+                          {displayData.published && displayData.slug && (
+                            <button
+                              onClick={() => copyProductLink(displayData.slug!, product.id)}
+                              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
+                            >
+                              <Copy className="w-4 h-4" />
+                              {copiedProductId === product.id ? 'Copied!' : 'Copy Link'}
+                            </button>
                           )}
                           
                           <Link
@@ -574,43 +665,164 @@ export default function Dashboard() {
                             Delivery
                           </Link>
                         </div>
+
+                        {/* Original Idea Section (Expandable) */}
+                        {hasLinkedIdea && idea && (
+                          <div className="pt-3 border-t border-neutral-800">
+                            <button
+                              onClick={() => setExpandedIdeaId(isExpanded ? null : product.id)}
+                              className="flex items-center gap-2 text-sm text-neutral-400 hover:text-neutral-300 transition-colors"
+                            >
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              <Lightbulb className="w-4 h-4" />
+                              Original Idea
+                            </button>
+                            
+                            {isExpanded && (
+                              <div className="mt-3 p-4 bg-neutral-800/50 rounded-lg border border-neutral-700">
+                                <div className="flex flex-wrap gap-4 text-sm text-neutral-400 mb-3">
+                                  <span>Target: <span className="text-neutral-300">{idea.productConfig?.targetAudience}</span></span>
+                                  <span>Includes: <span className="text-neutral-300">{idea.productConfig?.valueStack?.length || 0} items</span></span>
+                                  <span>Guarantees: <span className="text-neutral-300">{idea.productConfig?.guarantees?.length || 0}</span></span>
+                                </div>
+                                {idea.productConfig?.mission && (
+                                  <p className="text-sm italic text-neutral-400 mb-3">"{idea.productConfig.mission}"</p>
+                                )}
+                                <button
+                                  onClick={() => editIdea(idea.id)}
+                                  className="px-3 py-1.5 text-sm bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  Edit Idea
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Delete Options */}
+                        <div className="pt-3 border-t border-neutral-800">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-neutral-500">Delete:</span>
+                            {hasLinkedIdea && sourceId ? (
+                              <>
+                                <button
+                                  onClick={() => deleteSalesPageOnly(product.id, sourceId, displayData.title)}
+                                  className="px-3 py-1.5 text-xs bg-red-950/20 hover:bg-red-950/40 text-red-400 rounded-lg transition-colors flex items-center gap-1"
+                                >
+                                  <X className="w-3 h-3" />
+                                  Sales Page Only
+                                </button>
+                                <button
+                                  onClick={() => deleteEverything(product.id, sourceId, displayData.title)}
+                                  className="px-3 py-1.5 text-xs bg-red-950/20 hover:bg-red-950/40 text-red-400 rounded-lg transition-colors flex items-center gap-1"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  Everything
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => deleteProduct(product.id, displayData.title)}
+                                className="px-3 py-1.5 text-xs bg-red-950/20 hover:bg-red-950/40 text-red-400 rounded-lg transition-colors flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                Delete Product
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-16 bg-neutral-900/30 rounded-lg border border-neutral-800">
-                <div className="text-5xl mb-4"></div>
-                <p className="text-xl text-neutral-300 mb-2">No sales pages yet</p>
-                <p className="text-neutral-400 mb-6">
-                  {completedIdeas.length > 0 
-                    ? 'Create a sales page from one of your product ideas'
-                    : 'Start by creating a product idea first'
-                  }
-                </p>
-                {completedIdeas.length > 0 ? (
-                  <button
-                    onClick={() => setActiveTab('ideas')}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 rounded-lg hover:bg-purple-500 transition-colors font-medium"
-                  >
-                    <Lightbulb className="w-5 h-5" />
-                    View Product Ideas
-                  </button>
-                ) : (
-                  <Link 
-                    to="/product-idea-copilot"
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium"
-                  >
-                    <Sparkles className="w-5 h-5" />
-                    Start Product Idea Co-Pilot
-                  </Link>
-                )}
-              </div>
-            )}
+                  </div>
+                );
+              }
+
+              return null;
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-16 bg-neutral-900/30 rounded-lg border border-neutral-800">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-purple-950/30 flex items-center justify-center">
+              <Sparkles className="w-8 h-8 text-purple-400" />
+            </div>
+            <p className="text-xl text-neutral-300 mb-2">No products yet</p>
+            <p className="text-neutral-400 mb-6">Start by creating a product idea with the Co-Pilot</p>
+            <Link 
+              to="/product-idea-copilot"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium"
+            >
+              <Sparkles className="w-5 h-5" />
+              Start Product Idea Co-Pilot
+            </Link>
           </div>
         )}
       </div>
+
+      {/* New Product Selection Modal */}
+      {showNewProductModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold">Create New Product</h2>
+              <button
+                onClick={() => setShowNewProductModal(false)}
+                className="p-2 hover:bg-neutral-800 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <p className="text-neutral-400 mb-6">How would you like to start?</p>
+            
+            <div className="space-y-3">
+              {/* Option 1: Product Idea Co-Pilot */}
+              <button
+                onClick={() => {
+                  setShowNewProductModal(false);
+                  navigate('/product-idea-copilot?new=true');
+                }}
+                className="w-full p-4 bg-gradient-to-r from-purple-600/20 to-indigo-600/20 hover:from-purple-600/30 hover:to-indigo-600/30 border border-purple-500/30 rounded-xl text-left transition-all group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-500/30 transition-colors">
+                    <Sparkles className="w-6 h-6 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white mb-1">Product Idea Co-Pilot</h3>
+                    <p className="text-sm text-neutral-400">
+                      Not sure what to sell? Let AI help you discover the perfect product based on your skills and audience.
+                    </p>
+                    <span className="inline-block mt-2 text-xs text-purple-400 font-medium">Recommended for beginners</span>
+                  </div>
+                </div>
+              </button>
+              
+              {/* Option 2: Create Sales Page Directly */}
+              <button
+                onClick={() => {
+                  setShowNewProductModal(false);
+                  navigate('/products/sales');
+                }}
+                className="w-full p-4 bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-700 rounded-xl text-left transition-all group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-lg bg-neutral-700/50 flex items-center justify-center flex-shrink-0 group-hover:bg-neutral-700 transition-colors">
+                    <Rocket className="w-6 h-6 text-neutral-300" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white mb-1">Create Sales Page</h3>
+                    <p className="text-sm text-neutral-400">
+                      Already know what you're selling? Jump straight into building your sales page.
+                    </p>
+                    <span className="inline-block mt-2 text-xs text-neutral-500 font-medium">For experienced creators</span>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

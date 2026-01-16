@@ -2,7 +2,7 @@
 // Product Idea Discovery Framework
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { doc, updateDoc, setDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -893,6 +893,9 @@ const questions: QuestionData[] = [
 
 export default function ProductIdeaGenerator() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isNewSession = searchParams.get('new') === 'true';
+  
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
   const [aiResponses, setAiResponses] = useState<AIResponses>({});
@@ -954,6 +957,26 @@ export default function ProductIdeaGenerator() {
       }
 
       try {
+        // If coming from Dashboard with ?new=true, start a fresh session
+        if (isNewSession) {
+          console.log('Starting fresh session from Dashboard...');
+          const newSessionId = await startNewCoPilotSession(user.uid);
+          setCurrentSessionId(newSessionId);
+          setSessionName(`Business Idea #${newSessionId.slice(-4)}`);
+          setCurrentQuestionIndex(0);
+          setAnswers({});
+          setAiResponses({});
+          setGeneratedIdeas([]);
+          setEditableProduct(null);
+          setShowResults(false);
+          setHasResumedSession(false);
+          
+          // Clear the URL param so refresh doesn't start another new session
+          navigate('/product-idea-copilot', { replace: true });
+          setIsLoadingAnswers(false);
+          return;
+        }
+        
         const { sessionId, session, isNew } = await getOrCreateActiveSession(user.uid);
         
         setCurrentSessionId(sessionId);
@@ -991,7 +1014,7 @@ export default function ProductIdeaGenerator() {
     };
 
     loadOrCreateSession();
-  }, []);
+  }, [isNewSession]);
 
   // Helper to regenerate product from saved answers (for resuming completed sessions)
   const regenerateProductFromAnswers = (savedAnswers: Record<string, any>) => {
@@ -1146,7 +1169,7 @@ export default function ProductIdeaGenerator() {
       return {
         value: `${value}${custom ? `_${index}` : ''}`,
         label: fullLabel,
-        description: `${hints.pain} • ${hints.money} • ${hints.access}`,
+        description: `${hints.pain} â€¢ ${hints.money} â€¢ ${hints.access}`,
         originalSelection: selection
       };
     });
@@ -1548,7 +1571,7 @@ export default function ProductIdeaGenerator() {
   };
 
   const handleImproveAnswer = async (currentAnswer: string) => {
-    console.log('🚀 Starting improvement process...');
+    console.log('ðŸš€ Starting improvement process...');
     setIsGeneratingImprovement(true);
     
     try {
