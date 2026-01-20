@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DeliveryData } from './DeliveryBuilder';
 import { storage, auth } from '../../lib/firebase';
@@ -8,6 +8,7 @@ import {
   Upload, X, Loader, File, Video, FileText, Link,
   ChevronDown, ChevronUp, Eye, Trash2, Plus
 } from 'lucide-react';
+import ConfirmModal from '../ConfirmModal';
 
 interface DeliveryStep2Props {
   data: DeliveryData;
@@ -49,12 +50,37 @@ export default function DeliveryStep2({
   // UI state
   const [showEmailPreview, setShowEmailPreview] = useState(false);
 
+  // Delete confirmation modal state (for files and videos)
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    type: 'file' | 'video';
+    id: string;
+    url: string;
+    name: string;
+  }>({ isOpen: false, type: 'file', id: '', url: '', name: '' });
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Ref for auto-expanding textarea
+  const emailBodyRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize email body textarea
+  useEffect(() => {
+    const textarea = emailBodyRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.max(textarea.scrollHeight, 200)}px`;
+    }
+  }, [data.email.body]);
+
   // ==========================================
   // FILE UPLOAD HANDLERS
   // ==========================================
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+
+    // Reset input value to allow uploading the same file again
+    e.target.value = '';
 
     const file = files[0];
     
@@ -115,21 +141,37 @@ export default function DeliveryStep2({
     }
   };
 
-  const handleDeleteFile = async (fileId: string, fileUrl: string) => {
-    if (!confirm('Delete this file?')) return;
+  // Open delete confirmation modal
+  const openDeleteModal = (type: 'file' | 'video', id: string, name: string, url: string = '') => {
+    setDeleteModal({ isOpen: true, type, id, url, name });
+  };
+
+  // Confirm deletion (files or videos)
+  const confirmDelete = async () => {
+    setIsDeleting(true);
     
-    try {
-      // Delete from storage
-      const storageRef = ref(storage, fileUrl);
-      await deleteObject(storageRef);
-    } catch (error) {
-      console.error('Error deleting from storage:', error);
+    if (deleteModal.type === 'file') {
+      try {
+        // Delete file from storage
+        const storageRef = ref(storage, deleteModal.url);
+        await deleteObject(storageRef);
+      } catch (error) {
+        console.error('Error deleting from storage:', error);
+      }
+      
+      // Remove file from data
+      updateHosted({
+        files: data.hosted.files.filter(f => f.id !== deleteModal.id)
+      });
+    } else {
+      // Remove video from data (no storage deletion needed)
+      updateHosted({
+        videos: data.hosted.videos.filter(v => v.id !== deleteModal.id)
+      });
     }
     
-    // Remove from data
-    updateHosted({
-      files: data.hosted.files.filter(f => f.id !== fileId)
-    });
+    setIsDeleting(false);
+    setDeleteModal({ isOpen: false, type: 'file', id: '', url: '', name: '' });
   };
 
   // ==========================================
@@ -160,24 +202,41 @@ export default function DeliveryStep2({
     setVideoTitle('');
   };
 
-  const handleDeleteVideo = (videoId: string) => {
-    updateHosted({
-      videos: data.hosted.videos.filter(v => v.id !== videoId)
-    });
-  };
-
   // ==========================================
   // EMAIL PREVIEW
   // ==========================================
-  const getPreviewEmail = () => {
+  const ACCESS_BUTTON_PLACEHOLDER = '___ACCESS_BUTTON___';
+  
+  const getPreviewEmailParts = () => {
     let body = data.email.body;
     body = body.replace(/\{\{customer_name\}\}/g, 'John');
     body = body.replace(/\{\{customer_email\}\}/g, 'john@example.com');
     body = body.replace(/\{\{product_name\}\}/g, productName);
-    body = body.replace(/\{\{access_button\}\}/g, data.deliveryMethod !== 'email-only' 
-      ? '[🔗 Access Your Product]' 
-      : '');
+    body = body.replace(/\{\{access_button\}\}/g, 
+      data.deliveryMethod !== 'email-only' ? ACCESS_BUTTON_PLACEHOLDER : ''
+    );
     return body;
+  };
+
+  const renderEmailPreview = () => {
+    const content = getPreviewEmailParts();
+    
+    if (!content.includes(ACCESS_BUTTON_PLACEHOLDER)) {
+      return <span className="whitespace-pre-wrap">{content}</span>;
+    }
+    
+    const parts = content.split(ACCESS_BUTTON_PLACEHOLDER);
+    return (
+      <>
+        <span className="whitespace-pre-wrap">{parts[0]}</span>
+        <div className="my-3">
+          <span className="inline-block px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium">
+            🔗 Access Your Product
+          </span>
+        </div>
+        <span className="whitespace-pre-wrap">{parts[1]}</span>
+      </>
+    );
   };
 
   // ==========================================
@@ -223,6 +282,7 @@ export default function DeliveryStep2({
               type="text"
               value={data.email.subject}
               onChange={(e) => updateEmail({ subject: e.target.value })}
+              maxLength={100}
               placeholder="Your purchase is confirmed! 🎉"
               className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg focus:border-indigo-500 focus:outline-none text-white"
             />
@@ -237,11 +297,11 @@ export default function DeliveryStep2({
               Email Body <span className="text-red-400">*</span>
             </label>
             <textarea
+              ref={emailBodyRef}
               value={data.email.body}
               onChange={(e) => updateEmail({ body: e.target.value })}
               placeholder="Write your confirmation email..."
-              rows={8}
-              className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg focus:border-indigo-500 focus:outline-none text-white resize-none font-mono text-sm"
+              className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg focus:border-indigo-500 focus:outline-none text-white resize-y font-mono text-sm min-h-[200px] overflow-hidden"
             />
             
             {/* Variable hints */}
@@ -275,8 +335,8 @@ export default function DeliveryStep2({
                 <p className="text-xs text-neutral-500">Subject:</p>
                 <p className="font-medium">{data.email.subject}</p>
               </div>
-              <div className="whitespace-pre-wrap text-sm">
-                {getPreviewEmail()}
+              <div className="text-sm">
+                {renderEmailPreview()}
               </div>
             </div>
           )}
@@ -375,7 +435,7 @@ export default function DeliveryStep2({
             {/* Info banner */}
             <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-lg p-4">
               <p className="text-sm text-indigo-300">
-                💡 Add files, videos, a Notion page, or create a custom content page. Customers will see a branded delivery page after purchase.
+                💡 Add files, videos, embed external pages, or create a custom content page. Customers will see a branded delivery page after purchase.
               </p>
             </div>
 
@@ -384,7 +444,7 @@ export default function DeliveryStep2({
               <div className="flex items-center gap-2 mb-4">
                 <File className="w-5 h-5 text-neutral-400" />
                 <h4 className="font-medium">Files</h4>
-                <span className="text-xs text-neutral-500">PDFs, ZIPs, images, etc.</span>
+                <span className="text-xs text-neutral-500">PDFs, ZIPs, images, videos, etc.</span>
               </div>
 
               {/* File list */}
@@ -398,7 +458,7 @@ export default function DeliveryStep2({
                         <p className="text-xs text-neutral-500">{formatFileSize(file.size)}</p>
                       </div>
                       <button
-                        onClick={() => handleDeleteFile(file.id, file.url)}
+                        onClick={() => openDeleteModal('file', file.id, file.name, file.url)}
                         className="p-1 hover:bg-neutral-700 rounded"
                       >
                         <Trash2 className="w-4 h-4 text-red-400" />
@@ -455,7 +515,7 @@ export default function DeliveryStep2({
                         <p className="text-xs text-neutral-500 capitalize">{video.platform}</p>
                       </div>
                       <button
-                        onClick={() => handleDeleteVideo(video.id)}
+                        onClick={() => openDeleteModal('video', video.id, video.title)}
                         className="p-1 hover:bg-neutral-700 rounded"
                       >
                         <Trash2 className="w-4 h-4 text-red-400" />
@@ -491,23 +551,23 @@ export default function DeliveryStep2({
               </div>
             </div>
 
-            {/* NOTION */}
+            {/* EMBED EXTERNAL PAGE */}
             <div className="border border-neutral-700 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-4">
-                <FileText className="w-5 h-5 text-neutral-400" />
-                <h4 className="font-medium">Notion Page</h4>
-                <span className="text-xs text-neutral-500">Embed a Notion page</span>
+                <Link className="w-5 h-5 text-neutral-400" />
+                <h4 className="font-medium">Embed External Page</h4>
+                <span className="text-xs text-neutral-500">Notion, Google Docs, Coda, etc.</span>
               </div>
 
               <input
                 type="text"
                 value={data.hosted.notionUrl}
                 onChange={(e) => updateHosted({ notionUrl: e.target.value })}
-                placeholder="https://www.notion.so/your-page"
+                placeholder="https://notion.so/... or docs.google.com/..."
                 className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-sm focus:border-indigo-500 focus:outline-none"
               />
               <p className="text-xs text-neutral-500 mt-2">
-                Make sure to publish your Notion page and enable "Share to web"
+                Make sure the page is published and set to "Anyone with the link can view"
               </p>
             </div>
 
@@ -617,6 +677,19 @@ export default function DeliveryStep2({
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal (Files & Videos) */}
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        title={deleteModal.type === 'file' ? 'Delete File?' : 'Delete Video?'}
+        message={`Are you sure you want to delete "${deleteModal.name}"? This cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteModal({ isOpen: false, type: 'file', id: '', url: '', name: '' })}
+        isLoading={isDeleting}
+      />
     </div>
   );
 }

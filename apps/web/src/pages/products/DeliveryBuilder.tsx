@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 // Step components
-import DeliveryStep2 from './deliveryStep2';
+import DeliveryStep2 from './DeliveryStep2';
 import DeliveryPreview from './delivery page components/DeliveryPreview';
 
 // ============================================
@@ -287,7 +287,7 @@ export default function DeliveryBuilder() {
         lastUpdated: new Date()
       });
 
-      console.log('✅ Delivery configuration saved successfully');
+      console.log('âœ… Delivery configuration saved successfully');
       setSaveSuccess(true);
       
       // Redirect after 2 seconds
@@ -377,7 +377,7 @@ export default function DeliveryBuilder() {
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-green-500" />
             <p className="text-sm text-green-500">
-              ✅ Delivery configured successfully! Returning to dashboard...
+              âœ… Delivery configured successfully! Returning to dashboard...
             </p>
           </div>
         </div>

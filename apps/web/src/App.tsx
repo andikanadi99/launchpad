@@ -25,6 +25,7 @@ import Success from "./pages/products/Success";
 import Support from "./pages/Support";
 import ProductPagePreview from "./pages/products/product page components/ProductPagePreview";
 import DeliveryBuilder from "./pages/products/DeliveryBuilder";
+import ContentBuilderPage from "./pages/products/product page components/ContentBuilderPage";
 
 //Sales Page
 import SalesPage from "./pages/products/SalesPage";
@@ -69,6 +70,7 @@ export default function App() {
           <Route path=":productId/preview" element={<SalesPagePreview />} />
           <Route path=":productId/success" element={<Success />} /> 
           <Route path=":productId/delivery" element={<DeliveryBuilder />} />
+          <Route path=":productId/content-builder" element={<ContentBuilderPage />} />
         </Route>
         
         <Route path="settings" element={<Settings />} />
@@ -80,7 +82,7 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Auth area: outside layout â†’ no header/nav */}
+      {/* Auth area: outside layout Ã¢â€ â€™ no header/nav */}
       <Route path="/auth">
         <Route path="signin" element={<SignIn />} />
         <Route path="signup" element={<SignUp />} />
