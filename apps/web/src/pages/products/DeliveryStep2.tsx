@@ -587,7 +587,7 @@ export default function DeliveryStep2({
               </div>
 
               <button
-                onClick={() => navigate(`/product/${productId}/content-builder`)}
+                onClick={() => navigate(`/products/${productId}/content-builder`)}
                 className="w-full px-4 py-3 border border-neutral-600 hover:border-neutral-500 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
               >
                 {data.hosted.hasCustomContent ? 'Edit Content Page' : 'Create Content Page'}
