@@ -34,6 +34,7 @@ export interface QuestionData {
   showAIHelper?: boolean;
   smartSuggestion?: boolean; 
   showAutoGenerate?: boolean;
+  dynamicOptionsFrom?: string;
 }
 
 interface QuestionStepProps {
@@ -57,7 +58,8 @@ interface QuestionStepProps {
   isGeneratingOptimal?: boolean;
   isGeneratingImprovement?: boolean;
   isNavigating?: boolean;
-  // Edit flow props
+  recommendedValue?: string;
+  recommendedReason?: string;
   isReturningFromEdit?: boolean;
   onReturnToProduct?: () => void;
 }
@@ -83,8 +85,8 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
   isGeneratingOptimal = false,      
   isGeneratingImprovement = false,
   isNavigating = false,
-  isReturningFromEdit = false,
-  onReturnToProduct,
+  recommendedValue,
+  recommendedReason,
 }) => {
 
   const [error, setError] = useState<string>('');
@@ -133,7 +135,12 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
     // Check required
     if (required) {
       if (!answer || (Array.isArray(answer) && answer.length === 0) || answer === '') {
-        setError('This field is required');
+        const message = question.type === 'checkbox' 
+          ? 'Please select at least one option'
+          : question.type === 'radio'
+          ? 'Please select an option'
+          : 'This field is required';
+        setError(message);
         return false;
       }
     }
@@ -418,10 +425,12 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
             />
             
             {/* Character count */}
-            <div className="flex justify-end">
+            <div className="flex justify-between">
               <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                {answer?.length || 0} characters
-                {question.validation?.minLength && ` (min: ${question.validation.minLength})`}
+                {question.validation?.minLength && `Min: ${question.validation.minLength} chars`}
+              </span>
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                {answer?.length || 0}{question.validation?.maxLength ? `/${question.validation.maxLength}` : ''} characters
               </span>
             </div>
           </div>
@@ -457,15 +466,25 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                         className="mt-1 text-purple-600 focus:ring-purple-500"
                       />
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {option.icon}
                           <span className="font-medium text-neutral-900 dark:text-white">
                             {option.label}
                           </span>
+                          {recommendedValue && option.value.startsWith(recommendedValue) && (
+                            <span className="px-2 py-0.5 text-xs font-semibold bg-yellow-400/20 text-yellow-600 dark:text-yellow-400 border border-yellow-400/30 rounded-full">
+                              ⭐ Recommended
+                            </span>
+                          )}
                         </div>
                         {option.description && (
                           <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
                             {option.description}
+                          </p>
+                        )}
+                        {recommendedValue && recommendedReason && option.value.startsWith(recommendedValue) && (
+                          <p className="text-xs text-yellow-600 dark:text-yellow-400/80 mt-1.5 italic">
+                            Why: {recommendedReason}
                           </p>
                         )}
                       </div>
@@ -679,74 +698,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
 
       {/* Navigation Buttons */}
         <div className="space-y-2">
-        {/* Show special buttons when returning from edit on last question */}
-        {isLastQuestion && isReturningFromEdit && onReturnToProduct ? (
-          <div className="flex flex-col gap-2 pt-4">
-            <div className="flex gap-3">
-              <button
-                onClick={onBack}
-                disabled={isFirstQuestion || isNavigating}
-                className={`
-                  px-5 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 text-sm
-                  ${
-                  isFirstQuestion || isNavigating
-                      ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'
-                      : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-white hover:bg-neutral-300 dark:hover:bg-neutral-700'
-                  }
-                `}
-              >
-                {isNavigating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Back'
-                )}
-              </button>
-              
-              <button
-                onClick={onReturnToProduct}
-                disabled={isNavigating}
-                className="flex-1 px-5 py-2.5 rounded-lg font-medium transition-all flex items-center justify-center gap-2 text-sm bg-green-600 text-white hover:bg-green-700"
-              >
-                Back to Product Summary
-              </button>
-            </div>
-            
-            <button
-              onClick={() => {
-                if (window.confirm('Are you sure you want to regenerate?\n\nThis will replace your current product including:\n• Product name & description\n• Pricing\n• Value stack items\n• Guarantees\n\nThis action cannot be undone.')) {
-                  handleNext();
-                }
-              }}
-              disabled={isNextDisabled()}
-              className={`w-full px-5 py-2.5 rounded-lg font-medium transition-all flex items-center justify-center gap-2 text-sm
-                ${isNextDisabled()
-                ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-50'
-                : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 border border-neutral-300 dark:border-neutral-600'
-                }`}
-            >
-              {isNavigating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Regenerating...
-                </>
-              ) : (
-                <>
-                  Regenerate Product
-                  <ChevronRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-            
-            <p className="text-center text-xs text-neutral-500 dark:text-neutral-400">
-              Regenerating will replace your current product with AI-generated content
-            </p>
-          </div>
-        ) : (
-          /* Normal navigation buttons */
-          <div className="flex gap-3 justify-between pt-4">
+        <div className="flex gap-3 justify-between pt-4">
             <button
             onClick={onBack}
             disabled={isFirstQuestion || isNavigating}
@@ -790,8 +742,7 @@ const QuestionStep: React.FC<QuestionStepProps> = ({
                   </>
                 )}
                 </button>
-          </div>
-        )}
+        </div>
         
         {/* Validation Warning Message */}
         {isNextDisabled() && !isNavigating && (

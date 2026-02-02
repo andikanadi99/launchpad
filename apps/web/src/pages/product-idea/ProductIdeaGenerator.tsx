@@ -181,67 +181,37 @@ const generateProductDescription = (
 };
 
 const generateMissionStatementSuggestion = (answers: Answers): string => {
-  // Get Q6: Primary Target (who they chose to focus on first)
   const primaryTarget = answers.primary_target;
-  // Get Q7: Starting Product type
   const startingProduct = answers.starting_product;
-  // Get Q5: Target Outcome
   const targetOutcome = answers.target_outcome || '';
-  // Get Q4: All target audiences (for context)
-  const targetWho = answers.target_who || [];
   
-  // Return empty if core prerequisites not met
   if (!primaryTarget || !startingProduct || !targetOutcome) {
     return '';
   }
   
-  // === Extract WHO (Primary Target) ===
-  // Q6 answer can be a string like "business_owners_0" or an object
+  // === Extract WHO (Primary Target) - keep it clean ===
   let primaryTargetValue = '';
-  let primaryTargetCustom = '';
   
   if (typeof primaryTarget === 'object') {
     primaryTargetValue = primaryTarget.value || primaryTarget.label || '';
-    primaryTargetCustom = primaryTarget.custom || '';
   } else if (typeof primaryTarget === 'string') {
     primaryTargetValue = primaryTarget;
   }
   
-  // Clean up the value (remove index suffix like _0, _1)
   const baseTargetValue = primaryTargetValue.replace(/_\d+$/, '');
   
-  // Map to human-readable labels
   const audienceLabels: { [key: string]: string } = {
     'business_owners': 'small business owners',
-    'professionals': 'corporate professionals',
-    'freelancers': 'freelancers and consultants',
+    'professionals': 'tech professionals',
+    'freelancers': 'freelancers',
     'creators': 'content creators',
     'students': 'students and learners',
     'parents': 'busy parents',
-    'hobbyists': 'passionate hobbyists',
+    'hobbyists': 'hobbyists',
     'other': 'people'
   };
   
-  // Try to get custom description from Q4 answers if available
-  let whoDescription = audienceLabels[baseTargetValue] || baseTargetValue;
-  
-  // Look for matching Q4 answer with custom text
-  if (Array.isArray(targetWho)) {
-    const matchingAnswer = targetWho.find((tw: any) => {
-      const twValue = typeof tw === 'object' ? tw.value : tw;
-      return twValue === baseTargetValue || primaryTargetValue.startsWith(twValue);
-    });
-    
-    if (matchingAnswer && typeof matchingAnswer === 'object' && matchingAnswer.custom) {
-      // Use the custom description from Q4
-      whoDescription = `${audienceLabels[baseTargetValue] || baseTargetValue} (${matchingAnswer.custom})`;
-    }
-  }
-  
-  // If Q6 itself has custom text, prefer that
-  if (primaryTargetCustom) {
-    whoDescription = primaryTargetCustom;
-  }
+  const whoDescription = audienceLabels[baseTargetValue] || baseTargetValue;
   
   // === Extract WHAT (Product Type) ===
   let productValue = '';
@@ -251,7 +221,6 @@ const generateMissionStatementSuggestion = (answers: Answers): string => {
     productValue = startingProduct;
   }
   
-  // Map product types to delivery methods
   const productDelivery: { [key: string]: string } = {
     'low_ticket': 'a quick-start guide and templates',
     'mid_ticket': 'a comprehensive course',
@@ -261,37 +230,22 @@ const generateMissionStatementSuggestion = (answers: Answers): string => {
   
   const deliveryMethod = productDelivery[productValue] || 'step-by-step guidance';
   
-  // === Extract OUTCOME (from Q5) ===
-  // Clean up and shorten the outcome
-  let outcomeText = targetOutcome.trim();
-  
-  // Remove common prefixes
-  outcomeText = outcomeText
+  // === Extract OUTCOME - keep short ===
+  let outcomeText = targetOutcome.trim()
     .replace(/^(help them |help people |to )/i, '')
     .replace(/^(get |achieve |reach |attain )/i, '');
   
-  // Truncate if too long (aim for ~50 chars max)
-  if (outcomeText.length > 80) {
-    // Find a good breaking point
-    const breakPoints = ['. ', ', ', ' - ', ' and ', ' or '];
-    for (const bp of breakPoints) {
-      const idx = outcomeText.indexOf(bp);
-      if (idx > 20 && idx < 80) {
-        outcomeText = outcomeText.substring(0, idx);
-        break;
-      }
-    }
-    // If still too long, just truncate
-    if (outcomeText.length > 80) {
-      outcomeText = outcomeText.substring(0, 77) + '...';
-    }
+  // Take just the first sentence or clause
+  const firstBreak = outcomeText.search(/[.!?]\s|,\s(?=and |or |but )/);
+  if (firstBreak > 15 && firstBreak < 80) {
+    outcomeText = outcomeText.substring(0, firstBreak);
+  } else if (outcomeText.length > 80) {
+    outcomeText = outcomeText.substring(0, 77) + '...';
   }
   
-  // Make sure outcome starts lowercase for sentence flow
   outcomeText = outcomeText.charAt(0).toLowerCase() + outcomeText.slice(1);
   
-  // === Build the Mission Statement ===
-  // Format: "I help [WHO] [OUTCOME] through [DELIVERY METHOD]."
+  // === Simple format: "I help [WHO] [OUTCOME] through [DELIVERY]." ===
   return `I help ${whoDescription} ${outcomeText} through ${deliveryMethod}.`;
 };
 
@@ -362,7 +316,7 @@ const generateSmartSuggestion = (questionId: string, answers: Answers): string =
       
       // Extract key phrases from requests
       const requestKeywords = userRequests.toLowerCase().match(/(?:help with|ask for|want|need|asks?)\s+([^,.]+)/g) || [];
-      const specificRequests = requestKeywords.slice(0, 2).map(r => r.replace(/(?:help with|ask for|want|need|asks?)\s+/, '').trim());
+      const specificRequests = requestKeywords.slice(0, 2).map((r: string) => r.replace(/(?:help with|ask for|want|need|asks?)\s+/, '').trim());
       
       // Build a simple, direct answer
       if (skillLabels.length > 0 && specificRequests.length > 0) {
@@ -854,15 +808,14 @@ const questions: QuestionData[] = [
     question: "Your Mission Statement",
     subtext: "Let's put it all together - this is your north star for your first launch",
     type: 'textarea',
-    placeholder: "Write your mission statement following the template above...",
+    placeholder: 'I help [WHO] [ACHIEVE WHAT] through [PRODUCT TYPE].',
     validation: {
       required: true,
       minLength: 20,
       maxLength: 500
     },
-    helpText: "Keep it simple: WHO you help + WHAT outcome + HOW FAST + WITHOUT what obstacle. One or two sentences max.",
+    helpText: "Keep it simple: I help [WHO] [ACHIEVE WHAT] through [PRODUCT TYPE]. One sentence is all you need.",
     showAIHelper: true,
-    smartSuggestion: true,
     showAutoGenerate: true
   },
 
@@ -1169,7 +1122,7 @@ export default function ProductIdeaGenerator() {
       return {
         value: `${value}${custom ? `_${index}` : ''}`,
         label: fullLabel,
-        description: `${hints.pain} â€¢ ${hints.money} â€¢ ${hints.access}`,
+        description: `${hints.pain} • ${hints.money} • ${hints.access}`,
         originalSelection: selection
       };
     });
@@ -1473,7 +1426,7 @@ export default function ProductIdeaGenerator() {
         }));
       }
     }
-  }, [currentQuestionIndex, hasPreselected]);
+  }, [currentQuestionIndex]);
 
   // Handle answer changes
   const handleAnswerChange = (answer: any) => {
@@ -1482,7 +1435,7 @@ export default function ProductIdeaGenerator() {
       [currentQuestion.id]: answer
     }));
     
-    if (showSmartSuggestion) {
+    if (showSmartSuggestion && currentQuestion.id !== 'primary_target' && currentQuestion.id !== 'starting_product') {
       setTimeout(() => setShowSmartSuggestion(null), 2000);
     }
 
@@ -1571,7 +1524,7 @@ export default function ProductIdeaGenerator() {
   };
 
   const handleImproveAnswer = async (currentAnswer: string) => {
-    console.log('ðŸš€ Starting improvement process...');
+    console.log('Starting improvement process...');
     setIsGeneratingImprovement(true);
     
     try {
@@ -2691,6 +2644,10 @@ export default function ProductIdeaGenerator() {
                         ? "Pre-selected based on your previous answers - Please validate!"
                         : currentQuestion.id === 'confidence_test'
                         ? "We've calculated what you could charge based on your skills"
+                        : currentQuestion.id === 'primary_target'
+                        ? "AI Recommendation"
+                        : currentQuestion.id === 'starting_product'
+                        ? "AI Recommendation"
                         : "We've pre-filled this based on your previous answers!"}
                     </p>
                     <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
@@ -2703,6 +2660,8 @@ export default function ProductIdeaGenerator() {
                             </span>
                           </span>
                         )
+                        : currentQuestion.id === 'primary_target' || currentQuestion.id === 'starting_product'
+                        ? showSmartSuggestion
                         : "Feel free to edit or keep as is - this suggestion follows proven frameworks for success."}
                     </p>
                   </div>
@@ -2783,6 +2742,54 @@ export default function ProductIdeaGenerator() {
                 isNavigating={isNavigating}
                 isReturningFromEdit={isEditingFromResults && currentQuestionIndex === questions.length - 1}
                 onReturnToProduct={handleReturnToProduct}
+                recommendedValue={
+                  currentQuestion.id === 'primary_target' 
+                    ? (() => {
+                        const targetWhoAnswers = answers.target_who || [];
+                        if (targetWhoAnswers.length <= 1) return undefined;
+                        const scoringMap: { [key: string]: number } = {
+                          'business_owners': 26, 'professionals': 23, 'freelancers': 21,
+                          'creators': 23, 'students': 19, 'parents': 22, 'hobbyists': 17, 'other': 15
+                        };
+                        let best = ''; let highest = 0;
+                        targetWhoAnswers.forEach((s: any) => {
+                          const v = typeof s === 'object' ? s.value : s;
+                          const score = scoringMap[v] || 15;
+                          if (score > highest) { highest = score; best = v; }
+                        });
+                        return best;
+                      })()
+                    : undefined
+                }
+                recommendedReason={
+                  currentQuestion.id === 'primary_target'
+                    ? (() => {
+                        const targetWhoAnswers = answers.target_who || [];
+                        if (targetWhoAnswers.length <= 1) return undefined;
+                        const reasonMap: { [key: string]: string } = {
+                          'business_owners': 'They have high pain, budget to spend, and are easy to reach — strongest combo for your first launch.',
+                          'professionals': 'They have steady income and are accessible via LinkedIn — great for a first product.',
+                          'freelancers': 'High pain and reachable in online communities, though budgets vary.',
+                          'creators': 'High pain, growing income, and very reachable on social platforms.',
+                          'students': 'Easy to reach but limited budget — better as a second audience.',
+                          'parents': 'High pain with budget, reachable in Facebook groups.',
+                          'hobbyists': 'Passion-driven spending, but pain and budgets are lower.',
+                          'other': 'Consider how much pain, money, and access this group has.'
+                        };
+                        const scoringMap: { [key: string]: number } = {
+                          'business_owners': 26, 'professionals': 23, 'freelancers': 21,
+                          'creators': 23, 'students': 19, 'parents': 22, 'hobbyists': 17, 'other': 15
+                        };
+                        let best = ''; let highest = 0;
+                        targetWhoAnswers.forEach((s: any) => {
+                          const v = typeof s === 'object' ? s.value : s;
+                          const score = scoringMap[v] || 15;
+                          if (score > highest) { highest = score; best = v; }
+                        });
+                        return reasonMap[best] || reasonMap['other'];
+                      })()
+                    : undefined
+                }
               />
             </div>
 

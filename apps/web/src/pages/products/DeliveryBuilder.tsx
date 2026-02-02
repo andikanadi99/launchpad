@@ -127,7 +127,6 @@ export default function DeliveryBuilder() {
         setUserId(user.uid);
 
         if (!productId) {
-          alert('No product ID provided');
           navigate('/dashboard');
           return;
         }
@@ -153,12 +152,11 @@ export default function DeliveryBuilder() {
               }));
             }
           } else {
-            alert('Product not found');
             navigate('/dashboard');
           }
         } catch (error) {
           console.error('Error loading product:', error);
-          alert('Failed to load product');
+          navigate('/dashboard');
         } finally {
           setIsLoading(false);
         }
@@ -287,7 +285,7 @@ export default function DeliveryBuilder() {
         lastUpdated: new Date()
       });
 
-      console.log('âœ… Delivery configuration saved successfully');
+      console.log('Delivery configuration saved successfully');
       setSaveSuccess(true);
       
       // Redirect after 2 seconds
@@ -377,7 +375,7 @@ export default function DeliveryBuilder() {
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-green-500" />
             <p className="text-sm text-green-500">
-              âœ… Delivery configured successfully! Returning to dashboard...
+              Delivery configured successfully! Returning to dashboard...
             </p>
           </div>
         </div>

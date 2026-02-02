@@ -886,7 +886,7 @@ function generateFullPreviewHTML(
 </head>
 <body>
   <div class="preview-banner">
-    ⚠️ This is a preview of your delivery page. Customers will see this after purchase.
+    This is a preview of your delivery page. Customers will see this after purchase.
   </div>
   <div class="content">
     ${showTitle ? `
@@ -981,7 +981,7 @@ export default function ContentBuilderPage() {
       setUserId(user.uid);
 
       if (!productId) {
-        alert('No product ID provided');
+        console.warn('No product ID provided');
         navigate('/dashboard');
         return;
       }
@@ -1032,12 +1032,12 @@ export default function ContentBuilderPage() {
             }
           }
         } else {
-          alert('Product not found');
+          console.warn('Product not found');
           navigate('/dashboard');
         }
       } catch (error) {
         console.error('Error loading product:', error);
-        alert('Failed to load product');
+        navigate('/dashboard');
       } finally {
         setIsLoading(false);
       }
@@ -1116,7 +1116,7 @@ export default function ContentBuilderPage() {
       
       setTimeout(() => setSaveSuccess(false), 3000);
       
-      console.log('✅ Content saved successfully');
+      console.log('Content saved successfully');
     } catch (error) {
       console.error('Error saving content:', error);
       alert('Failed to save. Please try again.');

@@ -3,6 +3,7 @@ import { auth, db } from '../lib/firebase';
 import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { Link, useNavigate } from 'react-router-dom';
 import { setActiveSession } from '../lib/UserDocumentHelpers';
+import ConfirmModal from './ConfirmModal';
 import { 
   Package, 
   ExternalLink, 
@@ -81,6 +82,21 @@ export default function Dashboard() {
   const [showNewProductModal, setShowNewProductModal] = useState(false);
   const [showInfoBanner, setShowInfoBanner] = useState(() => {
     return localStorage.getItem('hideInfoBanner') !== 'true';
+  });
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    onConfirm: () => Promise<void>;
+    isLoading: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Delete',
+    onConfirm: async () => {},
+    isLoading: false,
   });
 
   // Fetch Product Ideas from Co-Pilot sessions
@@ -208,67 +224,93 @@ export default function Dashboard() {
 
   // Delete just the idea
   const deleteIdea = async (ideaId: string, ideaName: string) => {
-    if (confirm(`Are you sure you want to delete "${ideaName}"? This cannot be undone.`)) {
-      try {
-        await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'productCoPilotSessions', ideaId));
-      } catch (error) {
-        console.error('Error deleting idea:', error);
-        alert('Failed to delete idea');
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Idea',
+      message: `Are you sure you want to delete "${ideaName}"? This cannot be undone.`,
+      confirmText: 'Delete Idea',
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isLoading: true }));
+        try {
+          await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'productCoPilotSessions', ideaId));
+        } catch (error) {
+          console.error('Error deleting idea:', error);
+        }
+        setConfirmModal(prev => ({ ...prev, isOpen: false, isLoading: false }));
       }
-    }
+    });
   };
 
   // Delete just the sales page (keep the idea)
   const deleteSalesPageOnly = async (productId: string, sourceSessionId: string | undefined, productName: string) => {
-    if (confirm(`Delete the sales page for "${productName}"? The original idea will be restored to your backlog.`)) {
-      try {
-        // Delete the product
-        await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'products', productId));
-        
-        // If there was a linked idea, clear its salesPageId to restore it
-        if (sourceSessionId) {
-          const sessionRef = doc(db, 'users', auth.currentUser!.uid, 'productCoPilotSessions', sourceSessionId);
-          await updateDoc(sessionRef, {
-            salesPageId: null,
-            salesPageStatus: 'none',
-            graduatedAt: null,
-          });
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Sales Page',
+      message: `Delete the sales page for "${productName}"? The original idea will be restored to your backlog.`,
+      confirmText: 'Delete Sales Page',
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isLoading: true }));
+        try {
+          await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'products', productId));
+          if (sourceSessionId) {
+            const sessionRef = doc(db, 'users', auth.currentUser!.uid, 'productCoPilotSessions', sourceSessionId);
+            await updateDoc(sessionRef, {
+              salesPageId: null,
+              salesPageStatus: 'none',
+              graduatedAt: null,
+            });
+          }
+        } catch (error) {
+          console.error('Error deleting sales page:', error);
         }
-      } catch (error) {
-        console.error('Error deleting sales page:', error);
-        alert('Failed to delete sales page');
+        setConfirmModal(prev => ({ ...prev, isOpen: false, isLoading: false }));
       }
-    }
+    });
   };
 
   // Delete everything (sales page + idea)
   const deleteEverything = async (productId: string, sourceSessionId: string | undefined, productName: string) => {
-    if (confirm(`Delete "${productName}" completely? This will remove both the sales page AND the original idea. This cannot be undone.`)) {
-      try {
-        // Delete the product
-        await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'products', productId));
-        
-        // Delete the linked idea too
-        if (sourceSessionId) {
-          await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'productCoPilotSessions', sourceSessionId));
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Everything',
+      message: `Delete "${productName}" completely? This will remove both the sales page AND the original idea. This cannot be undone.`,
+      confirmText: 'Delete Everything',
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isLoading: true }));
+        try {
+          await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'products', productId));
+          if (sourceSessionId) {
+            await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'productCoPilotSessions', sourceSessionId));
+          }
+        } catch (error) {
+          console.error('Error deleting:', error);
         }
-      } catch (error) {
-        console.error('Error deleting:', error);
-        alert('Failed to delete');
+        setConfirmModal(prev => ({ ...prev, isOpen: false, isLoading: false }));
       }
-    }
+    });
   };
 
   // Delete product without linked idea
   const deleteProduct = async (productId: string, productName: string) => {
-    if (confirm(`Are you sure you want to delete "${productName}"? This cannot be undone.`)) {
-      try {
-        await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'products', productId));
-      } catch (error) {
-        console.error('Error deleting product:', error);
-        alert('Failed to delete product');
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Product',
+      message: `Are you sure you want to delete "${productName}"? This cannot be undone.`,
+      confirmText: 'Delete Product',
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isLoading: true }));
+        try {
+          await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'products', productId));
+        } catch (error) {
+          console.error('Error deleting product:', error);
+        }
+        setConfirmModal(prev => ({ ...prev, isOpen: false, isLoading: false }));
       }
-    }
+    });
   };
 
   // Continue an in-progress idea
@@ -377,7 +419,7 @@ export default function Dashboard() {
             <p className="text-neutral-400 text-sm mb-1">Total Products</p>
             <p className="text-3xl font-bold">{totals.total}</p>
             <p className="text-xs text-neutral-500 mt-1">
-              {totals.ideasOnly} idea{totals.ideasOnly !== 1 ? 's' : ''} · {totals.withSalesPage} sales page{totals.withSalesPage !== 1 ? 's' : ''}
+              {totals.ideasOnly} idea{totals.ideasOnly !== 1 ? 's' : ''} Â· {totals.withSalesPage} sales page{totals.withSalesPage !== 1 ? 's' : ''}
             </p>
           </div>
           <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
@@ -823,6 +865,19 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        isLoading={confirmModal.isLoading}
+      />
     </div>
   );
 }
