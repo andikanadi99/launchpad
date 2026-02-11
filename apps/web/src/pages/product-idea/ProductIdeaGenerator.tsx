@@ -950,11 +950,23 @@ export default function ProductIdeaGenerator() {
             setHasResumedSession(true);
           }
           
-          // If they already completed, show results and regenerate product
+          // If they already completed, show results
           if (session.status === 'completed' && session.completedAt) {
             setShowResults(true);
-            // Regenerate product ideas from saved answers
+            // Always generate the tier options for switching between tiers
             regenerateProductFromAnswers(session.answers);
+            
+            // If session has a saved productConfig, override the defaults with it
+            if (session.productConfig) {
+              setEditableProduct({
+                name: session.productConfig.name,
+                description: session.productConfig.description,
+                price: session.productConfig.price,
+                valueStack: [...(session.productConfig.valueStack || [])],
+                guarantees: [...(session.productConfig.guarantees || [])]
+              });
+              setCurrentTierType(session.productConfig.tierType || 'low');
+            }
           }
         } else {
           console.log('Starting new Co-Pilot session:', sessionId);
@@ -1122,7 +1134,7 @@ export default function ProductIdeaGenerator() {
       return {
         value: `${value}${custom ? `_${index}` : ''}`,
         label: fullLabel,
-        description: `${hints.pain} • ${hints.money} • ${hints.access}`,
+        description: `${hints.pain} â€¢ ${hints.money} â€¢ ${hints.access}`,
         originalSelection: selection
       };
     });
@@ -2767,11 +2779,11 @@ export default function ProductIdeaGenerator() {
                         const targetWhoAnswers = answers.target_who || [];
                         if (targetWhoAnswers.length <= 1) return undefined;
                         const reasonMap: { [key: string]: string } = {
-                          'business_owners': 'They have high pain, budget to spend, and are easy to reach — strongest combo for your first launch.',
-                          'professionals': 'They have steady income and are accessible via LinkedIn — great for a first product.',
+                          'business_owners': 'They have high pain, budget to spend, and are easy to reach â€” strongest combo for your first launch.',
+                          'professionals': 'They have steady income and are accessible via LinkedIn â€” great for a first product.',
                           'freelancers': 'High pain and reachable in online communities, though budgets vary.',
                           'creators': 'High pain, growing income, and very reachable on social platforms.',
-                          'students': 'Easy to reach but limited budget — better as a second audience.',
+                          'students': 'Easy to reach but limited budget â€” better as a second audience.',
                           'parents': 'High pain with budget, reachable in Facebook groups.',
                           'hobbyists': 'Passion-driven spending, but pain and budgets are lower.',
                           'other': 'Consider how much pain, money, and access this group has.'

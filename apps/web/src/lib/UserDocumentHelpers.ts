@@ -586,6 +586,52 @@ export async function startNewCoPilotSession(uid: string): Promise<string> {
   return await createCoPilotSession(uid);
 }
 
+// Clone an existing Co-Pilot session (for editing ideas that already have a sales page)
+export async function cloneCoPilotSession(uid: string, sourceSessionId: string): Promise<string> {
+  const sessionsRef = getSessionsCollection(uid);
+  const userRef = doc(db, 'users', uid);
+
+  // Load the original session
+  const sourceRef = doc(db, 'users', uid, 'productCoPilotSessions', sourceSessionId);
+  const sourceSnap = await getDoc(sourceRef);
+
+  if (!sourceSnap.exists()) {
+    throw new Error('Source session not found');
+  }
+
+  const sourceData = sourceSnap.data();
+
+  // Create clone with all answers/config but NO sales page link
+  const clonedSession = {
+    name: `${sourceData.name || 'Business Idea'} (Copy)`,
+    answers: sourceData.answers || {},
+    currentQuestionIndex: sourceData.currentQuestionIndex || 0,
+    completedAt: sourceData.completedAt || null,
+    nicheScore: sourceData.nicheScore || null,
+    selectedProductType: sourceData.selectedProductType || null,
+    status: sourceData.status || 'completed',
+    productConfig: sourceData.productConfig || null,
+    // Intentionally NOT copying salesPageId or salesPageStatus
+    salesPageId: null,
+    salesPageStatus: 'none' as const,
+    // Traceability
+    clonedFromSessionId: sourceSessionId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  const docRef = await addDoc(sessionsRef, clonedSession);
+
+  // Set clone as the active session
+  await updateDoc(userRef, {
+    activeSessionId: docRef.id,
+    lastActiveDate: serverTimestamp(),
+  });
+
+  console.log('✅ Cloned Co-Pilot session:', sourceSessionId, '→', docRef.id);
+  return docRef.id;
+}
+
 // Get all Co-Pilot sessions for a user
 export async function getAllCoPilotSessions(uid: string): Promise<CoPilotSession[]> {
   const sessionsRef = getSessionsCollection(uid);

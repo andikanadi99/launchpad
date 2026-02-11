@@ -9,8 +9,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { 
   ArrowLeft, ArrowRight, Check, Loader, Upload, Image, Search, X,
   Plus, Trash2, ChevronDown, ChevronUp, Sparkles, Wand2, 
-  Mail, FileDown, ExternalLink, FileText, Settings2, Eye,
-  Monitor, Smartphone, Link, RefreshCw, Rocket, Sun, Moon
+  Mail, FileDown, ExternalLink, FileText, Settings2, Eye, EyeOff,
+  Monitor, Smartphone, Link, RefreshCw, Rocket, Sun, Moon, Save,
+  Layers, GripVertical
 } from 'lucide-react';
 
 // AI Copywriter
@@ -73,12 +74,21 @@ interface SalesPageData {
     textColor: string;
     fontPair: string;
     buttonStyle: 'rounded' | 'square' | 'pill';
+    buttonSize: 'small' | 'medium' | 'large';
+    buttonColor?: string;
+    buttonTextColor: 'light' | 'dark' | 'auto' | string;
     cardStyle: 'flat' | 'shadow' | 'border';
     spacing: 'compact' | 'comfortable' | 'spacious';
     sectionOrder: string[];
     hiddenSections: string[];
     ctaButtonText: string;
     animations: boolean;
+    titleSize: 'small' | 'normal' | 'large' | 'xlarge';
+    hideHeroPrice?: boolean;
+    showHeroCTA?: boolean;
+    freeText?: string;
+    textScale?: string;
+    lineHeight?: string;
   };
   publish: {
     slug: string;
@@ -390,6 +400,7 @@ export default function SalesPageSimplified() {
   const [productId, setProductId] = useState('');
   const [userId, setUserId] = useState('');
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [showSidePreview, setShowSidePreview] = useState(true);
   const [showCustomize, setShowCustomize] = useState(false);
   const [isPrefilledFromCoPilot, setIsPrefilledFromCoPilot] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
@@ -439,12 +450,18 @@ export default function SalesPageSimplified() {
       textColor: '#E5E5E5',
       fontPair: 'inter-system',
       buttonStyle: 'rounded',
+      buttonSize: 'medium',
+      buttonTextColor: 'auto',
       cardStyle: 'shadow',
       spacing: 'comfortable',
-      sectionOrder: ['creator', 'image', 'hero', 'tagline', 'description', 'benefits', 'guarantees', 'checkout'],
+      sectionOrder: ['hero', 'description', 'benefits', 'creator', 'guarantees', 'checkout'],
       hiddenSections: [],
       ctaButtonText: 'Buy Now',
       animations: true,
+      titleSize: 'normal',
+      hideHeroPrice: false,
+      showHeroCTA: false,
+      freeText: 'FREE',
     },
     publish: {
       slug: '',
@@ -559,6 +576,46 @@ Cheers!`,
     return obj;
   };
 
+  // Section reorder helpers -- all sections are reorderable
+  const ALL_SECTIONS = [
+    { id: 'hero', name: 'Hero (Title, Image & Price)', previewId: 'preview-title' },
+    { id: 'description', name: 'Description', previewId: 'preview-description' },
+    { id: 'benefits', name: "What's Included", previewId: 'preview-benefits' },
+    { id: 'creator', name: 'About the Creator', previewId: 'preview-creator' },
+    { id: 'guarantees', name: 'Guarantees', previewId: 'preview-guarantees' },
+    { id: 'checkout', name: 'Checkout Form', previewId: 'preview-checkout' },
+  ];
+  const DEFAULT_SECTION_ORDER = ['hero', 'description', 'benefits', 'creator', 'guarantees', 'checkout'];
+
+  const moveSectionOrder = (index: number, direction: 'up' | 'down') => {
+    const currentOrder = [...(data.design.sectionOrder || DEFAULT_SECTION_ORDER)];
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= currentOrder.length) return;
+    const movedSectionId = currentOrder[index];
+    [currentOrder[index], currentOrder[newIndex]] = [currentOrder[newIndex], currentOrder[index]];
+    setData(prev => ({ ...prev, design: { ...prev.design, sectionOrder: currentOrder } }));
+    
+    // Auto-scroll preview to the moved section
+    const section = ALL_SECTIONS.find(s => s.id === movedSectionId);
+    if (section) {
+      setTimeout(() => scrollToPreviewSection(section.previewId), 100);
+    }
+  };
+
+  const toggleSectionHidden = (sectionId: string) => {
+    const hidden = [...(data.design.hiddenSections || [])];
+    if (hidden.includes(sectionId)) {
+      setData(prev => ({ ...prev, design: { ...prev.design, hiddenSections: hidden.filter(id => id !== sectionId) } }));
+      // Auto-scroll to the section being shown
+      const section = ALL_SECTIONS.find(s => s.id === sectionId);
+      if (section) {
+        setTimeout(() => scrollToPreviewSection(section.previewId), 100);
+      }
+    } else {
+      setData(prev => ({ ...prev, design: { ...prev.design, hiddenSections: [...hidden, sectionId] } }));
+    }
+  };
+
   const generateSlug = (name: string): string => {
     return name
       .toLowerCase()
@@ -611,7 +668,7 @@ Cheers!`,
   });
 
   const currencySymbols: Record<string, string> = {
-    USD: "$", EUR: "€", GBP: "£", CAD: "C$", AUD: "A$",
+    USD: "$", EUR: "\u20AC", GBP: "\u00A3", CAD: "C$", AUD: "A$", IDR: "Rp"
   };
 
   // ============================================
@@ -782,7 +839,20 @@ Cheers!`,
                     guarantees: sp.valueProp?.guarantees || prev.valueProp.guarantees || [],
                   },
                   visuals: { ...prev.visuals, ...sp.visuals },
-                  design: { ...prev.design, ...sp.design },
+                  design: (() => {
+                    const mergedDesign = { ...prev.design, ...sp.design };
+                    // Migrate sectionOrder: ensure all 6 sections are present
+                    const ALL_IDS = ['hero', 'description', 'benefits', 'creator', 'guarantees', 'checkout'];
+                    let order = mergedDesign.sectionOrder || ALL_IDS;
+                    // Remove old section IDs that no longer exist (image, tagline)
+                    order = order.filter((id: string) => ALL_IDS.includes(id));
+                    // Add any missing sections at the end
+                    ALL_IDS.forEach((id: string) => {
+                      if (!order.includes(id)) order.push(id);
+                    });
+                    mergedDesign.sectionOrder = order;
+                    return mergedDesign;
+                  })(),
                   publish: { ...prev.publish, ...sp.publish },
                   delivery: existingData.delivery || sp.delivery || prev.delivery,
                   sourceSessionId: existingData.sourceSessionId || sp.sourceSessionId || prev.sourceSessionId,
@@ -1536,6 +1606,7 @@ Cheers!`,
           <div className="flex-1 overflow-auto">
             <SalesPageContent 
               data={data}
+              isEditorPreview={true}
               onCtaClick={() => {
                 alert('Preview Mode\n\nButtons will work after publishing.');
               }}
@@ -1572,64 +1643,100 @@ Cheers!`,
       )}
       
       {/* HEADER */}
-      <header className="border-b border-gray-200 dark:border-gray-200 dark:border-neutral-800 bg-white/50 dark:bg-neutral-900/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="px-6 py-4">
+      <header className="border-b border-neutral-800 bg-neutral-900/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="px-4 md:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
                 onClick={() => navigate('/dashboard')}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                className="p-2 hover:bg-neutral-800 rounded-lg transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-lg font-semibold">
-                    {data.coreInfo.name || 'New Product'}
-                  </h1>
+                  <h1 className="text-lg font-semibold">Sales Page Builder</h1>
                   {isAlreadyPublished && (
-                    <span className="px-2 py-0.5 text-xs font-medium bg-green-500/20 text-green-600 dark:text-green-400 rounded-full border border-green-500/30">
+                    <span className="px-2 py-0.5 text-xs font-medium bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
                       Live
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-gray-500 dark:text-gray-500 dark:text-neutral-400">
-                  Step {currentStep} of {STEPS.length}: {STEPS[currentStep - 1].name}
+                <p className="text-sm text-neutral-400">
+                  {data.coreInfo.name || 'New Product'} {'\u00B7'} Step {currentStep} of {STEPS.length}: {STEPS[currentStep - 1].name}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
-              {/* Save Status */}
-              <div className="flex items-center gap-2">
-                {isSaving ? (
-                  <>
-                    <Loader className="w-4 h-4 animate-spin text-yellow-500" />
-                    <span className="text-sm text-gray-500 dark:text-gray-500 dark:text-neutral-400">Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4 text-green-500" />
-                    <span className="text-sm text-gray-500 dark:text-gray-500 dark:text-neutral-400">Saved</span>
-                  </>
-                )}
-              </div>
+            <div className="flex items-center gap-3">
+              {/* Full Preview - opens in new tab */}
+              {productId && (
+                <div 
+                  className="relative"
+                  title={!data.coreInfo.name?.trim() ? 'Enter a product name first' : 'Open full preview in new tab'}
+                >
+                  <button
+                    onClick={() => window.open(`/products/${productId}/preview`, '_blank')}
+                    disabled={!data.coreInfo.name?.trim()}
+                    className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                      !data.coreInfo.name?.trim()
+                        ? 'text-neutral-600 cursor-not-allowed'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span className="text-sm">Full Preview</span>
+                  </button>
+                </div>
+              )}
 
-              {/* Preview Toggle */}
-              <div className="flex items-center gap-1 bg-gray-200 dark:bg-neutral-800 rounded-lg p-1">
-                <button
-                  onClick={() => setPreviewMode('desktop')}
-                  className={`p-2 rounded ${previewMode === 'desktop' ? 'bg-white dark:bg-gray-300 dark:bg-neutral-700' : ''}`}
-                >
-                  <Monitor className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setPreviewMode('mobile')}
-                  className={`p-2 rounded ${previewMode === 'mobile' ? 'bg-white dark:bg-gray-300 dark:bg-neutral-700' : ''}`}
-                >
-                  <Smartphone className="w-4 h-4" />
-                </button>
-              </div>
+              {/* Hide/Show Preview Toggle */}
+              <button
+                onClick={() => setShowSidePreview(!showSidePreview)}
+                className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                  showSidePreview ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                {showSidePreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <span className="text-sm">{showSidePreview ? 'Hide' : 'Show'} Preview</span>
+              </button>
+
+              {/* Desktop/Mobile Toggle - only when preview visible */}
+              {showSidePreview && (
+                <div className="hidden md:flex items-center border border-neutral-700 rounded-lg p-1">
+                  <button
+                    onClick={() => setPreviewMode('desktop')}
+                    className={`p-1.5 rounded ${
+                      previewMode === 'desktop' ? 'bg-neutral-700 text-white' : 'text-neutral-400'
+                    }`}
+                    title="Desktop preview"
+                  >
+                    <Monitor className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setPreviewMode('mobile')}
+                    className={`p-1.5 rounded ${
+                      previewMode === 'mobile' ? 'bg-neutral-700 text-white' : 'text-neutral-400'
+                    }`}
+                    title="Mobile preview"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Save Status */}
+              {isSaving ? (
+                <div className="flex items-center gap-2 text-neutral-400">
+                  <Loader className="w-4 h-4 animate-spin" />
+                  <span className="text-sm hidden sm:inline">Saving...</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-green-400">
+                  <Check className="w-4 h-4" />
+                  <span className="text-sm hidden sm:inline">Saved</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1641,7 +1748,7 @@ Cheers!`,
               <div key={step.id} className="flex-1">
                 <div
                   className={`h-2 rounded-full transition-colors ${
-                    step.id <= currentStep ? 'bg-purple-600' : 'bg-gray-200 dark:bg-neutral-800'
+                    step.id <= currentStep ? 'bg-purple-600' : 'bg-neutral-800'
                   }`}
                 />
               </div>
@@ -1675,7 +1782,7 @@ Cheers!`,
       {/* MAIN CONTENT */}
       <div className="flex h-[calc(100vh-140px)]">
         {/* LEFT: FORM */}
-        <div className="flex-1 overflow-y-auto">
+        <div className={`overflow-y-auto ${showSidePreview ? 'flex-1' : 'w-full'}`}>
           <div className="max-w-2xl mx-auto p-8">
             
             {/* ============================================ */}
@@ -1792,10 +1899,13 @@ Cheers!`,
                     ].map((color) => (
                       <button
                         key={color.value}
-                        onClick={() => setData(prev => ({
-                          ...prev,
-                          design: { ...prev.design, backgroundColor: color.value }
-                        }))}
+                        onClick={() => {
+                          setData(prev => ({
+                            ...prev,
+                            design: { ...prev.design, backgroundColor: color.value }
+                          }));
+                          scrollToPreviewSection('preview-title');
+                        }}
                         title={color.name}
                         className={`w-8 h-8 rounded-lg border-2 transition-all ${
                           data.design.backgroundColor?.toLowerCase() === color.value.toLowerCase()
@@ -1806,17 +1916,21 @@ Cheers!`,
                       />
                     ))}
                     {/* Custom color picker */}
-                    <div className="relative">
+                    <div className="relative flex items-center gap-1">
                       <input
                         type="color"
                         value={data.design.backgroundColor || '#0A0A0A'}
-                        onChange={(e) => setData(prev => ({
-                          ...prev,
-                          design: { ...prev.design, backgroundColor: e.target.value }
-                        }))}
-                        className="w-8 h-8 rounded-lg cursor-pointer border-2 border-gray-300 dark:border-neutral-600"
+                        onChange={(e) => {
+                          setData(prev => ({
+                            ...prev,
+                            design: { ...prev.design, backgroundColor: e.target.value }
+                          }));
+                          scrollToPreviewSection('preview-title');
+                        }}
+                        className="w-8 h-8 rounded-lg cursor-pointer border-2 border-dashed border-gray-400 dark:border-neutral-500"
                         title="Custom color"
                       />
+                      <span className="text-xs text-gray-400 dark:text-neutral-500">Custom</span>
                     </div>
                   </div>
                 </div>
@@ -1843,10 +1957,13 @@ Cheers!`,
                     ].map((color) => (
                       <button
                         key={color.value}
-                        onClick={() => setData(prev => ({
-                          ...prev,
-                          design: { ...prev.design, cardColor: color.value }
-                        }))}
+                        onClick={() => {
+                          setData(prev => ({
+                            ...prev,
+                            design: { ...prev.design, cardColor: color.value }
+                          }));
+                          scrollToPreviewSection('preview-checkout');
+                        }}
                         title={color.name}
                         className={`w-8 h-8 rounded-lg border-2 transition-all ${
                           (data.design.cardColor || '#171717').toLowerCase() === color.value.toLowerCase()
@@ -1857,17 +1974,21 @@ Cheers!`,
                       />
                     ))}
                     {/* Custom color picker */}
-                    <div className="relative">
+                    <div className="relative flex items-center gap-1">
                       <input
                         type="color"
                         value={data.design.cardColor || '#171717'}
-                        onChange={(e) => setData(prev => ({
-                          ...prev,
-                          design: { ...prev.design, cardColor: e.target.value }
-                        }))}
-                        className="w-8 h-8 rounded-lg cursor-pointer border-2 border-gray-300 dark:border-neutral-600"
+                        onChange={(e) => {
+                          setData(prev => ({
+                            ...prev,
+                            design: { ...prev.design, cardColor: e.target.value }
+                          }));
+                          scrollToPreviewSection('preview-checkout');
+                        }}
+                        className="w-8 h-8 rounded-lg cursor-pointer border-2 border-dashed border-gray-400 dark:border-neutral-500"
                         title="Custom color"
                       />
+                      <span className="text-xs text-gray-400 dark:text-neutral-500">Custom</span>
                     </div>
                   </div>
                 </div>
@@ -1988,6 +2109,34 @@ Cheers!`,
                   <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1 text-right">{data.coreInfo.name.length}/60</p>
                 </div>
 
+                {/* Product Name Size */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Product Name Size</label>
+                  <div className="flex gap-2">
+                    {([
+                      { id: 'small', label: 'Small' },
+                      { id: 'normal', label: 'Normal' },
+                      { id: 'large', label: 'Large' },
+                      { id: 'xlarge', label: 'Extra Large' },
+                    ] as const).map((size) => (
+                      <button
+                        key={size.id}
+                        onClick={() => {
+                          setData(prev => ({ ...prev, design: { ...prev.design, titleSize: size.id } }));
+                          scrollToPreviewSection('preview-title');
+                        }}
+                        className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-all ${
+                          (data.design.titleSize || 'normal') === size.id
+                            ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                            : 'border-gray-300 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:border-gray-400'
+                        }`}
+                      >
+                        {size.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Tagline */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
@@ -2098,6 +2247,132 @@ Cheers!`,
                       </button>
                     </div>
                   </div>
+                </div>
+
+                {/* Currency & Compare-at Price Row */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Currency */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Currency</label>
+                    <select
+                      value={data.coreInfo.currency}
+                      onChange={(e) => {
+                        setData(prev => ({
+                          ...prev,
+                          coreInfo: { ...prev.coreInfo, currency: e.target.value }
+                        }));
+                        scrollToPreviewSection('preview-checkout');
+                      }}
+                      className="w-full px-4 pr-10 py-3 bg-white dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-lg focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
+                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239CA3AF'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.25rem' }}
+                    >
+                      <option value="USD">$ USD</option>
+                      <option value="EUR">{'\u20AC'} EUR</option>
+                      <option value="GBP">{'\u00A3'} GBP</option>
+                      <option value="CAD">$ CAD</option>
+                      <option value="AUD">$ AUD</option>
+                      <option value="IDR">Rp IDR</option>
+                    </select>
+                  </div>
+                  
+                  {/* Compare-at Price */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Compare-at Price <span className="text-gray-400 dark:text-neutral-500 font-normal text-xs">(optional)</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-neutral-400">
+                        {currencySymbols[data.coreInfo.currency]}
+                      </span>
+                      <input
+                        type="number"
+                        value={data.coreInfo.compareAtPrice || ''}
+                        onFocus={() => scrollToPreviewSection('preview-title')}
+                        onChange={(e) => {
+                          setData(prev => ({
+                            ...prev,
+                            coreInfo: { ...prev.coreInfo, compareAtPrice: parseFloat(e.target.value) || undefined }
+                          }));
+                          scrollToPreviewSection('preview-title');
+                        }}
+                        disabled={data.coreInfo.priceType === 'free'}
+                        placeholder="Original price"
+                        className="w-full pl-10 pr-4 py-3 bg-white dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-lg focus:border-purple-500 focus:outline-none disabled:opacity-50"
+                      />
+                    </div>
+                    {data.coreInfo.compareAtPrice && data.coreInfo.compareAtPrice > data.coreInfo.price && (
+                      <p className="text-xs text-green-500 mt-1">
+                        Save {Math.round(((data.coreInfo.compareAtPrice - data.coreInfo.price) / data.coreInfo.compareAtPrice) * 100)}% shown on page
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Free Text Customization - only when price type is free */}
+                {data.coreInfo.priceType === 'free' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Free Label Text
+                    </label>
+                    <input
+                      type="text"
+                      value={data.design.freeText || 'FREE'}
+                      onChange={(e) => setData(prev => ({
+                        ...prev,
+                        design: { ...prev.design, freeText: e.target.value }
+                      }))}
+                      onFocus={() => scrollToPreviewSection('preview-title')}
+                      placeholder="FREE"
+                      maxLength={20}
+                      className="w-full px-4 py-3 bg-white dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-lg focus:border-purple-500 focus:outline-none"
+                    />
+                    <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1">Customize what shows instead of "$0"</p>
+                  </div>
+                )}
+
+                {/* Hide Price from Hero Toggle */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-neutral-800/50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium">Hide price from hero</p>
+                    <p className="text-xs text-gray-500 dark:text-neutral-400">Price will only show in checkout section</p>
+                  </div>
+                  <button
+                    onClick={() => setData(prev => ({
+                      ...prev,
+                      design: { ...prev.design, hideHeroPrice: !prev.design.hideHeroPrice }
+                    }))}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${
+                      data.design.hideHeroPrice ? 'bg-purple-500' : 'bg-gray-300 dark:bg-neutral-600'
+                    }`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                      data.design.hideHeroPrice ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Show Hero CTA Button Toggle */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-neutral-800/50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium">Show CTA button in hero</p>
+                    <p className="text-xs text-gray-500 dark:text-neutral-400">Adds a Buy Now button below the price</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setData(prev => ({
+                        ...prev,
+                        design: { ...prev.design, showHeroCTA: !prev.design.showHeroCTA }
+                      }));
+                      scrollToPreviewSection('preview-title');
+                    }}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${
+                      data.design.showHeroCTA ? 'bg-purple-500' : 'bg-gray-300 dark:bg-neutral-600'
+                    }`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                      data.design.showHeroCTA ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
                 </div>
 
                 {/* Image (Optional) */}
@@ -2824,6 +3099,142 @@ Cheers!`,
                   </div>
                 </div>
 
+                {/* Button Text Color */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Button Text Color</label>
+                  <div className="flex gap-2 items-center">
+                    {([
+                      { id: 'auto', label: 'Auto' },
+                      { id: 'light', label: 'Light' },
+                      { id: 'dark', label: 'Dark' },
+                    ] as const).map((option) => (
+                      <button
+                        key={option.id}
+                        onClick={() => {
+                          setData(prev => ({ ...prev, design: { ...prev.design, buttonTextColor: option.id } }));
+                          scrollToPreviewSection('preview-cta-button');
+                        }}
+                        className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-all ${
+                          (data.design.buttonTextColor || 'auto') === option.id
+                            ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                            : 'border-gray-300 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:border-gray-400'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                    {/* Custom color picker */}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="color"
+                        value={data.design.buttonTextColor?.startsWith('#') ? data.design.buttonTextColor : '#ffffff'}
+                        onChange={(e) => {
+                          setData(prev => ({ ...prev, design: { ...prev.design, buttonTextColor: e.target.value } }));
+                          scrollToPreviewSection('preview-cta-button');
+                        }}
+                        className={`w-8 h-8 rounded-lg cursor-pointer border-2 transition-all ${
+                          data.design.buttonTextColor?.startsWith('#')
+                            ? 'border-purple-500 ring-2 ring-purple-500 ring-offset-1 dark:ring-offset-neutral-900'
+                            : 'border-dashed border-gray-400 dark:border-neutral-500'
+                        }`}
+                        title="Custom color"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1">Auto detects contrast based on button color</p>
+                </div>
+
+                {/* PAGE LAYOUT -- Prominent section reorder */}
+                <div className="border-t border-gray-200 dark:border-neutral-800 pt-6">
+                  <label className="block text-sm font-medium mb-1 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-purple-400" />
+                    Page Layout
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">
+                    Drag sections to reorder or toggle visibility
+                  </p>
+                  
+                  <div className="rounded-xl border border-gray-200 dark:border-neutral-700 overflow-hidden">
+                    {(data.design.sectionOrder || DEFAULT_SECTION_ORDER).map((sectionId: string, index: number) => {
+                      const section = ALL_SECTIONS.find(s => s.id === sectionId);
+                      if (!section) return null;
+                      const isHidden = data.design.hiddenSections?.includes(sectionId);
+                      const totalSections = (data.design.sectionOrder || DEFAULT_SECTION_ORDER).length;
+                      
+                      return (
+                        <div 
+                          key={sectionId}
+                          className={`flex items-center gap-3 px-4 py-2.5 transition-all ${
+                            index < totalSections - 1 ? 'border-b border-gray-200 dark:border-neutral-700' : ''
+                          } ${
+                            isHidden 
+                              ? 'bg-gray-50 dark:bg-neutral-900/40 opacity-50' 
+                              : 'bg-white dark:bg-neutral-800/30'
+                          }`}
+                        >
+                          <GripVertical className="w-4 h-4 text-gray-300 dark:text-neutral-600 flex-shrink-0" />
+                          <div className="w-5 h-5 rounded bg-purple-500/15 flex items-center justify-center flex-shrink-0">
+                            <span className="text-[10px] font-bold text-purple-400">{index + 1}</span>
+                          </div>
+                          <span className={`flex-1 text-sm ${
+                            isHidden 
+                              ? 'line-through text-gray-400 dark:text-neutral-500' 
+                              : 'text-gray-700 dark:text-neutral-200'
+                          }`}>
+                            {section.name}
+                          </span>
+                          
+                          {/* Move buttons */}
+                          <div className="flex gap-0.5">
+                            <button
+                              onClick={() => moveSectionOrder(index, 'up')}
+                              disabled={index === 0}
+                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-neutral-700 rounded-md disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                            >
+                              <ChevronUp className="w-3.5 h-3.5 text-gray-500 dark:text-neutral-400" />
+                            </button>
+                            <button
+                              onClick={() => moveSectionOrder(index, 'down')}
+                              disabled={index === totalSections - 1}
+                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-neutral-700 rounded-md disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                            >
+                              <ChevronDown className="w-3.5 h-3.5 text-gray-500 dark:text-neutral-400" />
+                            </button>
+                          </div>
+                          
+                          {/* Visibility toggle */}
+                          <button
+                            onClick={() => toggleSectionHidden(sectionId)}
+                            className={`p-1.5 rounded-md transition-colors ${
+                              isHidden 
+                                ? 'hover:bg-gray-200 dark:hover:bg-neutral-700 text-gray-400 dark:text-neutral-500' 
+                                : 'hover:bg-gray-200 dark:hover:bg-neutral-700 text-purple-500 dark:text-purple-400'
+                            }`}
+                            title={isHidden ? 'Show section' : 'Hide section'}
+                          >
+                            {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* Reset to Default Order button */}
+                  <button
+                    onClick={() => setData(prev => ({
+                      ...prev,
+                      design: {
+                        ...prev.design,
+                        sectionOrder: DEFAULT_SECTION_ORDER,
+                        hiddenSections: []
+                      }
+                    }))}
+                    className="mt-3 text-xs text-gray-500 dark:text-neutral-400 hover:text-purple-500 dark:hover:text-purple-400 transition-colors"
+                  >
+                    Reset to default order
+                  </button>
+                </div>
+
                 {/* Advanced Settings (Collapsed) */}
                 <div className="border-t border-gray-200 dark:border-neutral-800 pt-6">
                   <button
@@ -2838,8 +3249,9 @@ Cheers!`,
                   {showCustomize && (
                     <div className="mt-4 p-4 bg-gray-100 dark:bg-neutral-800/50 rounded-xl space-y-4">
                       <p className="text-sm text-gray-500 dark:text-neutral-400">
-                        Fine-tune fonts, spacing, and layout
+                        Fine-tune fonts, spacing, and typography
                       </p>
+                      
                       <SalesStepCustomize
                         data={{
                           coreInfo: data.coreInfo,
@@ -3229,9 +3641,9 @@ Cheers!`,
                           <span className="text-xs text-purple-600 dark:text-purple-400">L</span>
                         </div>
                         <span>launchpad.com</span>
-                        <span className="text-gray-300 dark:text-neutral-600">›</span>
+                        <span className="text-gray-300 dark:text-neutral-600">/</span>
                         <span>p</span>
-                        <span className="text-gray-300 dark:text-neutral-600">›</span>
+                        <span className="text-gray-300 dark:text-neutral-600">/</span>
                         <span>{data.publish.slug || 'your-product'}</span>
                       </div>
                       <h4 className="text-lg text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
@@ -3469,6 +3881,7 @@ Cheers!`,
         </div>
 
         {/* RIGHT: PREVIEW */}
+        {showSidePreview && (
         <div className="w-1/2 bg-gray-100 dark:bg-neutral-900 border-l border-gray-200 dark:border-neutral-800 p-6 overflow-hidden">
           <div className={`h-full ${previewMode === 'mobile' ? 'max-w-sm mx-auto' : ''}`}>
             <div className="h-full rounded-lg border border-gray-300 dark:border-neutral-700 overflow-hidden flex flex-col bg-white dark:bg-neutral-950">
@@ -3497,12 +3910,14 @@ Cheers!`,
                     design: data.design,
                     publish: data.publish,
                   }}
+                  isEditorPreview={true}
                   onCtaClick={() => console.log('CTA clicked')}
                 />
               </div>
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Image Picker Modal */}

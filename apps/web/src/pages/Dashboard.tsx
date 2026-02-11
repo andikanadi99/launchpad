@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
 import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { Link, useNavigate } from 'react-router-dom';
-import { setActiveSession } from '../lib/UserDocumentHelpers';
+import { setActiveSession, cloneCoPilotSession } from '../lib/UserDocumentHelpers';
 import ConfirmModal from './ConfirmModal';
 import { 
   Package, 
@@ -16,12 +16,11 @@ import {
   FileText,
   Rocket,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
   Sparkles,
   Copy,
   Clock,
-  Plus
+  Plus,
+  MoreVertical
 } from 'lucide-react';
 
 interface ProductIdea {
@@ -78,7 +77,11 @@ export default function Dashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedProductId, setCopiedProductId] = useState<string | null>(null);
-  const [expandedIdeaId, setExpandedIdeaId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [ideaModal, setIdeaModal] = useState<{
+    isOpen: boolean;
+    idea: ProductIdea | null;
+  }>({ isOpen: false, idea: null });
   const [showNewProductModal, setShowNewProductModal] = useState(false);
   const [showInfoBanner, setShowInfoBanner] = useState(() => {
     return localStorage.getItem('hideInfoBanner') !== 'true';
@@ -135,6 +138,19 @@ export default function Dashboard() {
 
     return () => unsubscribe();
   }, []);
+
+  // Close overflow menu when clicking outside
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-menu-container]')) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openMenuId]);
 
   const dismissInfoBanner = () => {
     setShowInfoBanner(false);
@@ -335,6 +351,29 @@ export default function Dashboard() {
     }
   };
 
+  // Edit idea that has a linked sales page — clone it first
+  const editIdeaWithWarning = (ideaId: string, ideaName: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Edit Product Idea',
+      message: `This will create a copy of "${ideaName}" so you can make changes safely.\n\nYour existing sales page will NOT be affected.\n\nWhen you're done editing, you can create a new sales page from the updated idea.`,
+      confirmText: 'Create Copy & Edit',
+      isLoading: false,
+      onConfirm: async () => {
+        if (!auth.currentUser) return;
+        setConfirmModal(prev => ({ ...prev, isLoading: true }));
+        try {
+          await cloneCoPilotSession(auth.currentUser.uid, ideaId);
+          setConfirmModal(prev => ({ ...prev, isOpen: false, isLoading: false }));
+          navigate('/product-idea-copilot');
+        } catch (error) {
+          console.error('Error cloning idea:', error);
+          setConfirmModal(prev => ({ ...prev, isOpen: false, isLoading: false }));
+        }
+      }
+    });
+  };
+
   // Create sales page from idea
   const createSalesPage = (ideaId: string) => {
     navigate(`/products/sales?ideaId=${ideaId}`);
@@ -419,7 +458,7 @@ export default function Dashboard() {
             <p className="text-neutral-400 text-sm mb-1">Total Products</p>
             <p className="text-3xl font-bold">{totals.total}</p>
             <p className="text-xs text-neutral-500 mt-1">
-              {totals.ideasOnly} idea{totals.ideasOnly !== 1 ? 's' : ''} Â· {totals.withSalesPage} sales page{totals.withSalesPage !== 1 ? 's' : ''}
+              {totals.ideasOnly} idea{totals.ideasOnly !== 1 ? 's' : ''} · {totals.withSalesPage} sales page{totals.withSalesPage !== 1 ? 's' : ''}
             </p>
           </div>
           <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
@@ -591,10 +630,8 @@ export default function Dashboard() {
                   slug: product.salesPage?.publish?.slug,
                 };
 
-                const isExpanded = expandedIdeaId === product.id;
-
                 return (
-                  <div key={`product-${product.id}`} className="border border-neutral-800 rounded-lg bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors overflow-hidden">
+                  <div key={`product-${product.id}`} className="border border-neutral-800 rounded-lg bg-neutral-900/50 hover:bg-neutral-900/70 transition-colors">
                     <div className="p-6">
                       <div className="flex flex-col gap-4">
                         {/* Header */}
@@ -657,16 +694,17 @@ export default function Dashboard() {
                         </div>
 
                         {/* Actions */}
-                        <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-neutral-800">
+                        <div className="flex items-center gap-3 pt-3 border-t border-neutral-800">
+                          {/* Primary: Edit Sales Page */}
                           <Link
                             to={`/products/${product.id}/edit`}
                             className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
                           >
                             <Edit2 className="w-4 h-4" />
-                            Edit
+                            Edit Sales Page
                           </Link>
                           
-                          {/* Smart Preview/View Live Button */}
+                          {/* Preview / View Live */}
                           {displayData.published && displayData.slug ? (
                             <a
                               href={`/p/${displayData.slug}`}
@@ -687,18 +725,8 @@ export default function Dashboard() {
                               Preview
                             </Link>
                           )}
-                          
-                          {/* Copy Link - only when published */}
-                          {displayData.published && displayData.slug && (
-                            <button
-                              onClick={() => copyProductLink(displayData.slug!, product.id)}
-                              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
-                            >
-                              <Copy className="w-4 h-4" />
-                              {copiedProductId === product.id ? 'Copied!' : 'Copy Link'}
-                            </button>
-                          )}
-                          
+
+                          {/* Delivery */}
                           <Link
                             to={`/products/${product.id}/delivery`}
                             className="px-4 py-2 bg-blue-950/30 hover:bg-blue-950/50 text-blue-400 rounded-lg transition-colors flex items-center gap-2"
@@ -706,71 +734,104 @@ export default function Dashboard() {
                             <Settings className="w-4 h-4" />
                             Delivery
                           </Link>
-                        </div>
 
-                        {/* Original Idea Section (Expandable) */}
-                        {hasLinkedIdea && idea && (
-                          <div className="pt-3 border-t border-neutral-800">
+                          {/* More Options Menu */}
+                          <div className="relative" data-menu-container>
                             <button
-                              onClick={() => setExpandedIdeaId(isExpanded ? null : product.id)}
-                              className="flex items-center gap-2 text-sm text-neutral-400 hover:text-neutral-300 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(openMenuId === product.id ? null : product.id);
+                              }}
+                              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
                             >
-                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                              <Lightbulb className="w-4 h-4" />
-                              Original Idea
+                              <MoreVertical className="w-4 h-4" />
+                              More
                             </button>
-                            
-                            {isExpanded && (
-                              <div className="mt-3 p-4 bg-neutral-800/50 rounded-lg border border-neutral-700">
-                                <div className="flex flex-wrap gap-4 text-sm text-neutral-400 mb-3">
-                                  <span>Target: <span className="text-neutral-300">{idea.productConfig?.targetAudience}</span></span>
-                                  <span>Includes: <span className="text-neutral-300">{idea.productConfig?.valueStack?.length || 0} items</span></span>
-                                  <span>Guarantees: <span className="text-neutral-300">{idea.productConfig?.guarantees?.length || 0}</span></span>
-                                </div>
-                                {idea.productConfig?.mission && (
-                                  <p className="text-sm italic text-neutral-400 mb-3">"{idea.productConfig.mission}"</p>
-                                )}
-                                <button
-                                  onClick={() => editIdea(idea.id)}
-                                  className="px-3 py-1.5 text-sm bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
-                                >
-                                  <Edit2 className="w-3 h-3" />
-                                  Edit Idea
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
 
-                        {/* Delete Options */}
-                        <div className="pt-3 border-t border-neutral-800">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-neutral-500">Delete:</span>
-                            {hasLinkedIdea && sourceId ? (
-                              <>
-                                <button
-                                  onClick={() => deleteSalesPageOnly(product.id, sourceId, displayData.title)}
-                                  className="px-3 py-1.5 text-xs bg-red-950/20 hover:bg-red-950/40 text-red-400 rounded-lg transition-colors flex items-center gap-1"
-                                >
-                                  <X className="w-3 h-3" />
-                                  Sales Page Only
-                                </button>
-                                <button
-                                  onClick={() => deleteEverything(product.id, sourceId, displayData.title)}
-                                  className="px-3 py-1.5 text-xs bg-red-950/20 hover:bg-red-950/40 text-red-400 rounded-lg transition-colors flex items-center gap-1"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                  Everything
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={() => deleteProduct(product.id, displayData.title)}
-                                className="px-3 py-1.5 text-xs bg-red-950/20 hover:bg-red-950/40 text-red-400 rounded-lg transition-colors flex items-center gap-1"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                Delete Product
-                              </button>
+                            {openMenuId === product.id && (
+                              <div className="absolute right-0 bottom-full mb-1 w-56 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl z-50 py-1">
+                                {/* View Original Idea */}
+                                {hasLinkedIdea && idea && (
+                                  <button
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      setIdeaModal({ isOpen: true, idea });
+                                    }}
+                                    className="w-full px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-700 flex items-center gap-3 transition-colors"
+                                  >
+                                    <Lightbulb className="w-4 h-4 text-yellow-400" />
+                                    View Original Idea
+                                  </button>
+                                )}
+
+                                {/* Edit Idea (Copy) */}
+                                {hasLinkedIdea && idea && (
+                                  <button
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      editIdeaWithWarning(idea.id, idea.productConfig?.name || idea.name || 'this idea');
+                                    }}
+                                    className="w-full px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-700 flex items-center gap-3 transition-colors"
+                                  >
+                                    <Edit2 className="w-4 h-4 text-purple-400" />
+                                    Edit Idea (Copy)
+                                  </button>
+                                )}
+
+                                {/* Copy Link - only when published */}
+                                {displayData.published && displayData.slug && (
+                                  <button
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      copyProductLink(displayData.slug!, product.id);
+                                    }}
+                                    className="w-full px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-700 flex items-center gap-3 transition-colors"
+                                  >
+                                    <Copy className="w-4 h-4 text-neutral-400" />
+                                    {copiedProductId === product.id ? 'Copied!' : 'Copy Link'}
+                                  </button>
+                                )}
+
+                                {/* Divider before destructive actions */}
+                                <div className="border-t border-neutral-700 my-1" />
+
+                                {/* Delete options */}
+                                {hasLinkedIdea && sourceId ? (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setOpenMenuId(null);
+                                        deleteSalesPageOnly(product.id, sourceId, displayData.title);
+                                      }}
+                                      className="w-full px-4 py-2.5 text-sm text-red-400 hover:bg-red-950/30 flex items-center gap-3 transition-colors"
+                                    >
+                                      <X className="w-4 h-4" />
+                                      Delete Sales Page Only
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setOpenMenuId(null);
+                                        deleteEverything(product.id, sourceId, displayData.title);
+                                      }}
+                                      className="w-full px-4 py-2.5 text-sm text-red-400 hover:bg-red-950/30 flex items-center gap-3 transition-colors"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                      Delete Everything
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      deleteProduct(product.id, displayData.title);
+                                    }}
+                                    className="w-full px-4 py-2.5 text-sm text-red-400 hover:bg-red-950/30 flex items-center gap-3 transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    Delete Product
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -860,6 +921,109 @@ export default function Dashboard() {
                     <span className="inline-block mt-2 text-xs text-neutral-500 font-medium">For experienced creators</span>
                   </div>
                 </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Original Idea Modal */}
+      {ideaModal.isOpen && ideaModal.idea && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Lightbulb className="w-5 h-5 text-yellow-400" />
+                Original Idea
+              </h2>
+              <button
+                onClick={() => setIdeaModal({ isOpen: false, idea: null })}
+                className="p-2 hover:bg-neutral-800 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Product Name */}
+              <div>
+                <p className="text-xs text-neutral-500 uppercase tracking-wide mb-1">Product</p>
+                <p className="text-neutral-200 font-medium">{ideaModal.idea.productConfig?.name || ideaModal.idea.name}</p>
+              </div>
+
+              {/* Target Audience */}
+              {ideaModal.idea.productConfig?.targetAudience && (
+                <div>
+                  <p className="text-xs text-neutral-500 uppercase tracking-wide mb-1">Target Audience</p>
+                  <p className="text-neutral-300 text-sm">{ideaModal.idea.productConfig.targetAudience}</p>
+                </div>
+              )}
+
+              {/* Value Stack */}
+              {ideaModal.idea.productConfig?.valueStack && ideaModal.idea.productConfig.valueStack.length > 0 && (
+                <div>
+                  <p className="text-xs text-neutral-500 uppercase tracking-wide mb-1">Includes ({ideaModal.idea.productConfig.valueStack.length} items)</p>
+                  <ul className="text-sm text-neutral-300 space-y-1">
+                    {ideaModal.idea.productConfig.valueStack.map((item: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="text-purple-400 mt-0.5">•</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Guarantees */}
+              {ideaModal.idea.productConfig?.guarantees && ideaModal.idea.productConfig.guarantees.length > 0 && (
+                <div>
+                  <p className="text-xs text-neutral-500 uppercase tracking-wide mb-1">Guarantees ({ideaModal.idea.productConfig.guarantees.length})</p>
+                  <ul className="text-sm text-neutral-300 space-y-1">
+                    {ideaModal.idea.productConfig.guarantees.map((item: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="text-green-400 mt-0.5">✓</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Mission */}
+              {ideaModal.idea.productConfig?.mission && (
+                <div>
+                  <p className="text-xs text-neutral-500 uppercase tracking-wide mb-1">Mission</p>
+                  <p className="text-sm italic text-neutral-300 bg-neutral-800/50 rounded-lg p-3 border border-neutral-700">
+                    "{ideaModal.idea.productConfig.mission}"
+                  </p>
+                </div>
+              )}
+
+              {/* Price & Tier */}
+              <div className="flex gap-6 pt-2">
+                <div>
+                  <p className="text-xs text-neutral-500 uppercase tracking-wide mb-1">Price</p>
+                  <p className="text-neutral-200 font-medium">
+                    ${ideaModal.idea.productConfig?.price || 0} 
+                    <span className="text-neutral-500 text-xs ml-1">{ideaModal.idea.productConfig?.priceType || 'one-time'}</span>
+                  </p>
+                </div>
+                {ideaModal.idea.productConfig?.tierType && (
+                  <div>
+                    <p className="text-xs text-neutral-500 uppercase tracking-wide mb-1">Tier</p>
+                    <p className="text-neutral-200 font-medium capitalize">{ideaModal.idea.productConfig.tierType}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Close button */}
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setIdeaModal({ isOpen: false, idea: null })}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>
