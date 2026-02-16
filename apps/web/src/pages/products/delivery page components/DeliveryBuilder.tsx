@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { auth, db } from '../../lib/firebase';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { auth, db } from '../../../lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { 
@@ -8,8 +8,11 @@ import {
 } from 'lucide-react';
 
 // Step components
-import DeliveryStep2 from './DeliveryStep2';
-import DeliveryPreview from './delivery page components/DeliveryPreview';
+import DeliveryStepEmail from './DeliveryStepEmail';
+import DeliveryStepMethod from './DeliveryStepMethod';
+import DeliveryStepQuickPage from './DeliveryStepQuickPage';
+import DeliveryStepRedirect from './DeliveryStepRedirect';
+import DeliveryPreview from './DeliveryPreview';
 
 // ============================================
 // DELIVERY DATA INTERFACE
@@ -17,17 +20,17 @@ import DeliveryPreview from './delivery page components/DeliveryPreview';
 export interface DeliveryData {
   status: 'pending' | 'configured';
   
-  // SECTION 1: Confirmation Email (always required)
+  // STEP 1: Confirmation Email (always required)
   email: {
     subject: string;
     body: string;
     includeAccessButton: boolean;
   };
   
-  // SECTION 2: Delivery Method
-  deliveryMethod: 'email-only' | 'hosted' | 'redirect';
+  // STEP 2: Delivery Method
+  deliveryMethod: 'email-only' | 'quick-page' | 'custom-editor' | 'redirect';
   
-  // Hosted Content (when deliveryMethod === 'hosted')
+  // Quick Page Content (when deliveryMethod === 'quick-page')
   hosted: {
     files: Array<{
       id: string;
@@ -54,6 +57,15 @@ export interface DeliveryData {
     delay: number;
     showThankYou: boolean;
   };
+
+  // Delivery Page Design (when deliveryMethod === 'quick-page' or 'redirect')
+  design: {
+    backgroundColor: string;
+    accentColor: string;
+    logoUrl: string;
+    headingText: string;
+    subText: string;
+  };
   
   configuredAt?: Date;
 }
@@ -63,14 +75,12 @@ export const DEFAULT_DELIVERY_DATA: DeliveryData = {
   status: 'pending',
   
   email: {
-    subject: 'Your purchase is confirmed! 🎉',
+    subject: 'Your purchase is confirmed!',
     body: `Hi {{customer_name}}!
 
 Thank you for purchasing {{product_name}}.
 
 Your order is confirmed and you now have access to your product.
-
-{{access_button}}
 
 If you have any questions, just reply to this email.
 
@@ -93,16 +103,43 @@ Cheers!`,
     delay: 0,
     showThankYou: true,
   },
+
+  design: {
+    backgroundColor: '#ffffff',
+    accentColor: '#4f46e5',
+    logoUrl: '',
+    headingText: 'Thank you for your purchase!',
+    subText: "Here's your access to {{product_name}}",
+  },
 };
 
-const STEPS = [
-  { id: 1, name: 'Delivery Setup' },
-  { id: 2, name: 'Preview & Save' }
-];
+// ============================================
+// STEP DEFINITIONS
+// ============================================
+const getSteps = (method: DeliveryData['deliveryMethod']) => {
+  const steps = [
+    { id: 1, name: 'Email' },
+    { id: 2, name: 'Delivery Method' },
+  ];
+  
+  if (method === 'quick-page') {
+    steps.push({ id: 3, name: 'Quick Page Setup' });
+  } else if (method === 'redirect') {
+    steps.push({ id: 3, name: 'Redirect Setup' });
+  } else if (method === 'custom-editor') {
+    steps.push({ id: 3, name: 'Content Editor' });
+  }
+  // email-only: no Step 3
+  
+  steps.push({ id: steps.length + 1, name: 'Preview & Save' });
+  return steps;
+};
 
 export default function DeliveryBuilder() {
   const navigate = useNavigate();
   const { productId } = useParams();
+  const [searchParams] = useSearchParams();
+  const isPreviewMode = searchParams.get('preview') === 'true';
   
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -113,6 +150,11 @@ export default function DeliveryBuilder() {
 
   // Delivery data state
   const [deliveryData, setDeliveryData] = useState<DeliveryData>(DEFAULT_DELIVERY_DATA);
+
+  // Dynamic steps based on delivery method
+  const steps = getSteps(deliveryData.deliveryMethod);
+  const totalSteps = steps.length;
+  const isLastStep = currentStep === totalSteps;
 
   // Initialize - load product data
   useEffect(() => {
@@ -138,10 +180,8 @@ export default function DeliveryBuilder() {
           if (productSnap.exists()) {
             const data = productSnap.data();
             
-            // Get product name for preview
             setProductName(data.salesPage?.coreInfo?.name || 'Your Product');
             
-            // Load existing delivery data if any (merge with defaults)
             if (data.delivery) {
               setDeliveryData(prev => ({
                 ...prev,
@@ -149,6 +189,7 @@ export default function DeliveryBuilder() {
                 email: { ...prev.email, ...data.delivery.email },
                 hosted: { ...prev.hosted, ...data.delivery.hosted },
                 redirect: { ...prev.redirect, ...data.delivery.redirect },
+                design: { ...prev.design, ...(data.delivery.design || {}) },
               }));
             }
           } else {
@@ -168,12 +209,15 @@ export default function DeliveryBuilder() {
     init();
   }, [productId, navigate]);
 
-  // Update delivery data (supports nested updates)
+  // Preview mode renders a dedicated full-page preview (no step navigation needed)
+
+  // ==========================================
+  // UPDATE FUNCTIONS
+  // ==========================================
   const updateData = (updates: Partial<DeliveryData>) => {
     setDeliveryData(prev => ({ ...prev, ...updates }));
   };
 
-  // Update nested email data
   const updateEmail = (updates: Partial<DeliveryData['email']>) => {
     setDeliveryData(prev => ({
       ...prev,
@@ -181,7 +225,6 @@ export default function DeliveryBuilder() {
     }));
   };
 
-  // Update nested hosted data
   const updateHosted = (updates: Partial<DeliveryData['hosted']>) => {
     setDeliveryData(prev => ({
       ...prev,
@@ -189,7 +232,6 @@ export default function DeliveryBuilder() {
     }));
   };
 
-  // Update nested redirect data
   const updateRedirect = (updates: Partial<DeliveryData['redirect']>) => {
     setDeliveryData(prev => ({
       ...prev,
@@ -197,9 +239,18 @@ export default function DeliveryBuilder() {
     }));
   };
 
-  // Navigation handlers
+  const updateDesign = (updates: Partial<DeliveryData['design']>) => {
+    setDeliveryData(prev => ({
+      ...prev,
+      design: { ...prev.design, ...updates }
+    }));
+  };
+
+  // ==========================================
+  // NAVIGATION
+  // ==========================================
   const handleNext = () => {
-    if (currentStep < STEPS.length) {
+    if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -210,65 +261,76 @@ export default function DeliveryBuilder() {
     }
   };
 
-  // Validation for "Next" button
+  // When method changes in Step 2, reset to Step 2 if we were on a later step
+  const handleMethodChange = (method: DeliveryData['deliveryMethod']) => {
+    updateData({ deliveryMethod: method });
+    // If user was on Step 3+ and changes method, stay on Step 2
+    if (currentStep > 2) {
+      setCurrentStep(2);
+    }
+  };
+
+  // ==========================================
+  // VALIDATION
+  // ==========================================
   const canProceedToNext = () => {
     if (currentStep === 1) {
-      // Email is always required
-      if (!deliveryData.email.subject.trim() || !deliveryData.email.body.trim()) {
-        return false;
-      }
-      
-      // Validate based on delivery method
-      if (deliveryData.deliveryMethod === 'redirect') {
-        return deliveryData.redirect.url.trim().length > 0;
-      }
-      
-      if (deliveryData.deliveryMethod === 'hosted') {
-        // At least one hosted content type must be configured
-        const hasFiles = deliveryData.hosted.files.length > 0;
-        const hasVideos = deliveryData.hosted.videos.length > 0;
-        const hasNotion = deliveryData.hosted.notionUrl.trim().length > 0;
-        const hasContent = deliveryData.hosted.hasCustomContent;
-        return hasFiles || hasVideos || hasNotion || hasContent;
-      }
-      
-      // email-only just needs the email configured
+      return deliveryData.email.subject.trim().length > 0 && 
+             deliveryData.email.body.trim().length > 0;
+    }
+    
+    if (currentStep === 2) {
+      // Must have a method selected (always true since default is email-only)
       return true;
     }
+
+    // Step 3 validation depends on method
+    if (currentStep === 3 && deliveryData.deliveryMethod === 'quick-page') {
+      const hasFiles = deliveryData.hosted.files.length > 0;
+      const hasVideos = deliveryData.hosted.videos.length > 0;
+      const hasNotion = deliveryData.hosted.notionUrl.trim().length > 0;
+      return hasFiles || hasVideos || hasNotion;
+    }
+
+    if (currentStep === 3 && deliveryData.deliveryMethod === 'redirect') {
+      return deliveryData.redirect.url.trim().length > 0;
+    }
+
+    if (currentStep === 3 && deliveryData.deliveryMethod === 'custom-editor') {
+      return deliveryData.hosted.hasCustomContent;
+    }
+
     return true;
   };
 
-  // Get validation message
   const getValidationMessage = (): string | null => {
     if (canProceedToNext()) return null;
     
     if (currentStep === 1) {
       const missing: string[] = [];
-      
       if (!deliveryData.email.subject.trim()) missing.push('Email Subject');
       if (!deliveryData.email.body.trim()) missing.push('Email Body');
-      
-      if (deliveryData.deliveryMethod === 'redirect' && !deliveryData.redirect.url.trim()) {
-        missing.push('Redirect URL');
+      return `Required: ${missing.join(', ')}`;
+    }
+
+    if (currentStep === 3) {
+      if (deliveryData.deliveryMethod === 'quick-page') {
+        return 'Add at least one file, video, or embedded page';
       }
-      
-      if (deliveryData.deliveryMethod === 'hosted') {
-        const hasFiles = deliveryData.hosted.files.length > 0;
-        const hasVideos = deliveryData.hosted.videos.length > 0;
-        const hasNotion = deliveryData.hosted.notionUrl.trim().length > 0;
-        const hasContent = deliveryData.hosted.hasCustomContent;
-        if (!hasFiles && !hasVideos && !hasNotion && !hasContent) {
-          missing.push('At least one hosted content item');
-        }
+      if (deliveryData.deliveryMethod === 'redirect') {
+        return 'Required: Redirect URL';
       }
-      
-      return missing.length > 0 ? `Required: ${missing.join(', ')}` : null;
+      if (deliveryData.deliveryMethod === 'custom-editor') {
+        return 'Create your content page using the editor first';
+      }
     }
     
     return null;
   };
 
-  // Save to Firestore
+  // ==========================================
+  // SAVE
+  // ==========================================
   const handleSave = async () => {
     if (!userId || !productId) return;
 
@@ -288,7 +350,6 @@ export default function DeliveryBuilder() {
       console.log('Delivery configuration saved successfully');
       setSaveSuccess(true);
       
-      // Redirect after 2 seconds
       setTimeout(() => {
         navigate('/dashboard');
       }, 2000);
@@ -301,13 +362,131 @@ export default function DeliveryBuilder() {
     }
   };
 
-  // Loading state
+  // ==========================================
+  // RENDER
+  // ==========================================
   if (isLoading) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
         <div className="text-center">
           <Loader className="w-8 h-8 animate-spin text-neutral-400 mx-auto mb-2" />
           <div className="text-neutral-400">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Determine which step component to show for Step 3
+  const renderStep3 = () => {
+    switch (deliveryData.deliveryMethod) {
+      case 'quick-page':
+        return (
+          <DeliveryStepQuickPage
+          data={deliveryData}
+          updateHosted={updateHosted}
+          updateDesign={updateDesign}
+          productName={productName}
+          productId={productId || ''}
+          onBack={() => setCurrentStep(2)}
+          onNext={() => setCurrentStep(4)}
+          />
+        );
+      case 'redirect':
+        return (
+          <DeliveryStepRedirect
+            data={deliveryData}
+            updateRedirect={updateRedirect}
+          />
+        );
+      case 'custom-editor':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-semibold">Content Editor</h2>
+              <p className="text-neutral-400 mt-1">
+                Build a fully custom delivery page with our rich editor
+              </p>
+            </div>
+
+            <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-8 text-center">
+              {deliveryData.hosted.hasCustomContent ? (
+                <>
+                  <div className="w-14 h-14 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Check className="w-7 h-7 text-green-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Content Page Created</h3>
+                  <p className="text-sm text-neutral-400 mb-6">
+                    Your custom content page is ready. You can edit it anytime.
+                  </p>
+                  <button
+                    onClick={() => navigate(`/products/${productId}/content-builder`)}
+                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white font-medium transition-colors"
+                  >
+                    Edit Content Page
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="w-14 h-14 bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <ArrowRight className="w-7 h-7 text-indigo-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Create Your Content Page</h3>
+                  <p className="text-sm text-neutral-400 mb-6">
+                    Use our drag-and-drop editor to build a custom delivery page with rich text, images, videos, and more.
+                  </p>
+                  <button
+                    onClick={() => navigate(`/products/${productId}/content-builder`)}
+                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white font-medium transition-colors"
+                  >
+                    Open Content Editor
+                  </button>
+                  <p className="text-xs text-neutral-500 mt-3">
+                    You'll return here after creating your page
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // ==========================================
+  // PREVIEW MODE: Full-page preview from Dashboard
+  // ==========================================
+  if (isPreviewMode && !isLoading) {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-neutral-100">
+        <header className="border-b border-neutral-800 bg-neutral-900/50 backdrop-blur-sm sticky top-0 z-10">
+          <div className="px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="p-2 hover:bg-neutral-800 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h1 className="text-lg font-semibold">Delivery Preview</h1>
+                <p className="text-sm text-neutral-400">{productName}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate(`/products/${productId}/delivery`)}
+              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              Edit Delivery
+            </button>
+          </div>
+        </header>
+
+        <div className="max-w-4xl mx-auto p-6">
+          <DeliveryPreview 
+            data={deliveryData}
+            productName={productName}
+          />
         </div>
       </div>
     );
@@ -351,7 +530,7 @@ export default function DeliveryBuilder() {
         {/* Progress Steps */}
         <div className="px-6 pb-4">
           <div className="flex items-center gap-2">
-            {STEPS.map((step) => (
+            {steps.map((step) => (
               <div key={step.id} className="flex-1">
                 <div className="flex items-center gap-2">
                   <div
@@ -360,7 +539,7 @@ export default function DeliveryBuilder() {
                     }`}
                   />
                   {step.id === currentStep && (
-                    <span className="text-xs text-neutral-400">{step.name}</span>
+                    <span className="text-xs text-neutral-400 whitespace-nowrap">{step.name}</span>
                   )}
                 </div>
               </div>
@@ -383,26 +562,36 @@ export default function DeliveryBuilder() {
 
       {/* Main Content */}
       <div className="max-w-4xl mx-auto p-8">
+        {/* Step 1: Email */}
         {currentStep === 1 && (
-          <DeliveryStep2 
+          <DeliveryStepEmail
             data={deliveryData}
-            updateData={updateData}
             updateEmail={updateEmail}
-            updateHosted={updateHosted}
-            updateRedirect={updateRedirect}
             productName={productName}
-            productId={productId || ''}
           />
         )}
         
+        {/* Step 2: Method Selection */}
         {currentStep === 2 && (
+          <DeliveryStepMethod
+            data={deliveryData}
+            onMethodChange={handleMethodChange}
+          />
+        )}
+
+        {/* Step 3: Configuration (conditional) */}
+        {currentStep === 3 && renderStep3()}
+        
+        {/* Final Step: Preview & Save */}
+        {isLastStep && currentStep > 2 && (
           <DeliveryPreview 
             data={deliveryData}
             productName={productName}
           />
         )}
 
-        {/* Navigation Buttons */}
+        {/* Navigation Buttons - hide when quick-page Step 3 is active (it has its own nav) */}
+        {!(currentStep === 3 && deliveryData.deliveryMethod === 'quick-page') && (
         <div className="mt-8 flex items-center justify-between">
           <button
             onClick={handlePrevious}
@@ -415,12 +604,11 @@ export default function DeliveryBuilder() {
 
           <div className="flex items-center gap-2">
             <span className="text-sm text-neutral-400">
-              Step {currentStep} of {STEPS.length}
+              Step {currentStep} of {totalSteps}
             </span>
           </div>
 
           <div className="flex flex-col items-end gap-1">
-            {/* Validation message */}
             {getValidationMessage() && (
               <span className="text-xs text-amber-400 flex items-center gap-1">
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -430,7 +618,7 @@ export default function DeliveryBuilder() {
               </span>
             )}
             
-            {currentStep < STEPS.length ? (
+            {!isLastStep ? (
               <button
                 onClick={handleNext}
                 disabled={!canProceedToNext()}
@@ -451,6 +639,7 @@ export default function DeliveryBuilder() {
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

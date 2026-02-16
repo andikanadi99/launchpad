@@ -24,7 +24,7 @@ import ProductPage from './pages/products/Product';
 import Success from "./pages/products/Success";
 import Support from "./pages/Support";
 import ProductPagePreview from "./pages/products/product page components/ProductPagePreview";
-import DeliveryBuilder from "./pages/products/DeliveryBuilder";
+import DeliveryBuilder from "./pages/products/delivery page components/DeliveryBuilder";
 import ContentBuilderPage from "./pages/products/product page components/ContentBuilderPage";
 
 //Sales Page

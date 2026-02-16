@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DeliveryData } from './DeliveryBuilder';
+import { DeliveryData } from './delivery page components/DeliveryBuilder';
 import { storage, auth } from '../../lib/firebase';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { 
   Mail, Package, ExternalLink, Check, AlertCircle, 
   Upload, X, Loader, File, Video, FileText, Link,
-  ChevronDown, ChevronUp, Eye, Trash2, Plus
+  ChevronDown, ChevronUp, Eye, Trash2, Plus, Palette, Image
 } from 'lucide-react';
 import ConfirmModal from '../ConfirmModal';
 
@@ -16,6 +16,7 @@ interface DeliveryStep2Props {
   updateEmail: (updates: Partial<DeliveryData['email']>) => void;
   updateHosted: (updates: Partial<DeliveryData['hosted']>) => void;
   updateRedirect: (updates: Partial<DeliveryData['redirect']>) => void;
+  updateDesign: (updates: Partial<DeliveryData['design']>) => void;
   productName: string;
   productId: string;
 }
@@ -25,7 +26,6 @@ const EMAIL_VARIABLES = [
   { var: '{{customer_name}}', desc: 'Customer\'s name' },
   { var: '{{customer_email}}', desc: 'Customer\'s email' },
   { var: '{{product_name}}', desc: 'Your product name' },
-  { var: '{{access_button}}', desc: 'Access product button (if hosted)' },
 ];
 
 export default function DeliveryStep2({ 
@@ -34,6 +34,7 @@ export default function DeliveryStep2({
   updateEmail,
   updateHosted,
   updateRedirect,
+  updateDesign,
   productName,
   productId
 }: DeliveryStep2Props) {
@@ -49,6 +50,7 @@ export default function DeliveryStep2({
   
   // UI state
   const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // Delete confirmation modal state (for files and videos)
   const [deleteModal, setDeleteModal] = useState<{
@@ -60,8 +62,18 @@ export default function DeliveryStep2({
   }>({ isOpen: false, type: 'file', id: '', url: '', name: '' });
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Ref for auto-expanding textarea
+  // Ref for auto-expanding textareas
+  const emailSubjectRef = useRef<HTMLTextAreaElement>(null);
   const emailBodyRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize email subject textarea
+  useEffect(() => {
+    const textarea = emailSubjectRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.max(textarea.scrollHeight, 48)}px`;
+    }
+  }, [data.email.subject]);
 
   // Auto-resize email body textarea
   useEffect(() => {
@@ -203,38 +215,93 @@ export default function DeliveryStep2({
   };
 
   // ==========================================
+  // LOGO UPLOAD HANDLER
+  // ==========================================
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    // Validate: images only, max 2MB
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (PNG, JPG, SVG)');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Logo must be under 2MB');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) throw new Error('Not authenticated');
+
+      const timestamp = Date.now();
+      const fileName = `logo_${timestamp}_${file.name}`;
+      const storageRef = ref(storage, `users/${userId}/delivery-assets/${productId}/${fileName}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      uploadTask.on(
+        'state_changed',
+        () => {},
+        (error) => {
+          console.error('Logo upload error:', error);
+          alert('Failed to upload logo');
+          setUploadingLogo(false);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          updateDesign({ logoUrl: downloadURL });
+          setUploadingLogo(false);
+        }
+      );
+    } catch (error) {
+      console.error('Logo upload error:', error);
+      alert('Failed to upload logo');
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (data.design.logoUrl) {
+      try {
+        const storageRef = ref(storage, data.design.logoUrl);
+        await deleteObject(storageRef);
+      } catch (error) {
+        console.error('Error deleting logo from storage:', error);
+      }
+      updateDesign({ logoUrl: '' });
+    }
+  };
+
+  // ==========================================
   // EMAIL PREVIEW
   // ==========================================
-  const ACCESS_BUTTON_PLACEHOLDER = '___ACCESS_BUTTON___';
-  
   const getPreviewEmailParts = () => {
     let body = data.email.body;
+    // Strip any leftover {{access_button}} from old templates
+    body = body.replace(/\{\{access_button\}\}/g, '');
     body = body.replace(/\{\{customer_name\}\}/g, 'John');
     body = body.replace(/\{\{customer_email\}\}/g, 'john@example.com');
     body = body.replace(/\{\{product_name\}\}/g, productName);
-    body = body.replace(/\{\{access_button\}\}/g, 
-      data.deliveryMethod !== 'email-only' ? ACCESS_BUTTON_PLACEHOLDER : ''
-    );
-    return body;
+    return body.trim();
   };
 
   const renderEmailPreview = () => {
     const content = getPreviewEmailParts();
     
-    if (!content.includes(ACCESS_BUTTON_PLACEHOLDER)) {
-      return <span className="whitespace-pre-wrap">{content}</span>;
-    }
-    
-    const parts = content.split(ACCESS_BUTTON_PLACEHOLDER);
     return (
       <>
-        <span className="whitespace-pre-wrap">{parts[0]}</span>
-        <div className="my-3">
-          <span className="inline-block px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium">
-            🔗 Access Your Product
-          </span>
-        </div>
-        <span className="whitespace-pre-wrap">{parts[1]}</span>
+        <span className="whitespace-pre-wrap">{content}</span>
+        {data.deliveryMethod !== 'email-only' && (
+          <div className="mt-4 pt-3 border-t border-neutral-200">
+            <p className="text-xs text-neutral-500 italic mb-1">Auto-included with delivery:</p>
+            <span className="text-sm text-indigo-600 underline">
+              Access Your Product
+            </span>
+          </div>
+        )}
       </>
     );
   };
@@ -278,13 +345,14 @@ export default function DeliveryStep2({
             <label className="block text-sm font-medium mb-2">
               Email Subject <span className="text-red-400">*</span>
             </label>
-            <input
-              type="text"
+            <textarea
+              ref={emailSubjectRef}
               value={data.email.subject}
-              onChange={(e) => updateEmail({ subject: e.target.value })}
+              onChange={(e) => updateEmail({ subject: e.target.value.replace(/\n/g, '') })}
               maxLength={100}
+              rows={1}
               placeholder="Your purchase is confirmed! 🎉"
-              className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg focus:border-indigo-500 focus:outline-none text-white"
+              className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg focus:border-indigo-500 focus:outline-none text-white resize-none overflow-hidden"
             />
             <p className="text-xs text-neutral-500 mt-1">
               {data.email.subject.length}/100 characters
@@ -655,6 +723,191 @@ export default function DeliveryStep2({
         )}
       </div>
 
+      {/* ==========================================
+          SECTION 3: DELIVERY PAGE DESIGN (hosted only)
+          ========================================== */}
+      {data.deliveryMethod === 'hosted' && (
+        <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+              <Palette className="w-5 h-5 text-purple-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">Delivery Page Design</h3>
+              <p className="text-sm text-neutral-400">Customize what customers see after purchase</p>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {/* Logo Upload */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Logo</label>
+              {data.design.logoUrl ? (
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 bg-neutral-800 rounded-lg border border-neutral-700 flex items-center justify-center overflow-hidden">
+                    <img 
+                      src={data.design.logoUrl} 
+                      alt="Logo" 
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  </div>
+                  <button
+                    onClick={handleRemoveLogo}
+                    className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-500/50 rounded-lg transition-colors"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-3 px-4 py-3 bg-neutral-800 border border-neutral-700 hover:border-neutral-600 rounded-lg cursor-pointer transition-colors">
+                  {uploadingLogo ? (
+                    <Loader className="w-5 h-5 animate-spin text-neutral-400" />
+                  ) : (
+                    <Image className="w-5 h-5 text-neutral-400" />
+                  )}
+                  <span className="text-sm text-neutral-400">
+                    {uploadingLogo ? 'Uploading...' : 'Upload logo (PNG, JPG, SVG — max 2MB)'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    disabled={uploadingLogo}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+
+            {/* Colors */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Background Color */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Background Color</label>
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1.5">
+                    {['#ffffff', '#f8f9fa', '#f3f0ff', '#fef3c7', '#ecfdf5', '#1a1a2e'].map(color => (
+                      <button
+                        key={color}
+                        onClick={() => updateDesign({ backgroundColor: color })}
+                        className={`w-8 h-8 rounded-lg border-2 transition-all ${
+                          data.design.backgroundColor === color 
+                            ? 'border-indigo-500 scale-110' 
+                            : 'border-neutral-600 hover:border-neutral-500'
+                        }`}
+                        style={{ backgroundColor: color }}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="color"
+                      value={data.design.backgroundColor}
+                      onChange={(e) => updateDesign({ backgroundColor: e.target.value })}
+                      className="w-8 h-8 rounded-lg cursor-pointer border-2 border-dashed border-neutral-600 bg-transparent"
+                      title="Custom color"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Accent Color */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Accent Color</label>
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1.5">
+                    {['#4f46e5', '#7c3aed', '#059669', '#dc2626', '#ea580c', '#0284c7'].map(color => (
+                      <button
+                        key={color}
+                        onClick={() => updateDesign({ accentColor: color })}
+                        className={`w-8 h-8 rounded-lg border-2 transition-all ${
+                          data.design.accentColor === color 
+                            ? 'border-white scale-110' 
+                            : 'border-neutral-600 hover:border-neutral-500'
+                        }`}
+                        style={{ backgroundColor: color }}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="color"
+                      value={data.design.accentColor}
+                      onChange={(e) => updateDesign({ accentColor: e.target.value })}
+                      className="w-8 h-8 rounded-lg cursor-pointer border-2 border-dashed border-neutral-600 bg-transparent"
+                      title="Custom color"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Heading & Subtext */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Heading Text</label>
+                <input
+                  type="text"
+                  value={data.design.headingText}
+                  onChange={(e) => updateDesign({ headingText: e.target.value })}
+                  maxLength={80}
+                  placeholder="Thank you for your purchase!"
+                  className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg focus:border-indigo-500 focus:outline-none text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Subtext
+                  <span className="text-xs text-neutral-500 ml-2">Use {'{{product_name}}'} for product name</span>
+                </label>
+                <input
+                  type="text"
+                  value={data.design.subText}
+                  onChange={(e) => updateDesign({ subText: e.target.value })}
+                  maxLength={120}
+                  placeholder="Here's your access to {{product_name}}"
+                  className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg focus:border-indigo-500 focus:outline-none text-white"
+                />
+              </div>
+            </div>
+
+            {/* Mini Preview */}
+            <div>
+              <p className="text-xs text-neutral-500 uppercase tracking-wide mb-2">Preview</p>
+              <div 
+                className="rounded-lg p-6 text-center border border-neutral-700"
+                style={{ backgroundColor: data.design.backgroundColor }}
+              >
+                {data.design.logoUrl && (
+                  <img 
+                    src={data.design.logoUrl} 
+                    alt="Logo" 
+                    className="h-10 object-contain mx-auto mb-3"
+                  />
+                )}
+                <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2" style={{ backgroundColor: data.design.accentColor + '20' }}>
+                  <Check className="w-5 h-5" style={{ color: data.design.accentColor }} />
+                </div>
+                <p className="font-semibold text-neutral-900 text-sm">
+                  {data.design.headingText || 'Thank you for your purchase!'}
+                </p>
+                <p className="text-xs text-neutral-500 mt-1">
+                  {(data.design.subText || "Here's your access to {{product_name}}").replace(/\{\{product_name\}\}/g, productName || 'Your Product')}
+                </p>
+                <div 
+                  className="inline-block mt-3 px-4 py-1.5 rounded-lg text-white text-xs font-medium"
+                  style={{ backgroundColor: data.design.accentColor }}
+                >
+                  Download
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Summary */}
       <div className="bg-neutral-800/30 border border-neutral-700 rounded-lg p-4">
         <div className="flex items-start gap-3">
@@ -668,7 +921,7 @@ export default function DeliveryStep2({
                 <>Purchase → Confirmation email sent → Done</>
               )}
               {data.deliveryMethod === 'hosted' && (
-                <>Purchase → Confirmation email with "Access Product" button → LaunchPad delivery page</>
+                <>Purchase → Confirmation email with product link → LaunchPad delivery page</>
               )}
               {data.deliveryMethod === 'redirect' && (
                 <>Purchase → Confirmation email → {data.redirect.showThankYou ? 'Thank you page → ' : ''}Redirect to your platform</>

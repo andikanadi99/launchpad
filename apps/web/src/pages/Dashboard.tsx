@@ -20,7 +20,9 @@ import {
   Copy,
   Clock,
   Plus,
-  MoreVertical
+  MoreVertical,
+  Truck,
+  ChevronDown
 } from 'lucide-react';
 
 interface ProductIdea {
@@ -78,6 +80,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [copiedProductId, setCopiedProductId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null); // e.g. "productId-sales" or "productId-delivery"
   const [ideaModal, setIdeaModal] = useState<{
     isOpen: boolean;
     idea: ProductIdea | null;
@@ -139,18 +142,21 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
-  // Close overflow menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
-    if (!openMenuId) return;
+    if (!openMenuId && !openDropdown) return;
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('[data-menu-container]')) {
+      if (openMenuId && !target.closest('[data-menu-container]')) {
         setOpenMenuId(null);
+      }
+      if (openDropdown && !target.closest('[data-dropdown-container]')) {
+        setOpenDropdown(null);
       }
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [openMenuId]);
+  }, [openMenuId, openDropdown]);
 
   const dismissInfoBanner = () => {
     setShowInfoBanner(false);
@@ -351,7 +357,7 @@ export default function Dashboard() {
     }
   };
 
-  // Edit idea that has a linked sales page — clone it first
+  // Edit idea that has a linked sales page -- clone it first
   const editIdeaWithWarning = (ideaId: string, ideaName: string) => {
     setConfirmModal({
       isOpen: true,
@@ -628,6 +634,8 @@ export default function Dashboard() {
                   sales: product.analytics?.sales || 0,
                   revenue: product.analytics?.revenue || 0,
                   slug: product.salesPage?.publish?.slug,
+                  deliveryConfigured: product.delivery?.status === 'configured',
+                  deliveryMethod: product.delivery?.deliveryMethod || null,
                 };
 
                 return (
@@ -665,6 +673,14 @@ export default function Dashboard() {
                                     From Co-Pilot
                                   </span>
                                 )}
+                                <span className={`text-xs px-2 py-1 rounded-full border flex items-center gap-1 ${
+                                  displayData.deliveryConfigured
+                                    ? 'bg-blue-950/30 text-blue-400 border-blue-800/30'
+                                    : 'bg-neutral-800 text-neutral-500 border-neutral-700'
+                                }`}>
+                                  <Truck className="w-3 h-3" />
+                                  {displayData.deliveryConfigured ? 'Delivery Ready' : 'No Delivery'}
+                                </span>
                               </div>
                               <p className="text-neutral-400 text-sm mt-1 line-clamp-2">
                                 {displayData.description}
@@ -694,62 +710,145 @@ export default function Dashboard() {
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center gap-3 pt-3 border-t border-neutral-800">
-                          {/* Primary: Edit Sales Page */}
-                          <Link
-                            to={`/products/${product.id}/edit`}
-                            className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                            Edit Sales Page
-                          </Link>
-                          
-                          {/* Preview / View Live */}
-                          {displayData.published && displayData.slug ? (
-                            <a
-                              href={`/p/${displayData.slug}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-4 py-2 bg-green-950/30 hover:bg-green-950/50 text-green-400 rounded-lg transition-colors flex items-center gap-2"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                              View Live
-                            </a>
-                          ) : (
-                            <Link
-                              to={`/products/${product.id}/preview`}
-                              target="_blank"
-                              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
-                            >
-                              <Eye className="w-4 h-4" />
-                              Preview
-                            </Link>
-                          )}
+                        <div className="flex items-center gap-2 pt-3 border-t border-neutral-800">
+                          {/* Sales Page - split dropdown */}
+                          <div className="relative" data-dropdown-container>
+                            <div className="flex">
+                              <Link
+                                to={`/products/${product.id}/edit`}
+                                className="px-3.5 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-l-lg transition-colors flex items-center gap-2 text-sm border border-neutral-700 border-r-0"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                                Sales Page
+                              </Link>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenDropdown(openDropdown === `${product.id}-sales` ? null : `${product.id}-sales`);
+                                  setOpenMenuId(null);
+                                }}
+                                className="px-1.5 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 rounded-r-lg transition-colors border border-neutral-700"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            {openDropdown === `${product.id}-sales` && (
+                              <div className="absolute left-0 top-full mt-1 w-48 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl z-50 py-1">
+                                <Link
+                                  to={`/products/${product.id}/edit`}
+                                  onClick={() => setOpenDropdown(null)}
+                                  className="w-full px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-700 flex items-center gap-3 transition-colors"
+                                >
+                                  <Edit2 className="w-4 h-4 text-neutral-400" />
+                                  Edit Sales Page
+                                </Link>
+                                {displayData.published && displayData.slug ? (
+                                  <Link
+                                    to={`/products/${product.id}/preview`}
+                                    target="_blank"
+                                    onClick={() => setOpenDropdown(null)}
+                                    className="w-full px-4 py-2.5 text-sm text-green-400 hover:bg-neutral-700 flex items-center gap-3 transition-colors"
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                    View Live Page
+                                  </Link>
+                                ) : (
+                                  <Link
+                                    to={`/products/${product.id}/preview`}
+                                    target="_blank"
+                                    onClick={() => setOpenDropdown(null)}
+                                    className="w-full px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-700 flex items-center gap-3 transition-colors"
+                                  >
+                                    <Eye className="w-4 h-4 text-neutral-400" />
+                                    Preview Draft
+                                  </Link>
+                                )}
+                                {displayData.published && displayData.slug && (
+                                  <button
+                                    onClick={() => {
+                                      setOpenDropdown(null);
+                                      copyProductLink(displayData.slug!, product.id);
+                                    }}
+                                    className="w-full px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-700 flex items-center gap-3 transition-colors"
+                                  >
+                                    <Copy className="w-4 h-4 text-neutral-400" />
+                                    {copiedProductId === product.id ? 'Copied!' : 'Copy Link'}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
 
-                          {/* Delivery */}
-                          <Link
-                            to={`/products/${product.id}/delivery`}
-                            className="px-4 py-2 bg-blue-950/30 hover:bg-blue-950/50 text-blue-400 rounded-lg transition-colors flex items-center gap-2"
-                          >
-                            <Settings className="w-4 h-4" />
-                            Delivery
-                          </Link>
+                          {/* Delivery - split dropdown */}
+                          <div className="relative" data-dropdown-container>
+                            <div className="flex">
+                              <Link
+                                to={`/products/${product.id}/delivery`}
+                                className={`px-3.5 py-2 rounded-l-lg transition-colors flex items-center gap-2 text-sm border ${
+                                  displayData.deliveryConfigured
+                                    ? 'bg-blue-950/30 hover:bg-blue-950/50 text-blue-400 border-blue-800/30'
+                                    : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border-neutral-700'
+                                } border-r-0`}
+                              >
+                                <Truck className="w-3.5 h-3.5" />
+                                Delivery
+                              </Link>
+                              {displayData.deliveryConfigured && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenDropdown(openDropdown === `${product.id}-delivery` ? null : `${product.id}-delivery`);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="px-1.5 py-2 bg-blue-950/30 hover:bg-blue-950/50 text-blue-400 rounded-r-lg transition-colors border border-blue-800/30"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {!displayData.deliveryConfigured && (
+                                <span className="px-1.5 py-2 bg-neutral-800 text-neutral-600 rounded-r-lg border border-neutral-700 flex items-center">
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </span>
+                              )}
+                            </div>
+                            {openDropdown === `${product.id}-delivery` && displayData.deliveryConfigured && (
+                              <div className="absolute left-0 top-full mt-1 w-48 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl z-50 py-1">
+                                <Link
+                                  to={`/products/${product.id}/delivery`}
+                                  onClick={() => setOpenDropdown(null)}
+                                  className="w-full px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-700 flex items-center gap-3 transition-colors"
+                                >
+                                  <Settings className="w-4 h-4 text-neutral-400" />
+                                  Edit Delivery
+                                </Link>
+                                <Link
+                                  to={`/products/${product.id}/delivery?preview=true`}
+                                  target="_blank"
+                                  onClick={() => setOpenDropdown(null)}
+                                  className="w-full px-4 py-2.5 text-sm text-purple-400 hover:bg-neutral-700 flex items-center gap-3 transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                  Preview Delivery
+                                </Link>
+                              </div>
+                            )}
+                          </div>
 
-                          {/* More Options Menu */}
-                          <div className="relative" data-menu-container>
+                          {/* More Options */}
+                          <div className="relative ml-auto" data-menu-container>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setOpenMenuId(openMenuId === product.id ? null : product.id);
+                                setOpenDropdown(null);
                               }}
-                              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors flex items-center gap-2"
+                              className="p-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 rounded-lg transition-colors border border-neutral-700"
                             >
                               <MoreVertical className="w-4 h-4" />
-                              More
                             </button>
 
                             {openMenuId === product.id && (
-                              <div className="absolute right-0 bottom-full mb-1 w-56 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl z-50 py-1">
+                              <div className="absolute right-0 top-full mt-1 w-56 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl z-50 py-1">
                                 {/* View Original Idea */}
                                 {hasLinkedIdea && idea && (
                                   <button
@@ -775,20 +874,6 @@ export default function Dashboard() {
                                   >
                                     <Edit2 className="w-4 h-4 text-purple-400" />
                                     Edit Idea (Copy)
-                                  </button>
-                                )}
-
-                                {/* Copy Link - only when published */}
-                                {displayData.published && displayData.slug && (
-                                  <button
-                                    onClick={() => {
-                                      setOpenMenuId(null);
-                                      copyProductLink(displayData.slug!, product.id);
-                                    }}
-                                    className="w-full px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-700 flex items-center gap-3 transition-colors"
-                                  >
-                                    <Copy className="w-4 h-4 text-neutral-400" />
-                                    {copiedProductId === product.id ? 'Copied!' : 'Copy Link'}
                                   </button>
                                 )}
 

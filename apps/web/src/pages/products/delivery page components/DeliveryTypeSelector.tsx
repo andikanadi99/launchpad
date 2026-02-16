@@ -1,4 +1,4 @@
-import { DeliveryData } from '../DeliveryBuilder';
+import { DeliveryData } from './DeliveryBuilder';
 import { 
   Mail, FileText, Package, ExternalLink, Check, AlertCircle 
 } from 'lucide-react';

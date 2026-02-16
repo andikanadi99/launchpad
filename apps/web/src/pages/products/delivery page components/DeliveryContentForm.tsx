@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DeliveryData } from '../DeliveryBuilder';
+import { DeliveryData } from './DeliveryBuilder';
 import { storage, auth } from '../../../lib/firebase';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { 
