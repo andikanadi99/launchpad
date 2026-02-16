@@ -15,6 +15,21 @@ import DeliveryStepRedirect from './DeliveryStepRedirect';
 import DeliveryPreview from './DeliveryPreview';
 
 // ============================================
+// HELPERS
+// ============================================
+function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    const parts = parsed.hostname.split('.');
+    // Must have at least 2 parts (e.g. google.com) and TLD must be 2+ chars
+    return parts.length >= 2 && parts[parts.length - 1].length >= 2;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================
 // DELIVERY DATA INTERFACE
 // ============================================
 export interface DeliveryData {
@@ -209,8 +224,6 @@ export default function DeliveryBuilder() {
     init();
   }, [productId, navigate]);
 
-  // Preview mode renders a dedicated full-page preview (no step navigation needed)
-
   // ==========================================
   // UPDATE FUNCTIONS
   // ==========================================
@@ -264,7 +277,6 @@ export default function DeliveryBuilder() {
   // When method changes in Step 2, reset to Step 2 if we were on a later step
   const handleMethodChange = (method: DeliveryData['deliveryMethod']) => {
     updateData({ deliveryMethod: method });
-    // If user was on Step 3+ and changes method, stay on Step 2
     if (currentStep > 2) {
       setCurrentStep(2);
     }
@@ -280,11 +292,9 @@ export default function DeliveryBuilder() {
     }
     
     if (currentStep === 2) {
-      // Must have a method selected (always true since default is email-only)
       return true;
     }
 
-    // Step 3 validation depends on method
     if (currentStep === 3 && deliveryData.deliveryMethod === 'quick-page') {
       const hasFiles = deliveryData.hosted.files.length > 0;
       const hasVideos = deliveryData.hosted.videos.length > 0;
@@ -293,7 +303,7 @@ export default function DeliveryBuilder() {
     }
 
     if (currentStep === 3 && deliveryData.deliveryMethod === 'redirect') {
-      return deliveryData.redirect.url.trim().length > 0;
+      return isValidUrl(deliveryData.redirect.url);
     }
 
     if (currentStep === 3 && deliveryData.deliveryMethod === 'custom-editor') {
@@ -318,7 +328,9 @@ export default function DeliveryBuilder() {
         return 'Add at least one file, video, or embedded page';
       }
       if (deliveryData.deliveryMethod === 'redirect') {
-        return 'Required: Redirect URL';
+        return deliveryData.redirect.url.trim().length === 0
+          ? 'Required: Redirect URL'
+          : 'Please enter a valid URL starting with https:// or http://';
       }
       if (deliveryData.deliveryMethod === 'custom-editor') {
         return 'Create your content page using the editor first';
@@ -396,6 +408,11 @@ export default function DeliveryBuilder() {
           <DeliveryStepRedirect
             data={deliveryData}
             updateRedirect={updateRedirect}
+            updateDesign={updateDesign}
+            productName={productName}
+            productId={productId || ''}
+            onBack={() => setCurrentStep(2)}
+            onNext={() => setCurrentStep(4)}
           />
         );
       case 'custom-editor':
@@ -492,6 +509,23 @@ export default function DeliveryBuilder() {
     );
   }
 
+  // ==========================================
+  // SAVE SUCCESS: Full-page confirmation
+  // ==========================================
+  if (saveSuccess) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Check className="w-8 h-8 text-green-400" />
+          </div>
+          <h2 className="text-xl font-semibold text-white mb-2">Delivery Configured!</h2>
+          <p className="text-neutral-400 text-sm">Redirecting to dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
       {/* Header */}
@@ -516,11 +550,6 @@ export default function DeliveryBuilder() {
                 <div className="flex items-center gap-2">
                   <Loader className="w-4 h-4 animate-spin" />
                   <span className="text-sm text-neutral-400">Saving...</span>
-                </div>
-              ) : saveSuccess ? (
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-green-500" />
-                  <span className="text-sm text-green-500">Saved!</span>
                 </div>
               ) : null}
             </div>
@@ -547,18 +576,6 @@ export default function DeliveryBuilder() {
           </div>
         </div>
       </header>
-
-      {/* Success Banner */}
-      {saveSuccess && (
-        <div className="bg-green-500/10 border-b border-green-500/30 px-6 py-3">
-          <div className="flex items-center gap-2">
-            <Check className="w-4 h-4 text-green-500" />
-            <p className="text-sm text-green-500">
-              Delivery configured successfully! Returning to dashboard...
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Main Content */}
       <div className="max-w-4xl mx-auto p-8">
@@ -591,7 +608,7 @@ export default function DeliveryBuilder() {
         )}
 
         {/* Navigation Buttons - hide when quick-page Step 3 is active (it has its own nav) */}
-        {!(currentStep === 3 && deliveryData.deliveryMethod === 'quick-page') && (
+        {!(currentStep === 3 && (deliveryData.deliveryMethod === 'quick-page' || deliveryData.deliveryMethod === 'redirect')) && (
         <div className="mt-8 flex items-center justify-between">
           <button
             onClick={handlePrevious}
@@ -633,8 +650,17 @@ export default function DeliveryBuilder() {
                 disabled={isSaving}
                 className="px-6 py-2 bg-green-600 hover:bg-green-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded-lg font-medium transition-colors flex items-center gap-2"
               >
-                <Save className="w-4 h-4" />
-                Save Configuration
+                {isSaving ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Save Configuration
+                  </>
+                )}
               </button>
             )}
           </div>

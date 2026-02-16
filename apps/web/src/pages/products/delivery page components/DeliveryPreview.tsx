@@ -1,7 +1,7 @@
 import { DeliveryData } from './DeliveryBuilder';
 import { 
   Mail, Check, File, Video, Link, Download, ExternalLink, 
-  Package, Globe, ArrowRight, Clock
+  Package, Globe, ArrowRight
 } from 'lucide-react';
 
 interface DeliveryPreviewProps {
@@ -67,7 +67,7 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
     },
     'redirect': { 
       label: 'External Redirect', 
-      desc: 'Customers are redirected to an external URL after purchase.',
+      desc: 'Customers see a branded thank you page, then access your external URL.',
       icon: <Globe className="w-5 h-5 text-green-400" />
     },
     'custom-editor': { 
@@ -79,7 +79,7 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
 
   const method = methodLabels[data.deliveryMethod] || methodLabels['email-only'];
 
-  // Quick page design variables
+  // Design variables
   const designExt = data.design as any;
   const accent = data.design.accentColor || '#4f46e5';
   const bgColor = data.design.backgroundColor || '#ffffff';
@@ -124,6 +124,7 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
   };
 
   const contentOrder: string[] = designExt.contentOrder || ['header', 'files', 'videos', 'resources'];
+  const redirectButtonText: string = designExt.redirectButtonText || 'Access Your Purchase';
 
   // Content counts
   const fileCount = data.hosted.files.length;
@@ -143,8 +144,6 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
           CONFIGURATION SUMMARY
           ========================================== */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        {/* Delivery Method */}
         <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-4">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-9 h-9 bg-neutral-800 rounded-lg flex items-center justify-center">
@@ -158,7 +157,6 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
           <p className="text-xs text-neutral-400">{method.desc}</p>
         </div>
 
-        {/* Content Summary */}
         <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-4">
           <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Content Included</p>
           {data.deliveryMethod === 'email-only' ? (
@@ -169,12 +167,10 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
                 <Globe className="w-3.5 h-3.5 text-green-400" />
                 <span className="text-sm truncate">{data.redirect.url || 'No URL set'}</span>
               </div>
-              {data.redirect.delay > 0 && (
-                <div className="flex items-center gap-2">
-                  <Clock className="w-3.5 h-3.5 text-neutral-500" />
-                  <span className="text-xs text-neutral-400">{data.redirect.delay}s delay before redirect</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-neutral-500" />
+                <span className="text-xs text-neutral-400">Branded thank you page before redirect</span>
+              </div>
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -213,7 +209,6 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
           <span className="text-sm font-medium">Confirmation Email</span>
         </div>
         <div className="p-5">
-          {/* Email header */}
           <div className="mb-4 space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-neutral-500 uppercase w-14">Subject</span>
@@ -225,7 +220,6 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
             </div>
           </div>
 
-          {/* Email body */}
           <div className="bg-white rounded-lg p-5 text-neutral-800">
             <div className="text-sm whitespace-pre-wrap leading-relaxed" style={{ fontFamily: 'system-ui, sans-serif' }}>
               {resolveText(data.email.body).split('\n').map((line, i) => {
@@ -458,7 +452,6 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
                 })}
               </div>
 
-              {/* Footer */}
               <div 
                 className="text-center mt-12 pt-6"
                 style={{ borderTop: `1px solid ${borderColor}` }}
@@ -473,33 +466,79 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
       )}
 
       {/* ==========================================
-          REDIRECT PREVIEW
+          REDIRECT PREVIEW — Branded Thank You Page
           ========================================== */}
       {data.deliveryMethod === 'redirect' && (
-        <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-neutral-800 flex items-center gap-2">
+        <div>
+          <div className="flex items-center gap-2 mb-3">
             <Globe className="w-4 h-4 text-green-400" />
-            <span className="text-sm font-medium">Redirect Preview</span>
+            <span className="text-sm font-medium">Thank You Page Preview</span>
+            <span className="text-xs text-neutral-500">— what your customer sees</span>
           </div>
-          <div className="p-6 text-center space-y-4">
-            <div 
-              className="w-16 h-16 rounded-full flex items-center justify-center mx-auto"
-              style={{ backgroundColor: accent + '20' }}
-            >
-              <Check className="w-8 h-8" style={{ color: accent }} />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold">Thank you for your purchase!</h3>
-              <p className="text-neutral-400 text-sm mt-1">
-                {data.redirect.delay > 0 
-                  ? `Redirecting in ${data.redirect.delay} seconds...` 
-                  : 'Redirecting now...'}
+
+          <div
+            className="rounded-xl overflow-hidden border border-neutral-700"
+            style={{ backgroundColor: bgColor, fontFamily }}
+          >
+            <div className="px-8 py-10 max-w-lg mx-auto text-center">
+              {data.design.logoUrl && (
+                <img
+                  src={data.design.logoUrl}
+                  alt="Logo"
+                  className={`object-contain mx-auto overflow-hidden ${logoSizeMap[logoSize]} mb-6 ${logoShapeClass()}`}
+                />
+              )}
+
+              <div
+                className="rounded-full flex items-center justify-center mx-auto w-16 h-16 mb-4"
+                style={{ backgroundColor: accent + '20' }}
+              >
+                <Check className="w-8 h-8" style={{ color: accent }} />
+              </div>
+
+              <h3
+                className="font-bold"
+                style={{
+                  color: headingColor,
+                  fontSize: headingSize,
+                  marginBottom: '8px',
+                  lineHeight: 1.2,
+                  textAlign: headingAlign as any
+                }}
+              >
+                {data.design.headingText || 'Thank you for your purchase!'}
+              </h3>
+
+              <p style={{
+                color: stextColor,
+                fontSize: stextSize,
+                textAlign: stextAlign as any
+              }}>
+                {resolveText(data.design.subText || "Here's your access to {{product_name}}")}
               </p>
-            </div>
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-sm">
-              <Globe className="w-3.5 h-3.5 text-neutral-500" />
-              <span className="text-neutral-300 truncate max-w-md">{data.redirect.url || 'https://...'}</span>
-              <ExternalLink className="w-3.5 h-3.5 text-neutral-500" />
+
+              <div className="mt-8">
+                <span
+                  className="inline-flex items-center gap-2 px-8 py-3 rounded-lg text-white font-semibold text-base"
+                  style={{ backgroundColor: accent }}
+                >
+                  {redirectButtonText || 'Access Your Purchase'}
+                  <ExternalLink className="w-4 h-4" />
+                </span>
+              </div>
+
+              <p className="mt-4 text-xs" style={{ color: subtextColor }}>
+                Links to: {data.redirect.url || 'https://...'}
+              </p>
+
+              <div
+                className="mt-12 pt-6"
+                style={{ borderTop: `1px solid ${borderColor}` }}
+              >
+                <p className="text-xs" style={{ color: subtextColor }}>
+                  Powered by LaunchPad
+                </p>
+              </div>
             </div>
           </div>
         </div>
