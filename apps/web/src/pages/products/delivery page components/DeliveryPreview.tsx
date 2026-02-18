@@ -1,15 +1,18 @@
 import { DeliveryData } from './DeliveryBuilder';
+import { ContentBlock } from './DeliveryContentEditor';
+import { generateFullPreviewHTML, Alignment } from '../product page components/ContentBuilderPage';
 import { 
   Mail, Check, File, Video, Link, Download, ExternalLink, 
-  Package, Globe, ArrowRight
+  Package, Globe, ArrowRight, Maximize
 } from 'lucide-react';
 
 interface DeliveryPreviewProps {
   data: DeliveryData;
   productName: string;
+  productId?: string;
 }
 
-export default function DeliveryPreview({ data, productName }: DeliveryPreviewProps) {
+export default function DeliveryPreview({ data, productName, productId }: DeliveryPreviewProps) {
 
   // ==========================================
   // HELPERS
@@ -160,7 +163,7 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
         <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-4">
           <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Content Included</p>
           {data.deliveryMethod === 'email-only' ? (
-            <p className="text-sm text-neutral-400">Confirmation email only — no additional content.</p>
+            <p className="text-sm text-neutral-400">Confirmation email only â€” no additional content.</p>
           ) : data.deliveryMethod === 'redirect' ? (
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
@@ -172,6 +175,31 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
                 <span className="text-xs text-neutral-400">Branded thank you page before redirect</span>
               </div>
             </div>
+          ) : data.deliveryMethod === 'custom-editor' ? (
+            (() => {
+              let blockCount = 0;
+              try {
+                const parsed = JSON.parse(data.hosted.contentBlocks || '[]');
+                blockCount = Array.isArray(parsed) ? parsed.length : 0;
+              } catch { blockCount = 0; }
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+                    <span className="text-sm">{blockCount} content block{blockCount !== 1 ? 's' : ''}</span>
+                  </div>
+                  {data.hosted.hasCustomContent && (
+                    <div className="flex items-center gap-2">
+                      <Check className="w-3.5 h-3.5 text-green-400" />
+                      <span className="text-xs text-neutral-400">Custom page configured</span>
+                    </div>
+                  )}
+                  {blockCount === 0 && (
+                    <p className="text-sm text-neutral-500">No content blocks added yet.</p>
+                  )}
+                </div>
+              );
+            })()
           ) : (
             <div className="space-y-1.5">
               {fileCount > 0 && (
@@ -230,7 +258,7 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
                         className="inline-block px-6 py-3 rounded-lg text-white text-sm font-medium"
                         style={{ backgroundColor: accent }}
                       >
-                        Access Your Product →
+                        Access Your Product â†’
                       </span>
                     </div>
                   ) : null;
@@ -250,7 +278,7 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
           <div className="flex items-center gap-2 mb-3">
             <Package className="w-4 h-4 text-indigo-400" />
             <span className="text-sm font-medium">Delivery Page Preview</span>
-            <span className="text-xs text-neutral-500">— what your customer sees</span>
+            <span className="text-xs text-neutral-500">â€” what your customer sees</span>
           </div>
 
           <div 
@@ -466,14 +494,107 @@ export default function DeliveryPreview({ data, productName }: DeliveryPreviewPr
       )}
 
       {/* ==========================================
-          REDIRECT PREVIEW — Branded Thank You Page
+          CUSTOM EDITOR PREVIEW
+          ========================================== */}
+      {data.deliveryMethod === 'custom-editor' && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <ArrowRight className="w-4 h-4 text-purple-400" />
+              <span className="text-sm font-medium">Custom Content Page</span>
+            </div>
+            {productId && (
+              <button
+                onClick={() => {
+                  try {
+                    const hosted = data.hosted as any;
+                    const blocks: ContentBlock[] = JSON.parse(hosted.contentBlocks || '[]');
+                    if (blocks.length === 0) {
+                      alert('No content blocks to preview. Open the Content Builder to add content.');
+                      return;
+                    }
+                    const headerStyles = hosted.headerStyles || {};
+                    const previewHTML = generateFullPreviewHTML(
+                      blocks,
+                      hosted.pageTitle || '',
+                      hosted.pageSubtitle || '',
+                      headerStyles.showTitle !== false,
+                      headerStyles.titleSize || '2rem',
+                      (headerStyles.titleAlign || 'center') as Alignment,
+                      headerStyles.titleColor || '',
+                      headerStyles.subtitleSize || '1rem',
+                      (headerStyles.subtitleAlign || 'center') as Alignment,
+                      headerStyles.subtitleColor || '',
+                      hosted.pageBgColor || '#ffffff',
+                      hosted.pageTheme || 'light'
+                    );
+                    const blob = new Blob([previewHTML], { type: 'text/html' });
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, '_blank');
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  } catch (err) {
+                    console.error('Preview error:', err);
+                    alert('Could not generate preview. Try opening the Content Builder instead.');
+                  }
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-500 rounded-lg transition-colors"
+              >
+                <Maximize className="w-3.5 h-3.5" />
+                Full Preview
+              </button>
+            )}
+          </div>
+
+          <div className="rounded-xl overflow-hidden border border-neutral-700 bg-neutral-900/50 p-6">
+            {(() => {
+              let blockCount = 0;
+              let blockTypes: string[] = [];
+              try {
+                const parsed = JSON.parse(data.hosted.contentBlocks || '[]');
+                if (Array.isArray(parsed)) {
+                  blockCount = parsed.length;
+                  blockTypes = [...new Set(parsed.map((b: any) => b.type))];
+                }
+              } catch { /* ignore */ }
+              
+              const pageTitle = (data.hosted as any).pageTitle;
+              
+              return blockCount > 0 ? (
+                <div className="space-y-3">
+                  {pageTitle && (
+                    <p className="font-semibold text-lg">{pageTitle}</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {blockTypes.map((type) => (
+                      <span 
+                        key={type}
+                        className="px-2 py-1 text-xs bg-purple-500/10 text-purple-400 rounded-md capitalize"
+                      >
+                        {type === 'heading1' ? 'H1' : type === 'heading2' ? 'H2' : type}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-sm text-neutral-400">
+                    {blockCount} content block{blockCount !== 1 ? 's' : ''} configured. Use the Content Builder to preview the full page.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-neutral-500">No content blocks added yet. Open the Content Builder to start building your page.</p>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          REDIRECT PREVIEW â€” Branded Thank You Page
           ========================================== */}
       {data.deliveryMethod === 'redirect' && (
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Globe className="w-4 h-4 text-green-400" />
             <span className="text-sm font-medium">Thank You Page Preview</span>
-            <span className="text-xs text-neutral-500">— what your customer sees</span>
+            <span className="text-xs text-neutral-500">â€” what your customer sees</span>
           </div>
 
           <div

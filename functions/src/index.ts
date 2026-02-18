@@ -236,6 +236,114 @@ export const createCheckoutSession = onRequest(
 );
 
 /* 
+  Purpose: Verifies a Stripe checkout session and returns product + delivery data
+  Called by the customer-facing success page after purchase
+*/
+export const verifyPurchase = onRequest(
+  { 
+    secrets: [stripeSecretKey], 
+    cors: true,
+    region: "us-central1"
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    try {
+      const { sessionId } = req.body;
+      
+      if (!sessionId) {
+        res.status(400).json({ error: 'Missing session ID' });
+        return;
+      }
+
+      // Retrieve the checkout session from Stripe
+      const stripe = getStripe(stripeSecretKey.value());
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      
+      if (!session || session.payment_status !== 'paid') {
+        res.status(400).json({ error: 'Payment not completed' });
+        return;
+      }
+
+      const { productId, sellerId } = session.metadata || {};
+      
+      if (!productId || !sellerId) {
+        res.status(400).json({ error: 'Invalid session metadata' });
+        return;
+      }
+
+      // Fetch the product data
+      const productDoc = await db
+        .collection('users').doc(sellerId)
+        .collection('products').doc(productId)
+        .get();
+      
+      if (!productDoc.exists) {
+        res.status(404).json({ error: 'Product not found' });
+        return;
+      }
+
+      const product = productDoc.data()!;
+      const delivery = product.delivery || {};
+      const salesPage = product.salesPage || {};
+
+      // Return product + delivery data (no sensitive info)
+      res.json({
+        success: true,
+        product: {
+          name: salesPage.coreInfo?.name || product.title || 'Your Product',
+          description: salesPage.coreInfo?.description || product.description || '',
+        },
+        delivery: {
+          method: delivery.deliveryMethod || 'email-only',
+          email: {
+            subject: delivery.email?.subject || '',
+            body: delivery.email?.body || '',
+            includeAccessButton: delivery.email?.includeAccessButton ?? true,
+          },
+          hosted: {
+            files: delivery.hosted?.files || [],
+            videos: delivery.hosted?.videos || [],
+            notionUrl: delivery.hosted?.notionUrl || '',
+            hasCustomContent: delivery.hosted?.hasCustomContent || false,
+            contentBlocks: delivery.hosted?.contentBlocks || '[]',
+            pageTitle: delivery.hosted?.pageTitle || '',
+            pageSubtitle: delivery.hosted?.pageSubtitle || '',
+            headerStyles: delivery.hosted?.headerStyles || {},
+            pageBgColor: delivery.hosted?.pageBgColor || '#ffffff',
+            pageTheme: delivery.hosted?.pageTheme || 'light',
+          },
+          redirect: {
+            url: delivery.redirect?.url || '',
+            delay: delivery.redirect?.delay || 0,
+            showThankYou: delivery.redirect?.showThankYou ?? true,
+          },
+          design: {
+            backgroundColor: delivery.design?.backgroundColor || '#ffffff',
+            accentColor: delivery.design?.accentColor || '#4f46e5',
+            logoUrl: delivery.design?.logoUrl || '',
+            headingText: delivery.design?.headingText || 'Thank you for your purchase!',
+            subText: delivery.design?.subText || "Here's your access to {{product_name}}",
+            ...(delivery.design || {}),
+          },
+        },
+        customerEmail: session.customer_details?.email || '',
+        customerName: session.customer_details?.name || '',
+      });
+
+    } catch (error) {
+      console.error("Error verifying purchase:", error);
+      res.status(500).json({ 
+        error: (error as any).message || "Failed to verify purchase" 
+      });
+    }
+  }
+);
+
+/* 
   Purpose: Improves user's answers using Claude AI for the Product Idea Generator
 */
 export const improveAnswer = onRequest(
@@ -1339,7 +1447,7 @@ WRITING RULES:
 - Keep sentences punchy and scannable
 
 TRANSFORMATION FORMULA:
-- Feature: What it IS → Outcome: What it DOES → Dream: What they BECOME
+- Feature: What it IS â†’ Outcome: What it DOES â†’ Dream: What they BECOME
 
 Example:
 - Feature: "50 video lessons"

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { 
   Plus, Trash2, Type, Heading1, Heading2, 
-  List, Video, Image as ImageIcon, FileText,
-  AlertCircle, MoveUp, MoveDown, Undo2,
+  List, Video, Image as ImageIcon, FileText, Download,
+  AlertCircle, MoveUp, MoveDown, Undo2, Copy, Minus,
   ChevronDown, X, Palette, AlignLeft, AlignCenter, AlignRight
 } from 'lucide-react';
 import { storage, auth } from '../../../lib/firebase';
@@ -33,6 +33,15 @@ export interface BlockStyles {
   paragraphBgWidth?: 'content' | 'full';
   // List specific
   listSpacing?: 'tight' | 'normal' | 'relaxed';
+  // Divider specific
+  dividerThickness?: 'thin' | 'medium' | 'thick';
+  dividerStyle?: 'solid' | 'dashed' | 'dotted';
+  // File specific
+  fileBorder?: boolean;
+  fileBorderColor?: string;
+  fileTextColor?: string;
+  // Spacer specific
+  spacerHeight?: 'sm' | 'md' | 'lg' | 'xl';
   // Callout specific
   calloutWidth?: 'compact' | 'medium' | 'full';
   calloutAlign?: 'left' | 'center' | 'right';
@@ -44,10 +53,12 @@ export type ContentBlock =
   | { type: 'heading1'; content: string; id: string; styles?: BlockStyles }
   | { type: 'heading2'; content: string; id: string; styles?: BlockStyles }
   | { type: 'paragraph'; content: string; id: string; styles?: BlockStyles }
-  | { type: 'list'; items: string[]; id: string; styles?: BlockStyles }
+  | { type: 'list'; items: string[]; listStyle?: 'bullet' | 'number' | 'dash' | 'check' | 'none'; id: string; styles?: BlockStyles }
   | { type: 'video'; url: string; caption?: string; id: string; styles?: BlockStyles }
   | { type: 'image'; url: string; caption?: string; id: string; styles?: BlockStyles }
   | { type: 'divider'; id: string; styles?: BlockStyles }
+  | { type: 'file'; url: string; fileName: string; fileSize?: number; description?: string; id: string; styles?: BlockStyles }
+  | { type: 'spacer'; id: string; styles?: BlockStyles }
   | { type: 'callout'; content: string; emoji?: string; id: string; styles?: BlockStyles };
 
 interface DeliveryContentEditorProps {
@@ -56,6 +67,25 @@ interface DeliveryContentEditorProps {
   onActiveBlockChange?: (blockId: string | null, scrollTrigger?: number) => void;
   pageTheme?: 'light' | 'dark';
 }
+
+// List style helper
+const LIST_STYLE_OPTIONS = [
+  { value: 'bullet' as const, label: '\u2022' },
+  { value: 'number' as const, label: '1.' },
+  { value: 'dash' as const, label: '\u2014' },
+  { value: 'check' as const, label: '\u2713' },
+  { value: 'none' as const, label: 'Aa' },
+];
+
+const getListMarker = (style: string, idx: number): string => {
+  switch (style) {
+    case 'number': return `${idx + 1}.`;
+    case 'dash': return '\u2014';
+    case 'check': return '\u2713';
+    case 'none': return '';
+    default: return '\u2022';
+  }
+};
 
 // Emoji presets for callouts
 const EMOJI_PRESETS = [
@@ -219,6 +249,7 @@ function ImageStyleControls({
 export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockChange, pageTheme = 'light' }: DeliveryContentEditorProps) {
   const [showBlockMenu, setShowBlockMenu] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
   
@@ -296,7 +327,7 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
         newBlock = { type: 'paragraph', content: '', id, styles: {} };
         break;
       case 'list':
-        newBlock = { type: 'list', items: [''], id, styles: { listSpacing: 'normal' } };
+        newBlock = { type: 'list', items: [''], listStyle: 'bullet', id, styles: { listSpacing: 'normal' } };
         break;
       case 'video':
         newBlock = { type: 'video', url: '', id, styles: {} };
@@ -306,6 +337,12 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
         break;
       case 'divider':
         newBlock = { type: 'divider', id, styles: {} };
+        break;
+      case 'file':
+        newBlock = { type: 'file', url: '', fileName: '', id, styles: {} };
+        break;
+      case 'spacer':
+        newBlock = { type: 'spacer', id, styles: { spacerHeight: 'md' } };
         break;
       case 'callout':
         newBlock = { type: 'callout', content: '', emoji: '💡', id, styles: { calloutWidth: 'full', calloutAlign: 'left' } };
@@ -358,7 +395,10 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
         return block.url.trim().length > 0;
       case 'image':
         return block.url.trim().length > 0;
+      case 'file':
+        return block.url.trim().length > 0;
       case 'divider':
+      case 'spacer':
         return false;
       default:
         return false;
@@ -398,6 +438,19 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
     [newBlocks[index], newBlocks[targetIndex]] = [newBlocks[targetIndex], newBlocks[index]];
     
     onChange(newBlocks);
+  };
+
+  // Duplicate a block
+  const duplicateBlock = (block: ContentBlock) => {
+    saveToHistory(blocks);
+    const newId = generateId();
+    const cloned = JSON.parse(JSON.stringify(block));
+    cloned.id = newId;
+    const index = blocks.findIndex(b => b.id === block.id);
+    const newBlocks = [...blocks];
+    newBlocks.splice(index + 1, 0, cloned);
+    onChange(newBlocks);
+    setSelectedBlockId(newId);
   };
 
   // Handle image upload
@@ -445,6 +498,60 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
     }
   };
 
+  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+
+  // Format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // Get file icon based on extension
+  const getFileExtension = (filename: string): string => {
+    return filename.split('.').pop()?.toLowerCase() || '';
+  };
+
+  // Handle file upload for file block
+  const handleFileUpload = async (blockId: string, file: File) => {
+    if (file.size > MAX_FILE_SIZE) {
+      alert('File must be less than 25MB');
+      return;
+    }
+
+    setUploadingFile(true);
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) throw new Error('Not authenticated');
+
+      const timestamp = Date.now();
+      const fileName = `${timestamp}_${file.name}`;
+      const storageRef = ref(storage, `users/${userId}/content-files/${fileName}`);
+      
+      const uploadTask = uploadBytesResumable(storageRef, file);
+      
+      uploadTask.on(
+        'state_changed',
+        null,
+        (error) => {
+          console.error('Upload error:', error);
+          alert('Failed to upload file');
+          setUploadingFile(false);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          saveToHistory(blocks);
+          updateBlock(blockId, { url: downloadURL, fileName: file.name, fileSize: file.size });
+          setUploadingFile(false);
+        }
+      );
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Failed to upload file');
+      setUploadingFile(false);
+    }
+  };
+
   // Parse video URL to embed URL
   const getVideoEmbedUrl = (url: string): string => {
     if (!url) return '';
@@ -466,10 +573,14 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
     const styles = block.styles || {};
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [showBgColorPicker, setShowBgColorPicker] = useState(false);
+    const [showFileBgPicker, setShowFileBgPicker] = useState(false);
+    const [showFileTextPicker, setShowFileTextPicker] = useState(false);
     const [customSize, setCustomSize] = useState('');
     const [showCustomSize, setShowCustomSize] = useState(false);
     const colorRef = useRef<HTMLDivElement>(null);
     const bgColorRef = useRef<HTMLDivElement>(null);
+    const fileBgRef = useRef<HTMLDivElement>(null);
+    const fileTextRef = useRef<HTMLDivElement>(null);
     
     // Select colors based on theme
     const PRESET_COLORS = pageTheme === 'dark' ? PRESET_COLORS_DARK : PRESET_COLORS_LIGHT;
@@ -482,6 +593,12 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
         }
         if (bgColorRef.current && !bgColorRef.current.contains(e.target as Node)) {
           setShowBgColorPicker(false);
+        }
+        if (fileBgRef.current && !fileBgRef.current.contains(e.target as Node)) {
+          setShowFileBgPicker(false);
+        }
+        if (fileTextRef.current && !fileTextRef.current.contains(e.target as Node)) {
+          setShowFileTextPicker(false);
         }
       };
       document.addEventListener('mousedown', handleClick);
@@ -500,9 +617,9 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
     };
 
     // Different controls based on block type
-    const showSizeControls = ['heading1', 'heading2', 'paragraph', 'list', 'callout'].includes(block.type);
-    const showAlignControls = !['divider'].includes(block.type);
-    const showColorControls = ['heading1', 'heading2', 'paragraph', 'list', 'divider', 'callout'].includes(block.type);
+    const showSizeControls = ['heading1', 'heading2', 'paragraph', 'list', 'callout', 'file'].includes(block.type);
+    const showAlignControls = !['divider', 'video', 'file', 'spacer'].includes(block.type);
+    const showColorControls = ['heading1', 'heading2', 'paragraph', 'list', 'divider', 'callout', 'file'].includes(block.type);
 
     return (
       <div className="mt-3 p-3 bg-neutral-800/50 border border-neutral-700 rounded-lg space-y-3">
@@ -788,9 +905,28 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
           </div>
         )}
 
-        {/* List spacing */}
+        {/* List style + spacing */}
         {block.type === 'list' && (
           <div className="flex flex-wrap gap-3 pt-2 border-t border-neutral-700">
+            {/* List Style */}
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-neutral-500 mr-1">Marker:</span>
+              {LIST_STYLE_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => updateBlock(block.id, { listStyle: opt.value })}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    (block.listStyle || 'bullet') === opt.value
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Spacing */}
             <div className="flex items-center gap-1">
               <span className="text-xs text-neutral-500 mr-1">Spacing:</span>
               {(['tight', 'normal', 'relaxed'] as const).map((s) => (
@@ -804,6 +940,177 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
                   }`}
                 >
                   {s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Divider controls */}
+        {block.type === 'divider' && (
+          <div className="flex flex-wrap gap-3 pt-2 border-t border-neutral-700">
+            {/* Thickness */}
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-neutral-500 mr-1">Thickness:</span>
+              {(['thin', 'medium', 'thick'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => updateBlockStyles(block.id, { dividerThickness: t })}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    styles.dividerThickness === t || (!styles.dividerThickness && t === 'thin')
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
+                  }`}
+                >
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {/* Style */}
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-neutral-500 mr-1">Style:</span>
+              {(['solid', 'dashed', 'dotted'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => updateBlockStyles(block.id, { dividerStyle: s })}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    styles.dividerStyle === s || (!styles.dividerStyle && s === 'solid')
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
+                  }`}
+                >
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* File controls */}
+        {block.type === 'file' && (
+          <div className="flex flex-wrap gap-3 pt-2 border-t border-neutral-700">
+            {/* Border Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-neutral-500">Border:</span>
+              <button
+                onClick={() => updateBlockStyles(block.id, { fileBorder: !styles.fileBorder })}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  styles.fileBorder
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
+                }`}
+              >
+                {styles.fileBorder ? 'On' : 'Off'}
+              </button>
+            </div>
+
+            {/* Border Color (only when border is on) */}
+            {styles.fileBorder && (
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-neutral-500 mr-1">Border Color:</span>
+                {['#4f46e5', '#ef4444', '#22c55e', '#f59e0b', '#6b7280'].map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => updateBlockStyles(block.id, { fileBorderColor: c })}
+                    className={`w-5 h-5 rounded-full transition-all ${
+                      styles.fileBorderColor === c ? 'ring-2 ring-white ring-offset-1 ring-offset-neutral-900' : 'hover:scale-110'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Background */}
+            <div className="flex items-center gap-1 relative" ref={fileBgRef}>
+              <span className="text-xs text-neutral-500 mr-1">BG:</span>
+              <button
+                onClick={() => updateBlockStyles(block.id, { bgColor: '' })}
+                className={`w-5 h-5 rounded-full border border-neutral-600 transition-all ${
+                  !styles.bgColor ? 'ring-2 ring-white ring-offset-1 ring-offset-neutral-900' : 'hover:scale-110'
+                }`}
+                style={{ background: 'repeating-conic-gradient(#808080 0% 25%, transparent 0% 50%) 50% / 8px 8px' }}
+                title="None"
+              />
+              {['#1e1b4b', '#1a1a2e', '#1c2333', '#1a2e1a', '#2e1a1a'].map((c) => (
+                <button
+                  key={c}
+                  onClick={() => updateBlockStyles(block.id, { bgColor: c })}
+                  className={`w-5 h-5 rounded-full transition-all ${
+                    styles.bgColor === c ? 'ring-2 ring-white ring-offset-1 ring-offset-neutral-900' : 'hover:scale-110'
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+              <button
+                onClick={() => setShowFileBgPicker(!showFileBgPicker)}
+                className="w-5 h-5 rounded-full border-2 border-dashed border-neutral-500 flex items-center justify-center"
+              >
+                <Palette className="w-3 h-3 text-neutral-400" />
+              </button>
+              {showFileBgPicker && (
+                <div className="absolute top-full left-0 mt-1 p-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl z-20">
+                  <input
+                    type="color"
+                    value={styles.bgColor || '#1e1b4b'}
+                    onChange={(e) => updateBlockStyles(block.id, { bgColor: e.target.value })}
+                    className="w-full h-8 rounded cursor-pointer"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Text Color */}
+            <div className="flex items-center gap-1 relative" ref={fileTextRef}>
+              <span className="text-xs text-neutral-500 mr-1">Text:</span>
+              {['#000000', '#ffffff', '#e5e5e5', '#a3a3a3', '#4f46e5', '#22c55e', '#f59e0b'].map((c) => (
+                <button
+                  key={c}
+                  onClick={() => updateBlockStyles(block.id, { fileTextColor: c })}
+                  className={`w-5 h-5 rounded-full transition-all border border-neutral-600 ${
+                    (styles.fileTextColor === c || (!styles.fileTextColor && c === '#e5e5e5'))
+                      ? 'ring-2 ring-white ring-offset-1 ring-offset-neutral-900' : 'hover:scale-110'
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+              <button
+                onClick={() => setShowFileTextPicker(!showFileTextPicker)}
+                className="w-5 h-5 rounded-full border-2 border-dashed border-neutral-500 flex items-center justify-center"
+              >
+                <Palette className="w-3 h-3 text-neutral-400" />
+              </button>
+              {showFileTextPicker && (
+                <div className="absolute top-full left-0 mt-1 p-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl z-20">
+                  <input
+                    type="color"
+                    value={styles.fileTextColor || '#e5e5e5'}
+                    onChange={(e) => updateBlockStyles(block.id, { fileTextColor: e.target.value })}
+                    className="w-full h-8 rounded cursor-pointer"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Spacer controls */}
+        {block.type === 'spacer' && (
+          <div className="flex flex-wrap gap-3 pt-2 border-t border-neutral-700">
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-neutral-500 mr-1">Height:</span>
+              {(['sm', 'md', 'lg', 'xl'] as const).map((h) => (
+                <button
+                  key={h}
+                  onClick={() => updateBlockStyles(block.id, { spacerHeight: h })}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    styles.spacerHeight === h || (!styles.spacerHeight && h === 'md')
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
+                  }`}
+                >
+                  {h.toUpperCase()}
                 </button>
               ))}
             </div>
@@ -907,16 +1214,25 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
             >
               <MoveDown className="w-4 h-4 text-neutral-400" />
             </button>
-            <span className="text-xs text-neutral-500 ml-2 capitalize">{block.type}</span>
+            <span className="text-xs text-neutral-500 ml-2 capitalize">{block.type === 'heading1' ? 'H1' : block.type === 'heading2' ? 'H2' : block.type}</span>
           </div>
           
-          <button
-            onClick={(e) => { e.stopPropagation(); handleDeleteClick(block); }}
-            className="p-1 hover:bg-red-500/20 rounded"
-            title="Delete block"
-          >
-            <Trash2 className="w-4 h-4 text-red-400" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); duplicateBlock(block); }}
+              className="p-1 hover:bg-neutral-700 rounded"
+              title="Duplicate block"
+            >
+              <Copy className="w-4 h-4 text-neutral-400" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDeleteClick(block); }}
+              className="p-1 hover:bg-red-500/20 rounded"
+              title="Delete block"
+            >
+              <Trash2 className="w-4 h-4 text-red-400" />
+            </button>
+          </div>
         </div>
 
         {/* Block Content */}
@@ -967,7 +1283,9 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
             <div className="space-y-2">
               {block.items.map((item, idx) => (
                 <div key={idx} className="flex items-baseline gap-2">
-                  <span className="text-neutral-400 flex-shrink-0">•</span>
+                  <span className="text-neutral-400 flex-shrink-0 text-sm w-5 text-center">
+                    {getListMarker(block.listStyle || 'bullet', idx)}
+                  </span>
                   <textarea
                     value={item}
                     onChange={(e) => {
@@ -1010,13 +1328,24 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
 
           {block.type === 'video' && (
             <div className="space-y-2">
-              <input
-                type="url"
-                value={block.url}
-                onChange={(e) => updateBlock(block.id, { url: e.target.value })}
-                placeholder="Paste YouTube, Vimeo, or Loom URL..."
-                className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-sm"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={block.url}
+                  onChange={(e) => updateBlock(block.id, { url: e.target.value })}
+                  placeholder="Paste YouTube, Vimeo, or Loom URL..."
+                  className="flex-1 px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-sm"
+                />
+                {block.url && (
+                  <button
+                    onClick={() => updateBlock(block.id, { url: '', caption: '' })}
+                    className="px-3 py-2 bg-red-900/50 hover:bg-red-800/50 text-xs text-red-300 rounded-lg flex-shrink-0 transition-colors"
+                    title="Remove video"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
               {block.url && getVideoEmbedUrl(block.url) && (
                 <div className="aspect-video rounded-lg overflow-hidden bg-neutral-900">
                   <iframe
@@ -1071,11 +1400,34 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
                 </label>
               ) : (
                 <>
-                  <img 
-                    src={block.url} 
-                    alt={block.caption || 'Content image'} 
-                    className="w-full rounded-lg"
-                  />
+                  <div className="relative group/img">
+                    <img 
+                      src={block.url} 
+                      alt={block.caption || 'Content image'} 
+                      className="max-w-full rounded-lg"
+                    />
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/img:opacity-100 transition-opacity">
+                      <label className="px-2 py-1 bg-neutral-900/80 hover:bg-neutral-800 text-xs text-neutral-200 rounded cursor-pointer backdrop-blur-sm">
+                        Replace
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImageUpload(block.id, file);
+                          }}
+                          className="hidden"
+                          disabled={uploadingImage}
+                        />
+                      </label>
+                      <button
+                        onClick={() => updateBlock(block.id, { url: '', caption: '' })}
+                        className="px-2 py-1 bg-red-900/80 hover:bg-red-800 text-xs text-red-200 rounded backdrop-blur-sm"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
                   <textarea
                     value={block.caption || ''}
                     onChange={(e) => updateBlock(block.id, { caption: e.target.value })}
@@ -1096,7 +1448,88 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
 
           {block.type === 'divider' && (
             <div className="my-4">
-              <hr className="border-neutral-700" />
+              <hr 
+                className="border-neutral-700"
+                style={{
+                  borderStyle: block.styles?.dividerStyle || 'solid',
+                  borderTopWidth: block.styles?.dividerThickness === 'medium' ? '3px' 
+                    : block.styles?.dividerThickness === 'thick' ? '5px' : '1px',
+                }}
+              />
+            </div>
+          )}
+
+          {block.type === 'file' && (
+            <div className="space-y-3">
+              {!block.url ? (
+                <label className="block">
+                  <input
+                    type="file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(block.id, file);
+                    }}
+                    className="hidden"
+                    disabled={uploadingFile}
+                  />
+                  <div className="border-2 border-dashed border-neutral-700 rounded-lg p-6 text-center cursor-pointer hover:border-neutral-600 transition-colors">
+                    {uploadingFile ? (
+                      <div className="text-sm text-neutral-400">Uploading...</div>
+                    ) : (
+                      <>
+                        <Download className="w-8 h-8 mx-auto mb-2 text-neutral-500" />
+                        <p className="text-sm text-neutral-400">Click to upload a file</p>
+                        <p className="text-xs text-neutral-600 mt-1">Any file type — Max 25MB</p>
+                      </>
+                    )}
+                  </div>
+                </label>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-neutral-800 border border-neutral-700 rounded-lg">
+                  <div className="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-5 h-5 text-indigo-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-neutral-200 truncate">{block.fileName}</p>
+                    {block.fileSize && (
+                      <p className="text-xs text-neutral-500">{formatFileSize(block.fileSize)}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => updateBlock(block.id, { url: '', fileName: '', fileSize: undefined, description: '' })}
+                    className="px-2 py-1 bg-red-900/50 hover:bg-red-800/50 text-xs text-red-300 rounded transition-colors flex-shrink-0"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+              <textarea
+                value={block.description || ''}
+                onChange={(e) => updateBlock(block.id, { description: e.target.value })}
+                placeholder="File description (optional) — e.g., 'Download the complete workbook template'"
+                rows={1}
+                className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-xs resize-none overflow-hidden"
+                style={{ minHeight: '2.25rem' }}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement;
+                  target.style.height = 'auto';
+                  target.style.height = target.scrollHeight + 'px';
+                }}
+              />
+            </div>
+          )}
+
+          {block.type === 'spacer' && (
+            <div 
+              className="flex items-center justify-center border-2 border-dashed border-neutral-800 rounded-lg"
+              style={{ 
+                height: block.styles?.spacerHeight === 'sm' ? '1.5rem' 
+                  : block.styles?.spacerHeight === 'lg' ? '4rem' 
+                  : block.styles?.spacerHeight === 'xl' ? '6rem' 
+                  : '2.5rem' 
+              }}
+            >
+              <span className="text-xs text-neutral-600">Spacer</span>
             </div>
           )}
 
@@ -1295,6 +1728,17 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
               </button>
               
               <button
+                onClick={() => addBlock('file')}
+                className="flex items-center gap-2 p-3 hover:bg-neutral-800 rounded-lg text-left transition-colors"
+              >
+                <Download className="w-4 h-4 text-neutral-400" />
+                <div>
+                  <div className="text-sm font-medium">File Download</div>
+                  <div className="text-xs text-neutral-500">Downloadable file</div>
+                </div>
+              </button>
+              
+              <button
                 onClick={() => addBlock('divider')}
                 className="flex items-center gap-2 p-3 hover:bg-neutral-800 rounded-lg text-left transition-colors"
               >
@@ -1302,6 +1746,17 @@ export default function DeliveryContentEditor({ blocks, onChange, onActiveBlockC
                 <div>
                   <div className="text-sm font-medium">Divider</div>
                   <div className="text-xs text-neutral-500">Visual separator</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => addBlock('spacer')}
+                className="flex items-center gap-2 p-3 hover:bg-neutral-800 rounded-lg text-left transition-colors"
+              >
+                <Minus className="w-4 h-4 text-neutral-400" />
+                <div>
+                  <div className="text-sm font-medium">Spacer</div>
+                  <div className="text-xs text-neutral-500">Empty space</div>
                 </div>
               </button>
             </div>

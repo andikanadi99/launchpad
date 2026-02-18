@@ -155,6 +155,7 @@ export default function DeliveryBuilder() {
   const { productId } = useParams();
   const [searchParams] = useSearchParams();
   const isPreviewMode = searchParams.get('preview') === 'true';
+  const returnStep = searchParams.get('step');
   
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -215,6 +216,13 @@ export default function DeliveryBuilder() {
           navigate('/dashboard');
         } finally {
           setIsLoading(false);
+          // Apply return step from URL (e.g., coming back from content builder)
+          if (returnStep) {
+            const step = parseInt(returnStep);
+            if (!isNaN(step) && step > 0) {
+              setCurrentStep(step);
+            }
+          }
         }
       });
 
@@ -262,14 +270,36 @@ export default function DeliveryBuilder() {
   // ==========================================
   // NAVIGATION
   // ==========================================
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep < totalSteps) {
+      // Custom-editor Step 3: save delivery method to Firestore, then navigate to content builder
+      if (currentStep === 2 && deliveryData.deliveryMethod === 'custom-editor') {
+        if (!userId || !productId) return;
+        try {
+          const productRef = doc(db, 'users', userId, 'products', productId);
+          await updateDoc(productRef, {
+            'delivery.deliveryMethod': deliveryData.deliveryMethod,
+            'delivery.email': deliveryData.email,
+            lastUpdated: new Date()
+          });
+          navigate(`/products/${productId}/content-builder?from=delivery`);
+        } catch (error) {
+          console.error('Error saving before content builder:', error);
+          alert('Failed to save. Please try again.');
+        }
+        return;
+      }
       setCurrentStep(currentStep + 1);
     }
   };
 
   const handlePrevious = () => {
     if (currentStep > 1) {
+      // Going back to Step 3 for custom-editor: navigate to content builder
+      if (currentStep === 4 && deliveryData.deliveryMethod === 'custom-editor') {
+        navigate(`/products/${productId}/content-builder?from=delivery`);
+        return;
+      }
       setCurrentStep(currentStep - 1);
     }
   };
@@ -416,52 +446,12 @@ export default function DeliveryBuilder() {
           />
         );
       case 'custom-editor':
+        // Auto-navigating to content builder (useEffect handles this)
         return (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-semibold">Content Editor</h2>
-              <p className="text-neutral-400 mt-1">
-                Build a fully custom delivery page with our rich editor
-              </p>
-            </div>
-
-            <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-8 text-center">
-              {deliveryData.hosted.hasCustomContent ? (
-                <>
-                  <div className="w-14 h-14 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Check className="w-7 h-7 text-green-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">Content Page Created</h3>
-                  <p className="text-sm text-neutral-400 mb-6">
-                    Your custom content page is ready. You can edit it anytime.
-                  </p>
-                  <button
-                    onClick={() => navigate(`/products/${productId}/content-builder`)}
-                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white font-medium transition-colors"
-                  >
-                    Edit Content Page
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div className="w-14 h-14 bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <ArrowRight className="w-7 h-7 text-indigo-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">Create Your Content Page</h3>
-                  <p className="text-sm text-neutral-400 mb-6">
-                    Use our drag-and-drop editor to build a custom delivery page with rich text, images, videos, and more.
-                  </p>
-                  <button
-                    onClick={() => navigate(`/products/${productId}/content-builder`)}
-                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white font-medium transition-colors"
-                  >
-                    Open Content Editor
-                  </button>
-                  <p className="text-xs text-neutral-500 mt-3">
-                    You'll return here after creating your page
-                  </p>
-                </>
-              )}
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center">
+              <Loader className="w-8 h-8 animate-spin text-neutral-400 mx-auto mb-3" />
+              <p className="text-neutral-400">Opening Content Editor...</p>
             </div>
           </div>
         );
@@ -503,6 +493,7 @@ export default function DeliveryBuilder() {
           <DeliveryPreview 
             data={deliveryData}
             productName={productName}
+            productId={productId}
           />
         </div>
       </div>
@@ -604,11 +595,12 @@ export default function DeliveryBuilder() {
           <DeliveryPreview 
             data={deliveryData}
             productName={productName}
+            productId={productId}
           />
         )}
 
         {/* Navigation Buttons - hide when quick-page Step 3 is active (it has its own nav) */}
-        {!(currentStep === 3 && (deliveryData.deliveryMethod === 'quick-page' || deliveryData.deliveryMethod === 'redirect')) && (
+        {!(currentStep === 3 && (deliveryData.deliveryMethod === 'quick-page' || deliveryData.deliveryMethod === 'redirect' || deliveryData.deliveryMethod === 'custom-editor')) && (
         <div className="mt-8 flex items-center justify-between">
           <button
             onClick={handlePrevious}

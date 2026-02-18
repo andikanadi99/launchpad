@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { db, auth } from '../../../lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { 
-  ArrowLeft, Save, Loader, Check, Eye, EyeOff, 
-  FileText, Monitor, Smartphone, AlertCircle,
+  ArrowLeft, ArrowRight, Save, Loader, Check, Eye, EyeOff, 
+  FileText, Monitor, Smartphone, AlertCircle, Download,
   AlignLeft, AlignCenter, AlignRight, ChevronDown, ChevronUp, Palette,
   ExternalLink
 } from 'lucide-react';
@@ -13,7 +13,7 @@ import DeliveryContentEditor, { ContentBlock, BlockStyles, CaptionStyles } from 
 import ConfirmModal from '../../ConfirmModal';
 
 // Types for header styles
-type Alignment = 'left' | 'center' | 'right';
+export type Alignment = 'left' | 'center' | 'right';
 
 // Preset color options for light theme
 const PRESET_COLORS_LIGHT = [
@@ -58,7 +58,7 @@ const DARK_BG_COLORS = [
 ];
 
 // Helper to get computed font size from preset or custom value
-const getComputedFontSize = (size: string | undefined, type: 'title' | 'subtitle' | 'heading1' | 'heading2' | 'paragraph' | 'list' | 'callout' | 'caption'): string => {
+export const getComputedFontSize = (size: string | undefined, type: 'title' | 'subtitle' | 'heading1' | 'heading2' | 'paragraph' | 'list' | 'callout' | 'caption' | 'file'): string => {
   const presetSizes: Record<string, Record<string, string>> = {
     title: { sm: '1.125rem', md: '1.5rem', lg: '1.875rem', xl: '2.25rem' },
     subtitle: { sm: '0.75rem', md: '0.875rem', lg: '1rem', xl: '1.125rem' },
@@ -68,6 +68,7 @@ const getComputedFontSize = (size: string | undefined, type: 'title' | 'subtitle
     list: { sm: '0.875rem', md: '1rem', lg: '1.125rem', xl: '1.25rem' },
     callout: { sm: '0.875rem', md: '1rem', lg: '1.125rem', xl: '1.25rem' },
     caption: { sm: '0.75rem', md: '0.875rem', lg: '1rem', xl: '1.125rem' },
+    file: { sm: '0.8rem', md: '0.9rem', lg: '1.05rem', xl: '1.2rem' },
   };
   
   if (!size) return presetSizes[type]?.md || '1rem';
@@ -96,7 +97,7 @@ const getImageSizeStyle = (size: string | undefined, customSize?: string): React
     case 'medium': return { maxWidth: '400px' };
     case 'large': return { maxWidth: '600px' };
     case 'full':
-    default: return { width: '100%' };
+    default: return { maxWidth: '100%' };
   }
 };
 
@@ -359,13 +360,14 @@ function CaptionRenderer({
   
   return (
     <p 
-      className="break-words"
+      className="break-words w-full"
       style={{
         fontSize: getComputedFontSize(styles?.size || 'sm', 'caption'),
         color: getCaptionColor(),
         ...getAlignmentStyle(styles?.align || 'center'),
         wordWrap: 'break-word',
-        overflowWrap: 'break-word'
+        overflowWrap: 'break-word',
+        display: 'block'
       }}
     >
       {caption}
@@ -574,6 +576,16 @@ function ContentPreview({
                 ) : null;
 
               case 'list':
+                const listStyle = block.listStyle || 'bullet';
+                const getListMarker = (style: string, idx: number) => {
+                  switch (style) {
+                    case 'number': return `${idx + 1}.`;
+                    case 'dash': return '\u2014';
+                    case 'check': return '\u2713';
+                    case 'none': return '';
+                    default: return '\u2022';
+                  }
+                };
                 return block.items.filter(item => item.trim()).length > 0 ? (
                   <ul 
                     key={block.id}
@@ -594,7 +606,9 @@ function ContentPreview({
                           overflowWrap: 'break-word'
                         }}
                       >
-                        <span className="text-indigo-500 flex-shrink-0">•</span>
+                        {listStyle !== 'none' && (
+                          <span className="text-indigo-500 flex-shrink-0">{getListMarker(listStyle, idx)}</span>
+                        )}
                         <span 
                           className="break-words flex-1 min-w-0 leading-relaxed"
                           style={{ 
@@ -672,12 +686,90 @@ function ContentPreview({
                 ) : null;
 
               case 'divider':
+                const dividerThickness = styles.dividerThickness === 'medium' ? '3px' : styles.dividerThickness === 'thick' ? '5px' : '1px';
+                const dividerLineStyle = styles.dividerStyle || 'solid';
                 return (
                   <hr 
                     key={block.id}
                     data-preview-block={block.id}
                     className={`my-8 ${isActive ? 'ring-2 ring-indigo-500 ring-offset-2' : ''}`}
-                    style={{ borderColor: styles.color || (pageTheme === 'dark' ? '#404040' : '#e5e5e5') }}
+                    style={{ 
+                      border: 'none',
+                      borderTopWidth: dividerThickness,
+                      borderTopStyle: dividerLineStyle,
+                      borderTopColor: styles.color || (pageTheme === 'dark' ? '#404040' : '#e5e5e5')
+                    }}
+                  />
+                );
+
+              case 'file':
+                const fileAccentColor = styles.color || '#4f46e5';
+                const fileAccentBg = styles.color ? `${styles.color}15` : (pageTheme === 'dark' ? '#312e81' : '#eef2ff');
+                const fileBorderStyle = styles.fileBorder 
+                  ? { borderWidth: '2px', borderStyle: 'solid', borderColor: styles.fileBorderColor || fileAccentColor }
+                  : { borderWidth: '1px', borderStyle: 'solid', borderColor: pageTheme === 'dark' ? '#333' : '#e5e7eb' };
+                return block.url ? (
+                  <div
+                    key={block.id}
+                    data-preview-block={block.id}
+                    className={`flex items-center gap-4 p-4 rounded-lg ${isActive ? 'ring-2 ring-indigo-500 ring-offset-2' : ''}`}
+                    style={{
+                      backgroundColor: styles.bgColor || (pageTheme === 'dark' ? '#1c1c1c' : '#f9fafb'),
+                      ...fileBorderStyle
+                    }}
+                  >
+                    <div 
+                      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: fileAccentBg }}
+                    >
+                      <FileText className="w-5 h-5" style={{ color: fileAccentColor }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p 
+                        className="font-medium truncate"
+                        style={{ 
+                          color: styles.fileTextColor || (pageTheme === 'dark' ? '#e5e5e5' : '#171717'),
+                          fontSize: getComputedFontSize(styles.size, 'file')
+                        }}
+                      >
+                        {block.fileName}
+                      </p>
+                      {block.description && (
+                        <p 
+                          className="mt-0.5"
+                          style={{ 
+                            color: styles.fileTextColor ? `${styles.fileTextColor}99` : (pageTheme === 'dark' ? '#a3a3a3' : '#737373'),
+                            fontSize: `calc(${getComputedFontSize(styles.size, 'file')} - 0.125rem)`
+                          }}
+                        >
+                          {block.description}
+                        </p>
+                      )}
+                    </div>
+                    <div 
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 flex-shrink-0"
+                      style={{
+                        backgroundColor: fileAccentColor,
+                        color: '#ffffff'
+                      }}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download
+                    </div>
+                  </div>
+                ) : null;
+
+              case 'spacer':
+                const spacerPx = styles.spacerHeight === 'sm' ? '1.5rem' 
+                  : styles.spacerHeight === 'lg' ? '4rem' 
+                  : styles.spacerHeight === 'xl' ? '6rem' 
+                  : '2.5rem';
+                return (
+                  <div 
+                    key={block.id}
+                    data-preview-block={block.id}
+                    className={isActive ? 'ring-2 ring-indigo-500 ring-offset-2' : ''}
+                    style={{ height: spacerPx }}
                   />
                 );
 
@@ -725,7 +817,7 @@ function ContentPreview({
 }
 
 // Generate full preview HTML
-function generateFullPreviewHTML(
+export function generateFullPreviewHTML(
   blocks: ContentBlock[],
   pageTitle: string,
   pageSubtitle: string,
@@ -737,7 +829,8 @@ function generateFullPreviewHTML(
   subtitleAlign: Alignment,
   subtitleColor: string,
   pageBgColor: string,
-  pageTheme: 'light' | 'dark' = 'light'
+  pageTheme: 'light' | 'dark' = 'light',
+  isLive: boolean = false
 ): string {
   // Theme-aware color helpers
   const DEFAULT_LIGHT_TEXT = '#171717';
@@ -797,12 +890,24 @@ function generateFullPreviewHTML(
         }
         break;
       case 'list':
-        const items = block.items.filter(item => item.trim());
-        if (items.length > 0) {
+        const htmlItems = block.items.filter(item => item.trim());
+        if (htmlItems.length > 0) {
           const spacing = styles.listSpacing === 'tight' ? '0.25rem' : styles.listSpacing === 'relaxed' ? '1rem' : '0.5rem';
+          const htmlListStyle = block.listStyle || 'bullet';
+          const getHtmlMarker = (style: string, idx: number) => {
+            switch (style) {
+              case 'number': return `${idx + 1}.`;
+              case 'dash': return '\u2014';
+              case 'check': return '\u2713';
+              case 'none': return '';
+              default: return '\u2022';
+            }
+          };
           blocksHTML += `<ul style="font-size: ${getComputedFontSize(styles.size, 'list')}; color: ${getTextColor(styles.color)}; margin-left: 1rem; margin-bottom: 1.5rem;">`;
-          items.forEach(item => {
-            blocksHTML += `<li style="display: flex; gap: 0.5rem; margin-bottom: ${spacing}; word-wrap: break-word; overflow-wrap: break-word;"><span style="color: #4f46e5; flex-shrink: 0;">•</span><span style="word-break: break-word;">${item}</span></li>`;
+          htmlItems.forEach((item, idx) => {
+            const marker = getHtmlMarker(htmlListStyle, idx);
+            const markerSpan = htmlListStyle !== 'none' ? `<span style="color: #4f46e5; flex-shrink: 0;">${marker}</span>` : '';
+            blocksHTML += `<li style="display: flex; gap: 0.5rem; margin-bottom: ${spacing}; word-wrap: break-word; overflow-wrap: break-word;">${markerSpan}<span style="word-break: break-word;">${item}</span></li>`;
           });
           blocksHTML += `</ul>`;
         }
@@ -825,7 +930,7 @@ function generateFullPreviewHTML(
       case 'image':
         if (block.url) {
           const alignStyle = styles.align === 'center' ? 'margin: 0 auto;' : styles.align === 'right' ? 'margin-left: auto;' : '';
-          const sizeStyle = styles.imageSize === 'small' ? 'max-width: 200px;' : styles.imageSize === 'medium' ? 'max-width: 400px;' : styles.imageSize === 'large' ? 'max-width: 600px;' : styles.imageSize === 'custom' && styles.imageSizeCustom ? `width: ${styles.imageSizeCustom};` : 'width: 100%;';
+          const sizeStyle = styles.imageSize === 'small' ? 'max-width: 200px;' : styles.imageSize === 'medium' ? 'max-width: 400px;' : styles.imageSize === 'large' ? 'max-width: 600px;' : styles.imageSize === 'custom' && styles.imageSizeCustom ? `width: ${styles.imageSizeCustom};` : 'max-width: 100%;';
           const borderRadius = styles.imageRounded === 'none' ? '0' : styles.imageRounded === 'sm' ? '0.125rem' : styles.imageRounded === 'lg' ? '0.5rem' : styles.imageRounded === 'full' ? '9999px' : '0.375rem';
           const border = styles.imageBorder ? `border: 2px solid ${getBorderColor()};` : '';
           
@@ -841,7 +946,40 @@ function generateFullPreviewHTML(
         }
         break;
       case 'divider':
-        blocksHTML += `<hr style="border: none; border-top: 1px solid ${styles.color || getBorderColor()}; margin: 2rem 0;" />`;
+        const divThickness = styles.dividerThickness === 'medium' ? '3px' : styles.dividerThickness === 'thick' ? '5px' : '1px';
+        const divStyle = styles.dividerStyle || 'solid';
+        blocksHTML += `<hr style="border: none; border-top: ${divThickness} ${divStyle} ${styles.color || getBorderColor()}; margin: 2rem 0;" />`;
+        break;
+      case 'file':
+        if (block.url) {
+          const fileBg = styles.bgColor || (pageTheme === 'dark' ? '#1c1c1c' : '#f9fafb');
+          const htmlFileAccent = styles.color || '#4f46e5';
+          const htmlFileAccentBg = styles.color ? `${styles.color}15` : (pageTheme === 'dark' ? '#312e81' : '#eef2ff');
+          const fileNameColor = styles.fileTextColor || (pageTheme === 'dark' ? '#e5e5e5' : '#171717');
+          const fileDescColor = styles.fileTextColor ? `${styles.fileTextColor}99` : (pageTheme === 'dark' ? '#a3a3a3' : '#737373');
+          const fileFontSize = getComputedFontSize(styles.size, 'file');
+          const htmlFileBorder = styles.fileBorder 
+            ? `border: 2px solid ${styles.fileBorderColor || htmlFileAccent};` 
+            : `border: 1px solid ${pageTheme === 'dark' ? '#333' : '#e5e7eb'};`;
+          blocksHTML += `<a href="${block.url}" download="${block.fileName}" target="_blank" style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border-radius: 0.5rem; background: ${fileBg}; ${htmlFileBorder} margin-bottom: 1.5rem; text-decoration: none; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">`;
+          blocksHTML += `<div style="width: 2.5rem; height: 2.5rem; border-radius: 0.5rem; background: ${htmlFileAccentBg}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">`;
+          blocksHTML += `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${htmlFileAccent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+          blocksHTML += `</div>`;
+          blocksHTML += `<div style="flex: 1; min-width: 0;">`;
+          blocksHTML += `<div style="font-size: ${fileFontSize}; font-weight: 500; color: ${fileNameColor}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${block.fileName}</div>`;
+          if (block.description) {
+            blocksHTML += `<div style="font-size: calc(${fileFontSize} - 0.125rem); color: ${fileDescColor}; margin-top: 0.125rem;">${block.description}</div>`;
+          }
+          blocksHTML += `</div>`;
+          blocksHTML += `<div style="padding: 0.375rem 0.75rem; border-radius: 0.5rem; background: ${htmlFileAccent}; color: #fff; font-size: 0.75rem; font-weight: 500; display: flex; align-items: center; gap: 0.375rem; flex-shrink: 0;">`;
+          blocksHTML += `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+          blocksHTML += `Download</div>`;
+          blocksHTML += `</a>`;
+        }
+        break;
+      case 'spacer':
+        const spacerH = styles.spacerHeight === 'sm' ? '1.5rem' : styles.spacerHeight === 'lg' ? '4rem' : styles.spacerHeight === 'xl' ? '6rem' : '2.5rem';
+        blocksHTML += `<div style="height: ${spacerH};"></div>`;
         break;
       case 'callout':
         if (block.content) {
@@ -885,9 +1023,9 @@ function generateFullPreviewHTML(
   </style>
 </head>
 <body>
-  <div class="preview-banner">
+  ${!isLive ? `<div class="preview-banner">
     This is a preview of your delivery page. Customers will see this after purchase.
-  </div>
+  </div>` : ''}
   <div class="content">
     ${showTitle ? `
       <div style="${blocks.length > 0 ? `margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid ${getBorderColor()};` : 'margin-bottom: 1rem;'}">
@@ -910,6 +1048,8 @@ function generateFullPreviewHTML(
 export default function ContentBuilderPage() {
   const navigate = useNavigate();
   const { productId } = useParams();
+  const [searchParams] = useSearchParams();
+  const fromDelivery = searchParams.get('from') === 'delivery';
   
   // State
   const [isLoading, setIsLoading] = useState(true);
@@ -943,6 +1083,7 @@ export default function ContentBuilderPage() {
   const [pageBgColor, setPageBgColor] = useState<string>('#ffffff');
   const [initialPageBgColor, setInitialPageBgColor] = useState<string>('#ffffff');
   const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('light');
+  const [pendingThemeSwitch, setPendingThemeSwitch] = useState<'light' | 'dark' | null>(null);
   const [initialPageTheme, setInitialPageTheme] = useState<'light' | 'dark'>('light');
   const [showBgColorPicker, setShowBgColorPicker] = useState(false);
   const bgColorRef = useRef<HTMLDivElement>(null);
@@ -1125,15 +1266,37 @@ export default function ContentBuilderPage() {
     }
   };
 
-  // Handle back navigation with confirmation
+  // Handle back navigation
   const handleBack = () => {
-    const destination = `/products/${productId}/delivery`;
-    if (hasUnsavedChanges) {
-      setPendingNavigation(destination);
-      setShowLeaveModal(true);
+    if (fromDelivery) {
+      // Auto-save and go back to Step 2
+      handleSaveAndGoBack();
     } else {
-      navigate(destination);
+      // Leaving the flow entirely — prompt if unsaved
+      const destination = `/products/${productId}/delivery`;
+      if (hasUnsavedChanges) {
+        setPendingNavigation(destination);
+        setShowLeaveModal(true);
+      } else {
+        navigate(destination);
+      }
     }
+  };
+
+  // Auto-save and navigate back to delivery Step 2
+  const handleSaveAndGoBack = async () => {
+    if (hasUnsavedChanges) {
+      await handleSave();
+    }
+    navigate(`/products/${productId}/delivery?step=2`);
+  };
+
+  // Handle save & continue to delivery preview
+  const handleSaveAndContinue = async () => {
+    if (hasUnsavedChanges) {
+      await handleSave();
+    }
+    navigate(`/products/${productId}/delivery?step=4`);
   };
 
   // Confirm leave
@@ -1290,18 +1453,8 @@ export default function ContentBuilderPage() {
                   <div className="flex items-center gap-1 bg-neutral-800 rounded-lg p-1">
                     <button
                       onClick={() => {
-                        setPageTheme('light');
-                        // Switch to light mode colors
-                        if (DARK_BG_COLORS.some(c => c.value === pageBgColor)) {
-                          setPageBgColor('#ffffff');
-                        }
-                        // Switch text colors to dark (for light backgrounds)
-                        if (titleColor === '#ffffff' || titleColor === '#f5f5f5') {
-                          setTitleColor('#171717');
-                        }
-                        if (subtitleColor === '#a3a3a3' || subtitleColor === '#d4d4d4') {
-                          setSubtitleColor('#737373');
-                        }
+                        if (pageTheme === 'light') return;
+                        setPendingThemeSwitch('light');
                       }}
                       className={`px-3 py-1 text-xs rounded transition-colors ${
                         pageTheme === 'light' 
@@ -1313,18 +1466,8 @@ export default function ContentBuilderPage() {
                     </button>
                     <button
                       onClick={() => {
-                        setPageTheme('dark');
-                        // Switch to dark mode colors
-                        if (BG_COLORS.some(c => c.value === pageBgColor)) {
-                          setPageBgColor('#171717');
-                        }
-                        // Switch text colors to white (for dark backgrounds)
-                        if (titleColor === '#171717' || titleColor === '#000000') {
-                          setTitleColor('#ffffff');
-                        }
-                        if (subtitleColor === '#737373' || subtitleColor === '#525252') {
-                          setSubtitleColor('#a3a3a3');
-                        }
+                        if (pageTheme === 'dark') return;
+                        setPendingThemeSwitch('dark');
                       }}
                       className={`px-3 py-1 text-xs rounded transition-colors ${
                         pageTheme === 'dark' 
@@ -1540,8 +1683,37 @@ export default function ContentBuilderPage() {
         )}
       </div>
 
+      {/* ========== BOTTOM NAVIGATION BAR (Delivery Flow) ========== */}
+      {fromDelivery && (
+        <div className="bg-neutral-900 border-t border-neutral-800 px-6 py-4 flex items-center justify-between flex-shrink-0">
+          <button
+            onClick={handleBack}
+            className="flex items-center gap-2 px-5 py-2.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg text-sm font-medium text-neutral-300 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Previous
+          </button>
+
+          <div className="flex items-center gap-3">
+            {blocks.length === 0 && (
+              <p className="text-xs text-amber-400 hidden sm:block">
+                Add content to continue
+              </p>
+            )}
+            <button
+              onClick={handleSaveAndContinue}
+              disabled={isSaving || blocks.length === 0}
+              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white transition-colors"
+            >
+              Next
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Preview Button */}
-      <div className="md:hidden fixed bottom-4 right-4">
+      <div className={`md:hidden fixed ${fromDelivery ? 'bottom-20' : 'bottom-4'} right-4`}>
         <button
           onClick={() => setShowPreview(!showPreview)}
           className="p-4 bg-indigo-600 hover:bg-indigo-500 rounded-full shadow-lg transition-colors"
@@ -1551,6 +1723,42 @@ export default function ContentBuilderPage() {
       </div>
 
       {/* Leave Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!pendingThemeSwitch}
+        title="Switch Theme"
+        message="Switching themes will update your background, text, and block colors to match the new theme. Custom colors you've set may be adjusted. Continue?"
+        confirmText="Switch Theme"
+        cancelText="Cancel"
+        variant="warning"
+        onConfirm={() => {
+          if (pendingThemeSwitch === 'light') {
+            setPageTheme('light');
+            if (DARK_BG_COLORS.some(c => c.value === pageBgColor)) {
+              setPageBgColor('#ffffff');
+            }
+            if (titleColor === '#ffffff' || titleColor === '#f5f5f5') {
+              setTitleColor('#171717');
+            }
+            if (subtitleColor === '#a3a3a3' || subtitleColor === '#d4d4d4') {
+              setSubtitleColor('#737373');
+            }
+          } else if (pendingThemeSwitch === 'dark') {
+            setPageTheme('dark');
+            if (BG_COLORS.some(c => c.value === pageBgColor)) {
+              setPageBgColor('#171717');
+            }
+            if (titleColor === '#171717' || titleColor === '#000000') {
+              setTitleColor('#ffffff');
+            }
+            if (subtitleColor === '#737373' || subtitleColor === '#525252') {
+              setSubtitleColor('#a3a3a3');
+            }
+          }
+          setPendingThemeSwitch(null);
+        }}
+        onCancel={() => setPendingThemeSwitch(null)}
+      />
+
       <ConfirmModal
         isOpen={showLeaveModal}
         title="Unsaved Changes"
