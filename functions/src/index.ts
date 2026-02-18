@@ -161,29 +161,39 @@ export const createCheckoutSession = onRequest(
     region: "us-central1"
   },
   async (req, res) => {
+    // Manual CORS headers as fallback
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed' });
       return;
     }
   
     try {
-      const { productId, sellerId, origin } = req.body;
+      const { slug, sellerId, productId, origin } = req.body;
       
-      if (!productId || !sellerId) {
-        res.status(400).json({ error: 'Missing productId or sellerId' });
+      if (!slug || !sellerId) {
+        res.status(400).json({ error: 'Missing slug or sellerId' });
         return;
       }
       
-      const productDoc = await db
-        .collection('users').doc(sellerId)
-        .collection('products').doc(productId)
+      // Read from published_pages collection
+      const pageDoc = await db
+        .collection('published_pages').doc(slug)
         .get();
         
-      if (!productDoc.exists) {
+      if (!pageDoc.exists) {
         res.status(404).json({ error: 'Product not found' });
         return;
       }
-      const product = productDoc.data()!;
+      const product = pageDoc.data()!;
 
       // Get seller's Stripe account
       const sellerDoc = await db.collection('users').doc(sellerId).get();
@@ -194,33 +204,49 @@ export const createCheckoutSession = onRequest(
         return;
       }
 
+      // Read from salesPage.coreInfo
+      const salesPage = product.salesPage || {};
+      const coreInfo = salesPage.coreInfo || {};
+      const productName = coreInfo.name || product.productName || 'Digital Product';
+      const productDescription = salesPage.valueProp?.description || coreInfo.tagline || '';
+      
+      // Price is stored in dollars — convert to cents for Stripe
+      const priceInDollars = coreInfo.price ?? product.price ?? 0;
+      const priceInCents = Math.round(priceInDollars * 100);
+
+      if (priceInCents <= 0) {
+        res.status(400).json({ error: 'Invalid product price' });
+        return;
+      }
+
       // Create Checkout session
       const stripe = getStripe(stripeSecretKey.value());
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [{
           price_data: {
-            currency: 'usd',
+            currency: coreInfo.currency?.toLowerCase() || 'usd',
             product_data: {
-              name: product.title,
-              description: product.description,
+              name: productName,
+              ...(productDescription && { description: productDescription.substring(0, 500) }),
             },
-            unit_amount: product.price,
+            unit_amount: priceInCents,
           },
           quantity: 1,
         }],
         mode: 'payment',
         success_url: `${origin || 'https://launchpad-ec0b0.web.app'}/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${origin || 'https://launchpad-ec0b0.web.app'}/p/${sellerId}/${productId}`,
+        cancel_url: `${origin || 'https://launchpad-ec0b0.web.app'}/p/${slug}`,
         payment_intent_data: {
-          application_fee_amount: Math.round(product.price * 0.1), // 10% platform fee
+          application_fee_amount: Math.round(priceInCents * 0.05), // 5% platform fee
           transfer_data: {
             destination: stripeAccountId,
           },
         },
         metadata: {
-          productId,
+          slug,
           sellerId,
+          productId: productId || product.productId || '',
         }
       });
 
@@ -246,6 +272,16 @@ export const verifyPurchase = onRequest(
     region: "us-central1"
   },
   async (req, res) => {
+    // Manual CORS headers as fallback
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed' });
       return;
@@ -268,25 +304,24 @@ export const verifyPurchase = onRequest(
         return;
       }
 
-      const { productId, sellerId } = session.metadata || {};
+      const { slug, sellerId } = session.metadata || {};
       
-      if (!productId || !sellerId) {
+      if (!slug || !sellerId) {
         res.status(400).json({ error: 'Invalid session metadata' });
         return;
       }
 
-      // Fetch the product data
-      const productDoc = await db
-        .collection('users').doc(sellerId)
-        .collection('products').doc(productId)
+      // Fetch from published_pages collection
+      const pageDoc = await db
+        .collection('published_pages').doc(slug)
         .get();
       
-      if (!productDoc.exists) {
+      if (!pageDoc.exists) {
         res.status(404).json({ error: 'Product not found' });
         return;
       }
 
-      const product = productDoc.data()!;
+      const product = pageDoc.data()!;
       const delivery = product.delivery || {};
       const salesPage = product.salesPage || {};
 
@@ -294,8 +329,8 @@ export const verifyPurchase = onRequest(
       res.json({
         success: true,
         product: {
-          name: salesPage.coreInfo?.name || product.title || 'Your Product',
-          description: salesPage.coreInfo?.description || product.description || '',
+          name: salesPage.coreInfo?.name || product.productName || 'Your Product',
+          description: salesPage.valueProp?.description || salesPage.coreInfo?.tagline || '',
         },
         delivery: {
           method: delivery.deliveryMethod || 'email-only',
@@ -1447,7 +1482,7 @@ WRITING RULES:
 - Keep sentences punchy and scannable
 
 TRANSFORMATION FORMULA:
-- Feature: What it IS â†’ Outcome: What it DOES â†’ Dream: What they BECOME
+- Feature: What it IS Ã¢â€ â€™ Outcome: What it DOES Ã¢â€ â€™ Dream: What they BECOME
 
 Example:
 - Feature: "50 video lessons"

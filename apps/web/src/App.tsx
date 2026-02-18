@@ -21,7 +21,7 @@ import StripePage from "./pages/onboarding/account/Stripe";
 
 //Product Page
 import ProductPage from './pages/products/Product';
-import Success from "./pages/products/Success";
+import DeliverySuccessPage from "./pages/products/delivery page components/DeliverySuccessPage";
 import Support from "./pages/Support";
 import ProductPagePreview from "./pages/products/product page components/ProductPagePreview";
 import DeliveryBuilder from "./pages/products/delivery page components/DeliveryBuilder";
@@ -40,8 +40,8 @@ export default function App() {
     <ThemeProvider>
     <Routes>
       
-      <Route path="/p/:userId/:productId" element={<ProductPage />} />
-      <Route path="/success" element={<Success />} />
+      <Route path="/p/:slug" element={<ProductPage />} />
+      <Route path="/success" element={<DeliverySuccessPage />} />
 
       {/* Protected area: shows header/nav via AppLayout */}
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
@@ -68,7 +68,7 @@ export default function App() {
           <Route path=":productId/landing/edit" element={<SalesPageSimplified />} />  
           <Route path=":productId/edit" element={<SalesPageSimplified />} /> 
           <Route path=":productId/preview" element={<SalesPagePreview />} />
-          <Route path=":productId/success" element={<Success />} /> 
+          <Route path=":productId/success" element={<DeliverySuccessPage />} /> 
           <Route path=":productId/delivery" element={<DeliveryBuilder />} />
           <Route path=":productId/content-builder" element={<ContentBuilderPage />} />
         </Route>
