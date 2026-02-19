@@ -29,7 +29,6 @@ import ContentBuilderPage from "./pages/products/product page components/Content
 
 //Sales Page
 import SalesPage from "./pages/products/SalesPage";
-import SalesPageSimplified from "./pages/products/SalesPageSimplified";
 import SalesPagePreview from "./pages/products/sales page components/SalesPagePreview";
 
 // Product Idea Generator
@@ -64,9 +63,9 @@ export default function App() {
         <Route path="preview/product/:productId" element={<ProductPagePreview />} />
         
         <Route path="products">
-          <Route path="sales" element={<SalesPageSimplified />} />
-          <Route path=":productId/landing/edit" element={<SalesPageSimplified />} />  
-          <Route path=":productId/edit" element={<SalesPageSimplified />} /> 
+          <Route path="sales" element={<SalesPage />} />
+          <Route path=":productId/landing/edit" element={<SalesPage />} />  
+          <Route path=":productId/edit" element={<SalesPage />} /> 
           <Route path=":productId/preview" element={<SalesPagePreview />} />
           <Route path=":productId/success" element={<DeliverySuccessPage />} /> 
           <Route path=":productId/delivery" element={<DeliveryBuilder />} />
