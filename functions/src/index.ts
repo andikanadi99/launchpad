@@ -151,6 +151,207 @@ export const handleStripeConnect = onRequest(
   }
 );
 
+// ============================================================
+// NEW STRIPE CONNECT FUNCTIONS (Account Links API)
+// ============================================================
+
+/*
+  Purpose: Creates a Stripe Express connected account (if needed) and
+  generates an Account Links onboarding URL for the creator.
+  Replaces the old OAuth flow (generateStripeConnectUrl + handleStripeConnect).
+*/
+export const createConnectAccountLink = onRequest(
+  {
+    secrets: [stripeSecretKey],
+    cors: true,
+    region: "us-central1"
+  },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    try {
+      const { userId, returnUrl, refreshUrl } = req.body;
+
+      if (!userId) {
+        res.status(400).json({ error: 'userId is required' });
+        return;
+      }
+
+      const stripe = getStripe(stripeSecretKey.value());
+
+      // Check if user already has a connected account
+      const userRef = db.collection("users").doc(userId);
+      const userDoc = await userRef.get();
+
+      if (!userDoc.exists) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      const userData = userDoc.data()!;
+      let stripeConnectAccountId = userData.stripeConnectAccountId;
+
+      // If no existing account, create a new Express account
+      if (!stripeConnectAccountId) {
+        const account = await stripe.accounts.create({
+          type: 'express',
+          email: userData.email || undefined,
+          capabilities: {
+            card_payments: { requested: true },
+            transfers: { requested: true },
+          },
+          metadata: {
+            launchpad_user_id: userId,
+          },
+        });
+
+        stripeConnectAccountId = account.id;
+
+        // Save the account ID to Firestore immediately
+        await userRef.set({
+          stripeConnectAccountId,
+          stripeConnectedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        console.log(`Created new Stripe Express account ${stripeConnectAccountId} for user ${userId}`);
+      }
+
+      // Generate the Account Links onboarding URL
+      const baseUrl = returnUrl || 'https://launchpad-ec0b0.web.app/onboarding/stripe';
+      const baseRefreshUrl = refreshUrl || 'https://launchpad-ec0b0.web.app/onboarding/stripe';
+
+      const accountLink = await stripe.accountLinks.create({
+        account: stripeConnectAccountId,
+        return_url: baseUrl,
+        refresh_url: baseRefreshUrl,
+        type: 'account_onboarding',
+      });
+
+      res.json({
+        url: accountLink.url,
+        stripeConnectAccountId,
+      });
+
+    } catch (error) {
+      console.error("Error creating connect account link:", error);
+      res.status(500).json({
+        error: (error as any).message || "Failed to create Stripe connect link"
+      });
+    }
+  }
+);
+
+/*
+  Purpose: Checks the status of a creator's Stripe Connect account.
+  Called by the frontend after the creator returns from Stripe onboarding
+  to verify their account is fully set up and ready to accept payments.
+*/
+export const checkStripeAccountStatus = onRequest(
+  {
+    secrets: [stripeSecretKey],
+    cors: true,
+    region: "us-central1"
+  },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    try {
+      const { userId } = req.body;
+
+      if (!userId) {
+        res.status(400).json({ error: 'userId is required' });
+        return;
+      }
+
+      // Get user's Stripe account ID from Firestore
+      const userRef = db.collection("users").doc(userId);
+      const userDoc = await userRef.get();
+
+      if (!userDoc.exists) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      const userData = userDoc.data()!;
+      const stripeConnectAccountId = userData.stripeConnectAccountId;
+
+      if (!stripeConnectAccountId) {
+        res.json({
+          connected: false,
+          chargesEnabled: false,
+          payoutsEnabled: false,
+          detailsSubmitted: false,
+          message: 'No Stripe account found. Please start Stripe onboarding.',
+        });
+        return;
+      }
+
+      // Retrieve the account from Stripe to check its status
+      const stripe = getStripe(stripeSecretKey.value());
+      const account = await stripe.accounts.retrieve(stripeConnectAccountId);
+
+      const isFullyConnected = account.charges_enabled && account.details_submitted;
+
+      // Update Firestore with the latest status
+      await userRef.set({
+        stripeConnected: isFullyConnected,
+        stripeAccountDetails: {
+          email: account.email,
+          country: account.country,
+          defaultCurrency: account.default_currency,
+          chargesEnabled: account.charges_enabled,
+          payoutsEnabled: account.payouts_enabled,
+          detailsSubmitted: account.details_submitted,
+        },
+        ...(isFullyConnected && {
+          'onboardingSteps.stripeConnect': true,
+        }),
+      }, { merge: true });
+
+      res.json({
+        connected: isFullyConnected,
+        chargesEnabled: account.charges_enabled,
+        payoutsEnabled: account.payouts_enabled,
+        detailsSubmitted: account.details_submitted,
+        stripeConnectAccountId,
+        message: isFullyConnected
+          ? 'Stripe account is fully set up and ready to accept payments.'
+          : 'Stripe onboarding is incomplete. Please finish setting up your account.',
+      });
+
+    } catch (error) {
+      console.error("Error checking Stripe account status:", error);
+      res.status(500).json({
+        error: (error as any).message || "Failed to check Stripe account status"
+      });
+    }
+  }
+);
+
 /* 
     Purpose: Creates a Stripe Checkout session for product purchases
 */
@@ -197,7 +398,7 @@ export const createCheckoutSession = onRequest(
 
       // Get seller's Stripe account
       const sellerDoc = await db.collection('users').doc(sellerId).get();
-      const stripeAccountId = sellerDoc.data()?.stripeAccountId;
+      const stripeAccountId = sellerDoc.data()?.stripeConnectAccountId;
       
       if (!stripeAccountId) {
         res.status(400).json({ error: 'Seller not connected to Stripe' });
@@ -210,7 +411,7 @@ export const createCheckoutSession = onRequest(
       const productName = coreInfo.name || product.productName || 'Digital Product';
       const productDescription = salesPage.valueProp?.description || coreInfo.tagline || '';
       
-      // Price is stored in dollars — convert to cents for Stripe
+      // Price is stored in dollars â€” convert to cents for Stripe
       const priceInDollars = coreInfo.price ?? product.price ?? 0;
       const priceInCents = Math.round(priceInDollars * 100);
 
@@ -1482,7 +1683,7 @@ WRITING RULES:
 - Keep sentences punchy and scannable
 
 TRANSFORMATION FORMULA:
-- Feature: What it IS Ã¢â€ â€™ Outcome: What it DOES Ã¢â€ â€™ Dream: What they BECOME
+- Feature: What it IS ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Outcome: What it DOES ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Dream: What they BECOME
 
 Example:
 - Feature: "50 video lessons"

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../../../lib/firebase';
 import SalesPageContent from './SalesPageContent';
-import { Eye, X, Edit, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function SalesPagePreview() {
@@ -11,7 +11,6 @@ export default function SalesPagePreview() {
   const navigate = useNavigate();
   const [salesPageData, setSalesPageData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [isPublished, setIsPublished] = useState(false);
 
   useEffect(() => {
     const loadProduct = async () => {
@@ -28,7 +27,6 @@ export default function SalesPagePreview() {
           const data = productSnap.data();
           if (data.salesPage) {
             setSalesPageData(data.salesPage);
-            setIsPublished(data.published || false);
           } else {
             console.error('No sales page data found');
           }
@@ -71,42 +69,17 @@ export default function SalesPagePreview() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950">
-      {/* Preview Banner */}
-      <div className="sticky top-0 z-50 bg-purple-600 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Eye className="w-5 h-5" />
-            <div>
-              <div className="font-semibold flex items-center gap-2">
-                Preview Mode
-                {isPublished && (
-                  <span className="text-xs px-2 py-0.5 bg-green-500 rounded-full">Live</span>
-                )}
-              </div>
-              <div className="text-xs text-purple-200">
-                This is how your sales page appears to customers
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Link
-              to={`/products/${productId}/edit`}
-              className="px-4 py-2 bg-purple-700 hover:bg-purple-800 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <Edit className="w-4 h-4" />
-              Edit
-            </Link>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="p-2 hover:bg-purple-700 rounded-lg transition-colors"
-              title="Close preview"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+    <div className="min-h-screen bg-neutral-950 relative">
+      {/* Subtle floating preview badge */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 bg-neutral-900/90 backdrop-blur-sm border border-neutral-700 rounded-full shadow-lg">
+        <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+        <span className="text-xs text-neutral-300 font-medium">Preview Mode</span>
+        <button
+          onClick={() => navigate(-1)}
+          className="ml-2 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+        >
+          ✕
+        </button>
       </div>
 
       {/* Sales Page Content */}

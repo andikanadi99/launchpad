@@ -130,6 +130,21 @@ interface UnsplashImage {
 }
 
 // ============================================
+// ============================================
+// HELPERS
+// ============================================
+function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    const parts = parsed.hostname.split('.');
+    return parts.length >= 2 && parts[parts.length - 1].length >= 2;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================
 // STEPS CONFIG
 // ============================================
 const STEPS = [
@@ -531,10 +546,14 @@ Cheers!`,
   const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const [isPublishing, setIsPublishing] = useState(false);
   const [isAlreadyPublished, setIsAlreadyPublished] = useState(false);
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
+  const [showUpdateConfirmModal, setShowUpdateConfirmModal] = useState(false);
+  const [stripeConnected, setStripeConnected] = useState<boolean | null>(null); // null = loading
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
+  const initialLoadRef = useRef(true);
 
   // ============================================
   // AUTO-SCROLL PREVIEW TO SECTION
@@ -754,6 +773,15 @@ Cheers!`,
 
         setUserId(user.uid);
 
+        // Check Stripe connection status
+        const userDocRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userDocRef);
+        if (userSnap.exists()) {
+          setStripeConnected(userSnap.data().stripeConnected === true);
+        } else {
+          setStripeConnected(false);
+        }
+
         // Auto-fill creator info from user profile
         const autoCreator = {
           name: user.displayName || '',
@@ -897,6 +925,12 @@ Cheers!`,
           delivery: data.delivery,
           lastUpdated: new Date(),
         }));
+        // Track unpublished changes for already-published products
+        // Skip the first auto-save (initial data load)
+        if (isAlreadyPublished && !initialLoadRef.current) {
+          setHasUnpublishedChanges(true);
+        }
+        initialLoadRef.current = false;
       } catch (error) {
         console.error('Auto-save error:', error);
       } finally {
@@ -1352,7 +1386,7 @@ Cheers!`,
       
       // Validate based on delivery method
       if (data.delivery.method === 'redirect') {
-        return data.delivery.redirectUrl && data.delivery.redirectUrl.trim().length > 0;
+        return data.delivery.redirectUrl ? isValidUrl(data.delivery.redirectUrl) : false;
       }
       
       // For hosted and email-only, email validation is enough at this stage
@@ -1388,8 +1422,12 @@ Cheers!`,
       }
       
       // Method-specific validation
-      if (data.delivery.method === 'redirect' && !data.delivery.redirectUrl?.trim()) {
-        missing.push('Redirect URL');
+      if (data.delivery.method === 'redirect') {
+        if (!data.delivery.redirectUrl?.trim()) {
+          missing.push('Redirect URL');
+        } else if (!isValidUrl(data.delivery.redirectUrl)) {
+          missing.push('Valid Redirect URL (must start with http:// or https://)');
+        }
       }
     }
     
@@ -1406,13 +1444,16 @@ Cheers!`,
   };
 
   const canPublish = () => {
+    const isPaid = data.coreInfo.priceType !== 'free' && data.coreInfo.price > 0;
     return data.coreInfo.name.trim().length > 0 &&
            (data.coreInfo.priceType === 'free' || data.coreInfo.price > 0) &&
            data.valueProp.description.trim().length > 0 &&
            data.publish.slug.trim().length >= 3 &&
            data.publish.metaTitle.trim().length > 0 &&
            slugStatus !== 'taken' &&
-           slugStatus !== 'checking';
+           slugStatus !== 'checking' &&
+           (!isPaid || stripeConnected === true) &&
+           (data.delivery.method !== 'redirect' || (data.delivery.redirectUrl ? isValidUrl(data.delivery.redirectUrl) : false));
   };
 
   // Get all missing fields for publishing (combines all steps)
@@ -1428,6 +1469,19 @@ Cheers!`,
     if (!data.publish.slug.trim() || data.publish.slug.trim().length < 3) missing.push('URL Slug');
     if (!data.publish.metaTitle.trim()) missing.push('Page Title');
     if (slugStatus === 'taken') missing.push('Available URL (current is taken)');
+    
+    // Stripe requirement for paid products
+    const isPaid = data.coreInfo.priceType !== 'free' && data.coreInfo.price > 0;
+    if (isPaid && stripeConnected !== true) missing.push('Stripe Connection');
+    
+    // Delivery requirements
+    if (data.delivery.method === 'redirect') {
+      if (!data.delivery.redirectUrl?.trim()) {
+        missing.push('Redirect URL');
+      } else if (!isValidUrl(data.delivery.redirectUrl)) {
+        missing.push('Valid Redirect URL');
+      }
+    }
     
     return missing;
   };
@@ -1478,11 +1532,15 @@ Cheers!`,
       });
 
       // Create or update public page (preserve original publishedAt)
+      const publishedSalesPage = {
+        ...data,
+        publish: { ...data.publish, status: 'published' as const },
+      };
       await setDoc(publishedRef, cleanData({
         userId,
         productId,
         slug,
-        salesPage: data,
+        salesPage: publishedSalesPage,
         publishedAt: originalPublishedAt, // Preserve original publish date
         lastUpdated: new Date(),
         productName: data.coreInfo.name,
@@ -1516,6 +1574,7 @@ Cheers!`,
       }
 
       setIsAlreadyPublished(true);
+      setHasUnpublishedChanges(false);
       
       // Navigate immediately - the dashboard will show the updated state
       navigate('/dashboard');
@@ -1565,6 +1624,41 @@ Cheers!`,
       )}
 
       {/* PREVIEW CONFIRMATION MODAL */}
+      {/* Update Confirm Modal */}
+      {showUpdateConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+                <Rocket className="w-5 h-5 text-amber-400" />
+              </div>
+              <h2 className="text-lg font-semibold">Update Live Page?</h2>
+            </div>
+            <p className="text-neutral-400 text-sm mb-6">
+              This will update your live sales page at <span className="text-purple-400 font-medium">/p/{data.publish.slug}</span>. Your customers will see the changes immediately.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowUpdateConfirmModal(false)}
+                className="flex-1 px-4 py-3 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg text-sm font-medium text-neutral-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowUpdateConfirmModal(false);
+                  handlePublish();
+                }}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-sm font-semibold text-white transition-colors flex items-center justify-center gap-2"
+              >
+                <Rocket className="w-4 h-4" />
+                Update Live Page
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPreviewModal && (
         <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950">
           {/* Preview Header */}
@@ -1585,18 +1679,8 @@ Cheers!`,
                   onClick={() => setShowPreviewModal(false)}
                   className="px-4 py-2 bg-purple-700 hover:bg-purple-800 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
                 >
-                  <ArrowLeft className="w-4 h-4" />
-                  Back to Edit
-                </button>
-                <button
-                  onClick={() => {
-                    setShowPreviewModal(false);
-                    handlePublish();
-                  }}
-                  className="px-6 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
-                >
-                  <Rocket className="w-4 h-4" />
-                  Confirm & Publish
+                  <X className="w-4 h-4" />
+                  Close Preview
                 </button>
               </div>
             </div>
@@ -1726,17 +1810,25 @@ Cheers!`,
               )}
 
               {/* Save Status */}
-              {isSaving ? (
-                <div className="flex items-center gap-2 text-neutral-400">
-                  <Loader className="w-4 h-4 animate-spin" />
-                  <span className="text-sm hidden sm:inline">Saving...</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-green-400">
-                  <Check className="w-4 h-4" />
-                  <span className="text-sm hidden sm:inline">Saved</span>
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                {hasUnpublishedChanges && isAlreadyPublished && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full">
+                    <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    <span className="text-xs text-amber-400 font-medium hidden sm:inline">Unpublished changes</span>
+                  </div>
+                )}
+                {isSaving ? (
+                  <div className="flex items-center gap-2 text-neutral-400">
+                    <Loader className="w-4 h-4 animate-spin" />
+                    <span className="text-sm hidden sm:inline">Saving...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-green-400">
+                    <Check className="w-4 h-4" />
+                    <span className="text-sm hidden sm:inline">Saved</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -3535,8 +3627,24 @@ Cheers!`,
                             delivery: { ...prev.delivery, redirectUrl: e.target.value }
                           }))}
                           placeholder="https://your-course-platform.com/welcome"
-                          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border border-gray-300 dark:border-neutral-700 rounded-lg focus:border-purple-500 focus:outline-none"
+                          className={`w-full px-4 py-3 bg-white dark:bg-neutral-800 border rounded-lg focus:outline-none ${
+                            data.delivery.redirectUrl && !isValidUrl(data.delivery.redirectUrl)
+                              ? 'border-red-500 focus:border-red-500'
+                              : data.delivery.redirectUrl && isValidUrl(data.delivery.redirectUrl)
+                                ? 'border-green-500 focus:border-green-500'
+                                : 'border-gray-300 dark:border-neutral-700 focus:border-purple-500'
+                          }`}
                         />
+                        {data.delivery.redirectUrl && !isValidUrl(data.delivery.redirectUrl) && (
+                          <p className="text-xs text-red-400 mt-1">
+                            Please enter a valid URL starting with https:// or http://
+                          </p>
+                        )}
+                        {data.delivery.redirectUrl && isValidUrl(data.delivery.redirectUrl) && (
+                          <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Valid URL
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -3800,6 +3908,51 @@ Cheers!`,
                   </div>
                 </div>
 
+                {/* Stripe Connection Gate (for paid products) */}
+                {data.coreInfo.priceType !== 'free' && data.coreInfo.price > 0 && stripeConnected !== true && (
+                  <div className="mb-4 p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <svg className="w-5 h-5 text-indigo-400" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z"/>
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-indigo-300 mb-1">Connect Stripe to accept payments</p>
+                        <p className="text-sm text-neutral-400 mb-3">
+                          You need a Stripe account to sell paid products. It only takes 2-3 minutes to set up.
+                        </p>
+                        <button
+                          onClick={() => navigate(`/onboarding/stripe?returnTo=${encodeURIComponent(`/products/${productId}/edit`)}`)}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          Connect Stripe
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Redirect URL Validation Gate */}
+                {data.delivery.method === 'redirect' && data.delivery.redirectUrl && !isValidUrl(data.delivery.redirectUrl) && (
+                  <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <svg className="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M12 8v4m0 4h.01" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-amber-300 mb-1">Invalid redirect URL</p>
+                        <p className="text-sm text-neutral-400">
+                          Your redirect URL must start with http:// or https:// and include a valid domain (e.g., https://your-site.com/welcome).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Publish Button */}
                 {getMissingFieldsForPublish().length > 0 && (
                   <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
@@ -3814,8 +3967,8 @@ Cheers!`,
                 <button
                   onClick={() => {
                     if (isAlreadyPublished) {
-                      // Direct publish for updates
-                      handlePublish();
+                      // Show confirm modal for updates
+                      setShowUpdateConfirmModal(true);
                     } else {
                       // Show preview modal for first publish
                       setShowPreviewModal(true);

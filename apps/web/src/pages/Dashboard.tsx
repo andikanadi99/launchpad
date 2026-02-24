@@ -203,6 +203,10 @@ export default function Dashboard() {
       const sourceId = product.sourceSessionId || product.salesPage?.sourceSessionId;
       const linkedIdea = sourceId ? productIdeas.find(i => i.id === sourceId) : undefined;
       
+      // Skip empty/abandoned drafts (created but never filled in)
+      const productName = product.salesPage?.coreInfo?.name?.trim();
+      if (!productName && !product.published) return;
+      
       unified.push({
         type: 'with_sales_page',
         product,
@@ -464,7 +468,7 @@ export default function Dashboard() {
             <p className="text-neutral-400 text-sm mb-1">Total Products</p>
             <p className="text-3xl font-bold">{totals.total}</p>
             <p className="text-xs text-neutral-500 mt-1">
-              {totals.ideasOnly} idea{totals.ideasOnly !== 1 ? 's' : ''} · {totals.withSalesPage} sales page{totals.withSalesPage !== 1 ? 's' : ''}
+              {totals.ideasOnly} idea{totals.ideasOnly !== 1 ? 's' : ''} Â· {totals.withSalesPage} sales page{totals.withSalesPage !== 1 ? 's' : ''}
             </p>
           </div>
           <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
@@ -673,14 +677,16 @@ export default function Dashboard() {
                                     From Co-Pilot
                                   </span>
                                 )}
-                                <span className={`text-xs px-2 py-1 rounded-full border flex items-center gap-1 ${
-                                  displayData.deliveryConfigured
-                                    ? 'bg-blue-950/30 text-blue-400 border-blue-800/30'
-                                    : 'bg-neutral-800 text-neutral-500 border-neutral-700'
-                                }`}>
-                                  <Truck className="w-3 h-3" />
-                                  {displayData.deliveryConfigured ? 'Delivery Ready' : 'No Delivery'}
-                                </span>
+                                {displayData.published && (
+                                  <span className={`text-xs px-2 py-1 rounded-full border flex items-center gap-1 ${
+                                    displayData.deliveryConfigured
+                                      ? 'bg-blue-950/30 text-blue-400 border-blue-800/30'
+                                      : 'bg-amber-950/30 text-amber-400 border-amber-800/30'
+                                  }`}>
+                                    <Truck className="w-3 h-3" />
+                                    {displayData.deliveryConfigured ? 'Delivery Ready' : 'Set Up Delivery'}
+                                  </span>
+                                )}
                               </div>
                               <p className="text-neutral-400 text-sm mt-1 line-clamp-2">
                                 {displayData.description}
@@ -779,7 +785,8 @@ export default function Dashboard() {
                             )}
                           </div>
 
-                          {/* Delivery - split dropdown */}
+                          {/* Delivery - split dropdown (only for published products) */}
+                          {displayData.published && (
                           <div className="relative" data-dropdown-container>
                             <div className="flex">
                               <Link
@@ -833,6 +840,7 @@ export default function Dashboard() {
                               </div>
                             )}
                           </div>
+                          )}
 
                           {/* More Options */}
                           <div className="relative ml-auto" data-menu-container>
@@ -1051,7 +1059,7 @@ export default function Dashboard() {
                   <ul className="text-sm text-neutral-300 space-y-1">
                     {ideaModal.idea.productConfig.valueStack.map((item: string, i: number) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="text-purple-400 mt-0.5">•</span>
+                        <span className="text-purple-400 mt-0.5">â€¢</span>
                         {item}
                       </li>
                     ))}
@@ -1066,7 +1074,7 @@ export default function Dashboard() {
                   <ul className="text-sm text-neutral-300 space-y-1">
                     {ideaModal.idea.productConfig.guarantees.map((item: string, i: number) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="text-green-400 mt-0.5">✓</span>
+                        <span className="text-green-400 mt-0.5">âœ“</span>
                         {item}
                       </li>
                     ))}
