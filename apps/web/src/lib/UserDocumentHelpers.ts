@@ -2,8 +2,10 @@
 // Location: src/lib/UserDocumentHelpers.ts
 
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, runTransaction, collection, query, where, orderBy, limit, getDocs, addDoc, deleteDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
-import type { UserDocument, CoPilotSession } from './Usermodel';
+import { auth, db, storage } from './firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import type { UserDocument, CoPilotSession, CreatorProfile, CustomLink, CreatorPageStyle } from './Usermodel';
+import { createDefaultProfile, DEFAULT_PAGE_STYLE } from './Usermodel';
 
 // ============================================
 // UPDATED ensureUserDoc FUNCTION
@@ -45,6 +47,9 @@ export async function ensureUserDoc(
       photoURL: u?.photoURL || null,
       createdAt: now,
       lastLoginAt: now,
+      
+      // === CREATOR PROFILE (Phase 2.1) ===
+      profile: createDefaultProfile(u),
       
       // === ACCOUNT TYPE ===
       accountType: accountType,
@@ -119,7 +124,7 @@ export async function ensureUserDoc(
     };
     
     await setDoc(ref, newUserData);
-    console.log('✅ New user document created with lead magnet schema');
+    console.log('âœ… New user document created with lead magnet schema');
     
   } else {
     // EXISTING USER - Update last login and migrate if needed
@@ -182,12 +187,21 @@ export async function ensureUserDoc(
         };
       }
       
-      console.log('🔄 Migrating existing user to new schema');
+      console.log('ðŸ”„ Migrating existing user to new schema');
+    }
+    
+    // MIGRATION: Add CreatorProfile for existing users (Phase 2.1)
+    if (!existingData.profile) {
+      updates.profile = createDefaultProfile({
+        displayName: existingData.displayName || u?.displayName,
+        photoURL: existingData.photoURL || u?.photoURL,
+      });
+      console.log('🔄 Migrating existing user: added CreatorProfile');
     }
     
     // MIGRATION: Move old productCoPilot data to subcollection
     if (existingData.productCoPilot && existingData.productCoPilot.answers && !existingData.activeSessionId) {
-      console.log('🔄 Migrating productCoPilot to subcollection...');
+      console.log('ðŸ”„ Migrating productCoPilot to subcollection...');
       
       const sessionsRef = collection(db, 'users', uid, 'productCoPilotSessions');
       const oldData = existingData.productCoPilot;
@@ -211,7 +225,7 @@ export async function ensureUserDoc(
       updates.activeSessionId = docRef.id;
       // Note: We don't delete productCoPilot to preserve data, but activeSessionId takes precedence
       
-      console.log('✅ Migrated productCoPilot to session:', docRef.id);
+      console.log('âœ… Migrated productCoPilot to session:', docRef.id);
     }
     
     await updateDoc(ref, updates);
@@ -280,7 +294,7 @@ export async function convertToPaid(uid: string, trigger: string, tierInfo?: any
     trialEndDate: null, // Clear trial end date
   });
   
-  console.log('🎉 User converted to paid:', trigger);
+  console.log('ðŸŽ‰ User converted to paid:', trigger);
 }
 
 // Check if user can access feature
@@ -362,6 +376,360 @@ export async function getUserTrialStatus(uid: string) {
 }
 
 // ============================================
+// USERNAME & CREATOR PROFILE HELPERS (Phase 2.1)
+// ============================================
+
+// Reserved words that cannot be used as usernames
+const RESERVED_USERNAMES = [
+  'admin', 'administrator', 'api', 'app', 'auth', 'billing',
+  'blog', 'checkout', 'creator', 'dashboard', 'help', 'home',
+  'launchpad', 'login', 'logout', 'onboarding', 'pathfinder',
+  'pricing', 'privacy', 'profile', 'search', 'settings', 'signin',
+  'signout', 'signup', 'status', 'stripe', 'support', 'terms',
+  'test', 'user', 'users', 'www',
+];
+
+// Validate username format (client-side, before hitting Firestore)
+export function validateUsername(username: string): { valid: boolean; error: string | null } {
+  if (!username) {
+    return { valid: false, error: 'Username is required' };
+  }
+  
+  const trimmed = username.toLowerCase().trim();
+  
+  if (trimmed.length < 3) {
+    return { valid: false, error: 'Username must be at least 3 characters' };
+  }
+  
+  if (trimmed.length > 30) {
+    return { valid: false, error: 'Username must be 30 characters or less' };
+  }
+  
+  if (!/^[a-z0-9-]+$/.test(trimmed)) {
+    return { valid: false, error: 'Only lowercase letters, numbers, and hyphens allowed' };
+  }
+  
+  if (trimmed.startsWith('-') || trimmed.endsWith('-')) {
+    return { valid: false, error: 'Username cannot start or end with a hyphen' };
+  }
+  
+  if (trimmed.includes('--')) {
+    return { valid: false, error: 'Username cannot contain consecutive hyphens' };
+  }
+  
+  if (RESERVED_USERNAMES.includes(trimmed)) {
+    return { valid: false, error: 'This username is reserved' };
+  }
+  
+  return { valid: true, error: null };
+}
+
+// Check if a username is available in Firestore
+export async function checkUsernameAvailability(username: string): Promise<boolean> {
+  const validation = validateUsername(username);
+  if (!validation.valid) return false;
+  
+  const usernameRef = doc(db, 'usernames', username.toLowerCase().trim());
+  const snap = await getDoc(usernameRef);
+  return !snap.exists();
+}
+
+// Claim a username for a user (transactional — prevents race conditions)
+export async function claimUsername(userId: string, username: string): Promise<{ success: boolean; error: string | null }> {
+  const trimmed = username.toLowerCase().trim();
+  
+  // Client-side validation first
+  const validation = validateUsername(trimmed);
+  if (!validation.valid) {
+    return { success: false, error: validation.error };
+  }
+  
+  const usernameRef = doc(db, 'usernames', trimmed);
+  const userRef = doc(db, 'users', userId);
+  
+  try {
+    await runTransaction(db, async (transaction) => {
+      // Check if username is taken
+      const usernameSnap = await transaction.get(usernameRef);
+      if (usernameSnap.exists()) {
+        throw new Error('Username is already taken');
+      }
+      
+      // Check if user already has a username — if so, release the old one
+      const userSnap = await transaction.get(userRef);
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        const oldUsername = userData.profile?.username;
+        if (oldUsername && oldUsername !== trimmed) {
+          // Release old username
+          const oldUsernameRef = doc(db, 'usernames', oldUsername);
+          transaction.delete(oldUsernameRef);
+        }
+      }
+      
+      // Claim the new username
+      transaction.set(usernameRef, {
+        userId,
+        createdAt: serverTimestamp(),
+      });
+      
+      // Update user profile with the new username
+      transaction.update(userRef, {
+        'profile.username': trimmed,
+      });
+    });
+    
+    console.log('✅ Username claimed:', trimmed);
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Failed to claim username:', error);
+    return { success: false, error: error.message || 'Failed to claim username' };
+  }
+}
+
+// Release a username (when user changes or deletes their username)
+export async function releaseUsername(userId: string, username: string): Promise<void> {
+  const trimmed = username.toLowerCase().trim();
+  const usernameRef = doc(db, 'usernames', trimmed);
+  const userRef = doc(db, 'users', userId);
+  
+  try {
+    await runTransaction(db, async (transaction) => {
+      // Verify the username belongs to this user
+      const usernameSnap = await transaction.get(usernameRef);
+      if (!usernameSnap.exists()) return;
+      
+      const data = usernameSnap.data();
+      if (data.userId !== userId) {
+        throw new Error('Cannot release a username that belongs to another user');
+      }
+      
+      // Delete the username doc
+      transaction.delete(usernameRef);
+      
+      // Clear username from user profile
+      transaction.update(userRef, {
+        'profile.username': '',
+      });
+    });
+    
+    console.log('✅ Username released:', trimmed);
+  } catch (error) {
+    console.error('Failed to release username:', error);
+    throw error;
+  }
+}
+
+// Save creator profile (updates user doc + public_profiles collection)
+export async function saveCreatorProfile(
+  userId: string,
+  profileData: Partial<CreatorProfile>
+): Promise<void> {
+  const userRef = doc(db, 'users', userId);
+  
+  // Build the update object with dot notation for partial updates
+  const updates: Record<string, any> = {};
+  
+  if (profileData.displayName !== undefined) updates['profile.displayName'] = profileData.displayName;
+  if (profileData.bioShort !== undefined) updates['profile.bioShort'] = profileData.bioShort;
+  if (profileData.bioLong !== undefined) updates['profile.bioLong'] = profileData.bioLong;
+  if (profileData.photoURL !== undefined) updates['profile.photoURL'] = profileData.photoURL;
+  if (profileData.coverImageURL !== undefined) updates['profile.coverImageURL'] = profileData.coverImageURL;
+  if (profileData.socialLinks !== undefined) updates['profile.socialLinks'] = profileData.socialLinks;
+  if (profileData.customLinks !== undefined) updates['profile.customLinks'] = profileData.customLinks;
+  if (profileData.pageStyle !== undefined) updates['profile.pageStyle'] = profileData.pageStyle;
+  if (profileData.productOverrides !== undefined) updates['profile.productOverrides'] = profileData.productOverrides;
+  if (profileData.productSections !== undefined) updates['profile.productSections'] = profileData.productSections;
+  // Note: username is handled separately via claimUsername() — never set directly here
+  
+  updates.lastActiveDate = serverTimestamp();
+  
+  await updateDoc(userRef, updates);
+  console.log('✅ Creator profile saved');
+}
+
+// Publish creator profile to public_profiles collection
+// Called when saving profile in Settings (mirrors published_pages pattern)
+export async function publishCreatorProfile(userId: string): Promise<void> {
+  const userRef = doc(db, 'users', userId);
+  const userSnap = await getDoc(userRef);
+  
+  if (!userSnap.exists()) throw new Error('User not found');
+  
+  const userData = userSnap.data();
+  const profile = userData.profile;
+  
+  if (!profile?.username) {
+    throw new Error('Cannot publish profile without a username');
+  }
+  
+  const publicProfileRef = doc(db, 'public_profiles', profile.username);
+  
+  await setDoc(publicProfileRef, {
+    userId,
+    displayName: profile.displayName || '',
+    username: profile.username,
+    bioShort: profile.bioShort || '',
+    bioLong: profile.bioLong || '',
+    photoURL: profile.photoURL || '',
+    coverImageURL: profile.coverImageURL || '',
+    socialLinks: profile.socialLinks || {},
+    customLinks: profile.customLinks || [],
+    pageStyle: profile.pageStyle || null,
+    productOverrides: profile.productOverrides || {},
+    productSections: profile.productSections || [],
+    updatedAt: serverTimestamp(),
+  });
+  
+  console.log('✅ Public profile published for:', profile.username);
+}
+
+// Fetch a public creator profile by username (for /creator/{username} page)
+export async function getPublicProfile(username: string): Promise<any | null> {
+  const trimmed = username.toLowerCase().trim();
+  const profileRef = doc(db, 'public_profiles', trimmed);
+  const snap = await getDoc(profileRef);
+  
+  if (!snap.exists()) return null;
+  
+  return { username: trimmed, ...snap.data() };
+}
+
+// Upload a profile photo to Firebase Storage and update profile.photoURL
+export async function uploadProfilePhoto(
+  userId: string,
+  file: File
+): Promise<string> {
+  // Validate file type
+  const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  if (!validTypes.includes(file.type)) {
+    throw new Error('Please upload a JPG, PNG, GIF, or WebP image');
+  }
+
+  // Validate file size (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error('Image must be under 5MB');
+  }
+
+  // Upload to Storage
+  const ext = file.name.split('.').pop() || 'jpg';
+  const filePath = `users/${userId}/profile-photo.${ext}`;
+  const fileRef = storageRef(storage, filePath);
+  
+  await uploadBytes(fileRef, file);
+  const downloadURL = await getDownloadURL(fileRef);
+
+  // Update user profile
+  const userRef = doc(db, 'users', userId);
+  await updateDoc(userRef, {
+    'profile.photoURL': downloadURL,
+  });
+
+  console.log('✅ Profile photo uploaded:', filePath);
+  return downloadURL;
+}
+
+// Delete custom profile photo and revert to Google photo
+export async function deleteProfilePhoto(userId: string): Promise<void> {
+  const userRef = doc(db, 'users', userId);
+  const userSnap = await getDoc(userRef);
+  
+  if (!userSnap.exists()) return;
+  
+  const userData = userSnap.data();
+  const currentURL = userData.profile?.photoURL || '';
+
+  // Only delete from Storage if it's a Firebase Storage URL (not Google photo)
+  if (currentURL.includes('firebasestorage.googleapis.com')) {
+    try {
+      // Try common extensions
+      for (const ext of ['jpg', 'jpeg', 'png', 'gif', 'webp']) {
+        try {
+          const fileRef = storageRef(storage, `users/${userId}/profile-photo.${ext}`);
+          await deleteObject(fileRef);
+          break;
+        } catch {
+          // File with this extension doesn't exist, try next
+        }
+      }
+    } catch (e) {
+      console.warn('Could not delete old profile photo from storage:', e);
+    }
+  }
+
+  // Revert to Google auth photo
+  const googlePhoto = auth.currentUser?.photoURL || '';
+  await updateDoc(userRef, {
+    'profile.photoURL': googlePhoto,
+  });
+
+  console.log('✅ Profile photo removed, reverted to default');
+}
+
+// Upload a cover/banner image to Firebase Storage and update profile.coverImageURL
+export async function uploadCoverImage(
+  userId: string,
+  file: File
+): Promise<string> {
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!validTypes.includes(file.type)) {
+    throw new Error('Please upload a JPG, PNG, or WebP image');
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error('Cover image must be under 10MB');
+  }
+
+  const ext = file.name.split('.').pop() || 'jpg';
+  const filePath = `users/${userId}/cover-image.${ext}`;
+  const fileRef = storageRef(storage, filePath);
+
+  await uploadBytes(fileRef, file);
+  const downloadURL = await getDownloadURL(fileRef);
+
+  const userRef = doc(db, 'users', userId);
+  await updateDoc(userRef, {
+    'profile.coverImageURL': downloadURL,
+  });
+
+  console.log('✅ Cover image uploaded:', filePath);
+  return downloadURL;
+}
+
+// Delete cover image from Storage and clear profile.coverImageURL
+export async function deleteCoverImage(userId: string): Promise<void> {
+  const userRef = doc(db, 'users', userId);
+  const userSnap = await getDoc(userRef);
+
+  if (!userSnap.exists()) return;
+
+  const userData = userSnap.data();
+  const currentURL = userData.profile?.coverImageURL || '';
+
+  if (currentURL.includes('firebasestorage.googleapis.com')) {
+    try {
+      for (const ext of ['jpg', 'jpeg', 'png', 'webp']) {
+        try {
+          const fileRef = storageRef(storage, `users/${userId}/cover-image.${ext}`);
+          await deleteObject(fileRef);
+          break;
+        } catch {
+          // Try next extension
+        }
+      }
+    } catch (e) {
+      console.warn('Could not delete cover image from storage:', e);
+    }
+  }
+
+  await updateDoc(userRef, {
+    'profile.coverImageURL': '',
+  });
+
+  console.log('✅ Cover image removed');
+}
+
+// ============================================
 // PRODUCT CO-PILOT HELPERS (Subcollection-based)
 // ============================================
 
@@ -400,7 +768,7 @@ export async function createCoPilotSession(uid: string): Promise<string> {
     lastActiveDate: serverTimestamp(),
   });
   
-  console.log('✅ New Co-Pilot session created:', docRef.id);
+  console.log('âœ… New Co-Pilot session created:', docRef.id);
   return docRef.id;
 }
 
@@ -505,7 +873,7 @@ export async function saveProductCoPilotAnswers(
       });
     }
     
-    console.log('✅ Co-Pilot answers saved at question', currentQuestionIndex);
+    console.log('âœ… Co-Pilot answers saved at question', currentQuestionIndex);
   } catch (error) {
     console.error('Error saving Co-Pilot answers:', error);
     throw error;
@@ -553,7 +921,7 @@ export async function markProductCoPilotComplete(
       lastActiveDate: serverTimestamp(),
     });
     
-    console.log('🎉 Co-Pilot session marked complete with score:', nicheScore);
+    console.log('ðŸŽ‰ Co-Pilot session marked complete with score:', nicheScore);
   } catch (error) {
     console.error('Error marking Co-Pilot complete:', error);
     throw error;
@@ -574,7 +942,7 @@ export async function resetProductCoPilotSession(uid: string, sessionId: string)
       activeSessionId: null,
     });
     
-    console.log('🔄 Co-Pilot session deleted:', sessionId);
+    console.log('ðŸ”„ Co-Pilot session deleted:', sessionId);
   } catch (error) {
     console.error('Error resetting Co-Pilot session:', error);
     throw error;
@@ -628,7 +996,7 @@ export async function cloneCoPilotSession(uid: string, sourceSessionId: string):
     lastActiveDate: serverTimestamp(),
   });
 
-  console.log('✅ Cloned Co-Pilot session:', sourceSessionId, '→', docRef.id);
+  console.log('âœ… Cloned Co-Pilot session:', sourceSessionId, 'â†’', docRef.id);
   return docRef.id;
 }
 
@@ -707,7 +1075,7 @@ export async function renameCoPilotSession(
       name: newName,
       updatedAt: serverTimestamp(),
     });
-    console.log('✅ Session renamed to:', newName);
+    console.log('âœ… Session renamed to:', newName);
   } catch (error) {
     console.error('Error renaming session:', error);
     throw error;

@@ -24,7 +24,7 @@ export default function RootRedirect() {
         
         if (!userSnap.exists()) {
           // User document doesn't exist (shouldn't happen, but handle it)
-          setRedirectTo('/onboarding');
+          setRedirectTo('/pathfinder');
           setLoading(false);
           return;
         }
@@ -43,16 +43,16 @@ export default function RootRedirect() {
         const productsSnap = await getDocs(productsRef);
         
         if (productsSnap.empty) {
-          // No products - go to onboarding to create first product
-          setRedirectTo('/onboarding');
+          // No products - go straight to Product Pathfinder
+          setRedirectTo('/pathfinder');
         } else {
           // Has products - go to dashboard
           setRedirectTo('/dashboard');
         }
       } catch (error) {
         console.error('Error checking user state:', error);
-        // Default to onboarding on error
-        setRedirectTo('/onboarding');
+        // Default to Pathfinder on error
+        setRedirectTo('/pathfinder');
       } finally {
         setLoading(false);
       }
@@ -79,5 +79,5 @@ export default function RootRedirect() {
   }
 
   // Fallback (shouldn't reach here)
-  return <Navigate to="/onboarding" replace />;
+  return <Navigate to="/pathfinder" replace />;
 }

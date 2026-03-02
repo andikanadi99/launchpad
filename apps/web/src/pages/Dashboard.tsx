@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
-import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, orderBy, getDoc } from 'firebase/firestore';
 import { Link, useNavigate } from 'react-router-dom';
 import { setActiveSession, cloneCoPilotSession } from '../lib/UserDocumentHelpers';
 import ConfirmModal from './ConfirmModal';
@@ -22,7 +22,8 @@ import {
   Plus,
   MoreVertical,
   Truck,
-  ChevronDown
+  ChevronDown,
+  Palette
 } from 'lucide-react';
 
 interface ProductIdea {
@@ -86,6 +87,7 @@ export default function Dashboard() {
     idea: ProductIdea | null;
   }>({ isOpen: false, idea: null });
   const [showNewProductModal, setShowNewProductModal] = useState(false);
+  const [userData, setUserData] = useState<any>(null);
   const [showInfoBanner, setShowInfoBanner] = useState(() => {
     return localStorage.getItem('hideInfoBanner') !== 'true';
   });
@@ -140,6 +142,14 @@ export default function Dashboard() {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // Fetch user profile data (for creator page link)
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    getDoc(doc(db, 'users', auth.currentUser.uid)).then(snap => {
+      if (snap.exists()) setUserData(snap.data());
+    });
   }, []);
 
   // Close menus when clicking outside
@@ -344,7 +354,7 @@ export default function Dashboard() {
     if (!auth.currentUser) return;
     try {
       await setActiveSession(auth.currentUser.uid, ideaId);
-      navigate('/product-idea-copilot');
+      navigate('/pathfinder');
     } catch (error) {
       console.error('Error continuing idea:', error);
     }
@@ -355,7 +365,7 @@ export default function Dashboard() {
     if (!auth.currentUser) return;
     try {
       await setActiveSession(auth.currentUser.uid, ideaId);
-      navigate('/product-idea-copilot');
+      navigate('/pathfinder');
     } catch (error) {
       console.error('Error editing idea:', error);
     }
@@ -375,7 +385,7 @@ export default function Dashboard() {
         try {
           await cloneCoPilotSession(auth.currentUser.uid, ideaId);
           setConfirmModal(prev => ({ ...prev, isOpen: false, isLoading: false }));
-          navigate('/product-idea-copilot');
+          navigate('/pathfinder');
         } catch (error) {
           console.error('Error cloning idea:', error);
           setConfirmModal(prev => ({ ...prev, isOpen: false, isLoading: false }));
@@ -439,7 +449,7 @@ export default function Dashboard() {
                 <h3 className="font-semibold text-purple-300 mb-2">Welcome to LaunchPad!</h3>
                 <div className="text-sm text-purple-200/80 space-y-2">
                   <p>
-                    <strong className="text-purple-300">Step 1:</strong> Use the Product Idea Co-Pilot to discover what to sell
+                    <strong className="text-purple-300">Step 1:</strong> Use the Product Pathfinder to discover what to sell
                   </p>
                   <p>
                     <strong className="text-purple-300">Step 2:</strong> Refine your product idea with pricing and details
@@ -448,7 +458,7 @@ export default function Dashboard() {
                     <strong className="text-purple-300">Step 3:</strong> Create a professional sales page and start selling
                   </p>
                   <p className="text-xs text-purple-300/60 mt-3">
-                    Start with the Product Idea Co-Pilot - it's free and takes just 5 minutes!
+                    Start with the Product Pathfinder — it's free and takes just 5 minutes!
                   </p>
                 </div>
               </div>
@@ -468,7 +478,7 @@ export default function Dashboard() {
             <p className="text-neutral-400 text-sm mb-1">Total Products</p>
             <p className="text-3xl font-bold">{totals.total}</p>
             <p className="text-xs text-neutral-500 mt-1">
-              {totals.ideasOnly} idea{totals.ideasOnly !== 1 ? 's' : ''} Â· {totals.withSalesPage} sales page{totals.withSalesPage !== 1 ? 's' : ''}
+              {totals.ideasOnly} idea{totals.ideasOnly !== 1 ? 's' : ''} · {totals.withSalesPage} sales page{totals.withSalesPage !== 1 ? 's' : ''}
             </p>
           </div>
           <div className="bg-neutral-900/50 rounded-lg p-5 border border-neutral-800">
@@ -487,6 +497,39 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
+
+        {/* Creator Page Quick Link */}
+        {userData?.profile?.username && (
+          <div className="mb-8 flex flex-col sm:flex-row gap-3">
+            <a
+              href={`/creator/${userData.profile.username}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 flex items-center gap-3 bg-neutral-900/50 rounded-lg p-4 border border-neutral-800 hover:border-purple-500/30 transition-colors group"
+            >
+              <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <ExternalLink className="w-4 h-4 text-purple-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white">Creator Page</p>
+                <p className="text-xs text-neutral-500 truncate">launchpad.com/creator/{userData.profile.username}</p>
+              </div>
+              <span className="text-xs text-neutral-500 group-hover:text-purple-400 transition-colors">View →</span>
+            </a>
+            <button
+              onClick={() => navigate('/settings/customize?from=dashboard')}
+              className="flex items-center gap-3 bg-neutral-900/50 rounded-lg p-4 border border-neutral-800 hover:border-purple-500/30 transition-colors group sm:w-auto"
+            >
+              <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Palette className="w-4 h-4 text-purple-400" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium text-white">Customize</p>
+                <p className="text-xs text-neutral-500">Style your page</p>
+              </div>
+            </button>
+          </div>
+        )}
 
         {/* Products Section Header */}
         <div className="flex items-center justify-between mb-4">
@@ -674,7 +717,7 @@ export default function Dashboard() {
                                 {hasLinkedIdea && (
                                   <span className="text-xs px-2 py-1 rounded-full bg-purple-950/30 text-purple-400 border border-purple-800/30 flex items-center gap-1">
                                     <Sparkles className="w-3 h-3" />
-                                    From Co-Pilot
+                                    From Pathfinder
                                   </span>
                                 )}
                                 {displayData.published && (
@@ -943,13 +986,13 @@ export default function Dashboard() {
               <Sparkles className="w-8 h-8 text-purple-400" />
             </div>
             <p className="text-xl text-neutral-300 mb-2">No products yet</p>
-            <p className="text-neutral-400 mb-6">Start by creating a product idea with the Co-Pilot</p>
+            <p className="text-neutral-400 mb-6">Start by discovering a product idea with the Pathfinder</p>
             <Link 
-              to="/product-idea-copilot"
+              to="/pathfinder"
               className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg hover:from-purple-500 hover:to-indigo-500 transition-all font-medium"
             >
               <Sparkles className="w-5 h-5" />
-              Start Product Idea Co-Pilot
+              Start Product Pathfinder
             </Link>
           </div>
         )}
@@ -972,11 +1015,11 @@ export default function Dashboard() {
             <p className="text-neutral-400 mb-6">How would you like to start?</p>
             
             <div className="space-y-3">
-              {/* Option 1: Product Idea Co-Pilot */}
+              {/* Option 1: Product Pathfinder */}
               <button
                 onClick={() => {
                   setShowNewProductModal(false);
-                  navigate('/product-idea-copilot?new=true');
+                  navigate('/pathfinder?new=true');
                 }}
                 className="w-full p-4 bg-gradient-to-r from-purple-600/20 to-indigo-600/20 hover:from-purple-600/30 hover:to-indigo-600/30 border border-purple-500/30 rounded-xl text-left transition-all group"
               >
@@ -985,9 +1028,9 @@ export default function Dashboard() {
                     <Sparkles className="w-6 h-6 text-purple-400" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white mb-1">Product Idea Co-Pilot</h3>
+                    <h3 className="font-semibold text-white mb-1">Product Pathfinder</h3>
                     <p className="text-sm text-neutral-400">
-                      Not sure what to sell? Let AI help you discover the perfect product based on your skills and audience.
+                      Not sure what to sell? Discover the perfect product based on your skills and audience.
                     </p>
                     <span className="inline-block mt-2 text-xs text-purple-400 font-medium">Recommended for beginners</span>
                   </div>
@@ -1059,7 +1102,7 @@ export default function Dashboard() {
                   <ul className="text-sm text-neutral-300 space-y-1">
                     {ideaModal.idea.productConfig.valueStack.map((item: string, i: number) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="text-purple-400 mt-0.5">â€¢</span>
+                        <span className="text-purple-400 mt-0.5">•</span>
                         {item}
                       </li>
                     ))}
@@ -1074,7 +1117,7 @@ export default function Dashboard() {
                   <ul className="text-sm text-neutral-300 space-y-1">
                     {ideaModal.idea.productConfig.guarantees.map((item: string, i: number) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="text-green-400 mt-0.5">âœ“</span>
+                        <span className="text-green-400 mt-0.5">✔</span>
                         {item}
                       </li>
                     ))}

@@ -24,7 +24,8 @@ export default function AppLayout() {
           <nav className="flex items-center gap-1">
             <NavLink to="/dashboard" className={tabClass}>Dashboard</NavLink>
             <NavLink to="/onboarding" className={tabClass}>New Product</NavLink>
-            <NavLink to="/settings" className={tabClass}>Settings</NavLink>
+            <NavLink to="/settings/customize" className={tabClass}>My Page</NavLink>
+            <NavLink to="/settings" end className={tabClass}>Settings</NavLink>
           </nav>
 
           {/* Right-side actions - now with theme toggle! */}

@@ -34,12 +34,20 @@ import SalesPagePreview from "./pages/products/sales page components/SalesPagePr
 // Product Idea Generator
 import ProductIdeaGenerator from "./pages/product-idea/ProductIdeaGenerator";
 
+// Public Creator Page
+import CreatorPage from "./pages/CreatorPage";
+
+// Creator Page Customize
+import CreatorPageCustomize from "./pages/CreatorPageCustomize";
+
 export default function App() {
   return (
     <ThemeProvider>
     <Routes>
       
+      {/* Public pages — no auth required */}
       <Route path="/p/:slug" element={<ProductPage />} />
+      <Route path="/creator/:username" element={<CreatorPage />} />
       <Route path="/success" element={<DeliverySuccessPage />} />
 
       {/* Protected area: shows header/nav via AppLayout */}
@@ -52,6 +60,7 @@ export default function App() {
         
         {/* Product Idea Co-Pilot */}
         <Route path="product-idea-copilot" element={<ProductIdeaGenerator />} />
+         <Route path="pathfinder" element={<ProductIdeaGenerator />} />
         
         {/* Dashboard route - for users with products */}
         <Route path="dashboard" element={<Dashboard />} />
@@ -73,6 +82,7 @@ export default function App() {
         </Route>
         
         <Route path="settings" element={<Settings />} />
+        <Route path="settings/customize" element={<CreatorPageCustomize />} />
 
         {/* Onboarding steps inside the layout */}
         <Route path="onboarding">
@@ -81,7 +91,7 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Auth area: outside layout Ã¢â€ â€™ no header/nav */}
+      {/* Auth area: outside layout — no header/nav */}
       <Route path="/auth">
         <Route path="signin" element={<SignIn />} />
         <Route path="signup" element={<SignUp />} />

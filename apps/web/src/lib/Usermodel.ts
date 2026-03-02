@@ -36,6 +36,139 @@ export interface CoPilotSession {
   salesPageStatus?: 'none' | 'draft' | 'published';
 }
 
+// ============================================
+// CREATOR PROFILE (Phase 2.1)
+// ============================================
+
+export interface SocialLinks {
+  website: string;
+  youtube: string;
+  instagram: string;
+  twitter: string;
+  tiktok: string;
+  linkedin: string;
+}
+
+export interface CustomLink {
+  id: string;       // Unique ID (e.g. "cl_1709123456")
+  label: string;    // "My Podcast", "Free Guide", "Book a Call"
+  url: string;      // Full URL
+}
+
+// ============================================
+// CREATOR PAGE STYLE (Phase 2.1 — Step 4)
+// ============================================
+
+export type SectionKey = 'profile' | 'links' | 'products' | 'about';
+
+// Named group of products on the creator page
+export interface ProductSection {
+  id: string;           // Unique ID (e.g. "ps_1709123456")
+  title: string;        // "Free Resources", "Courses", "1:1 Coaching"
+  productSlugs: string[]; // Ordered list of product slugs in this section
+  layout: 'list' | 'grid';        // How products in this section are displayed
+  headerColor?: string;            // Custom header text color (defaults to subtext)
+  headerSize?: 'sm' | 'md' | 'lg'; // Header text size
+}
+
+export interface CreatorPageStyle {
+  accentColor: string;                                  // Hex: '#a855f7' default (purple)
+  photoShape: 'square' | 'circle';                      // Default: 'square'
+  layoutDensity: 'compact' | 'normal' | 'spacious';    // Default: 'normal'
+  theme: 'dark' | 'light';                              // Default: 'dark'
+  backgroundColor: string;                              // Hex for page bg: '#0B0B0D' (dark) or '#f5f5f5' (light)
+  backgroundGradient: boolean;                          // Whether to show gradient at top
+  backgroundGradientColor: string;                      // Hex for gradient overlay color
+  gradientDirection: 'to-bottom' | 'to-top' | 'to-right' | 'to-left' | 'to-br' | 'to-bl'; // Direction
+  gradientPosition: number;                             // 0-100: where gradient starts fading (default 50)
+  coverPosition: 'top' | 'center' | 'bottom';          // Where to anchor cover image vertically
+  coverZoom: number;                                    // 1 = normal, up to 1.5 = zoomed in
+  coverHeight: 'short' | 'medium' | 'tall';             // Banner height: short=6:1, medium=5:1, tall=3.5:1
+  sectionOrder: SectionKey[];                           // Order of page sections
+  // Product display
+  productCardStyle: 'compact' | 'standard' | 'featured'; // compact = no image, standard = image+text, featured = larger image
+  productLayout: 'list' | 'grid';                       // list = stacked, grid = 2-column
+  productShowTagline: boolean;                          // Show tagline on cards
+  productShowPrice: boolean;                            // Show price on cards
+}
+
+export const DEFAULT_PAGE_STYLE: CreatorPageStyle = {
+  accentColor: '#a855f7',
+  photoShape: 'square',
+  layoutDensity: 'normal',
+  theme: 'dark',
+  backgroundColor: '#0B0B0D',
+  backgroundGradient: false,
+  backgroundGradientColor: '#a855f7',
+  gradientDirection: 'to-bottom',
+  gradientPosition: 50,
+  coverPosition: 'center',
+  coverZoom: 1,
+  coverHeight: 'medium',
+  sectionOrder: ['profile', 'about', 'links', 'products'],
+  productCardStyle: 'standard',
+  productLayout: 'list',
+  productShowTagline: true,
+  productShowPrice: true,
+};
+
+export const ACCENT_PRESETS = [
+  { label: 'Purple', value: '#a855f7' },
+  { label: 'Blue',   value: '#3b82f6' },
+  { label: 'Cyan',   value: '#06b6d4' },
+  { label: 'Green',  value: '#22c55e' },
+  { label: 'Yellow', value: '#eab308' },
+  { label: 'Orange', value: '#f97316' },
+  { label: 'Pink',   value: '#ec4899' },
+  { label: 'Red',    value: '#ef4444' },
+];
+
+// Per-product overrides for creator page display
+// Keyed by product slug in CreatorProfile.productOverrides
+export interface ProductOverride {
+  thumbnail?: string;    // Custom image URL (overrides sales page header image)
+  description?: string;  // Custom short description (overrides sales page tagline)
+  ctaText?: string;      // Custom CTA button text (overrides "View Product")
+}
+
+export interface CreatorProfile {
+  displayName: string;         // "Adam Lowther" — shown on creator page + sales pages
+  username: string;            // "adamlowther" → /creator/adamlowther
+  bioShort: string;            // One-liner: "I help 7-figure businesses..." (160 char max)
+  bioLong: string;             // Extended about section (1000 char max, rendered in 'about' section)
+  photoURL: string;            // Defaults to Google auth photo, or custom upload
+  coverImageURL: string;       // Cover/banner image for creator page (wide aspect ratio)
+  socialLinks: SocialLinks;    // Platform links (empty string = not set)
+  customLinks: CustomLink[];   // User-defined links with labels
+  pageStyle: CreatorPageStyle; // Visual customization for public creator page
+  productOverrides: Record<string, ProductOverride>; // Per-product display overrides keyed by slug
+  productSections: ProductSection[]; // Named product groups for creator page
+}
+
+// Default empty profile — used when creating new users
+export function createDefaultProfile(user?: any): CreatorProfile {
+  return {
+    displayName: user?.displayName || '',
+    username: '',              // Must be claimed separately via username helpers
+    bioShort: '',
+    bioLong: '',
+    photoURL: user?.photoURL || '',
+    coverImageURL: '',
+    socialLinks: {
+      website: '',
+      youtube: '',
+      instagram: '',
+      twitter: '',
+      tiktok: '',
+      linkedin: '',
+    },
+    customLinks: [],
+    pageStyle: { ...DEFAULT_PAGE_STYLE },
+    productOverrides: {},
+    productSections: [],
+  };
+}
+
 export interface UserDocument {
   // === BASIC INFO (existing) ===
   email: string | null;
@@ -43,6 +176,9 @@ export interface UserDocument {
   photoURL: string | null;
   createdAt: any; // serverTimestamp()
   lastLoginAt: any; // serverTimestamp()
+  
+  // === CREATOR PROFILE (Phase 2.1) ===
+  profile: CreatorProfile;
   
   // === ACCOUNT TYPE (NEW for lead magnet) ===
   accountType: 'free' | 'paid';  // NEW: Distinguishes free lead magnet users from paid subscribers
@@ -141,6 +277,9 @@ export function createNewUserDocument(
     photoURL: user.photoURL || null,
     createdAt: now, // Will be converted to serverTimestamp
     lastLoginAt: now,
+    
+    // Creator Profile — seeded from Google auth
+    profile: createDefaultProfile(user),
     
     // Account type
     accountType: accountType,

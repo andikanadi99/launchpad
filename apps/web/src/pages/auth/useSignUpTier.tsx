@@ -202,7 +202,7 @@ async function getAutoAssignedTier(): Promise<TierInfo> {
           spotsLeft: 10 - foundingBetaCount,
           benefits: [
             'Free access forever',
-            'Product Idea Co-Pilot',
+            'Product Pathfinder',
             'Guided Sales Copywriter',
             'Personal Sales Page Review',
             'Launch Day Promotion',
@@ -228,7 +228,7 @@ async function getAutoAssignedTier(): Promise<TierInfo> {
           spotsLeft: 50 - foundingMemberCount,
           benefits: [
             '$29/month locked in forever',
-            'Product Idea Co-Pilot',
+            'Product Pathfinder',
             'Guided Sales Copywriter',
             'Personal Sales Page Review',
             'Launch Day Promotion',
@@ -321,7 +321,7 @@ export function TierBadge({ tierInfo }: { tierInfo: TierInfo }) {
       <div className="space-y-1.5">
         {tierInfo.benefits.slice(0, 4).map((benefit, i) => (
           <div key={i} className="flex items-center gap-2 text-sm text-neutral-300">
-            <span className="text-emerald-400">✓</span>
+            <span className="text-emerald-400">✔</span>
             <span>{benefit}</span>
           </div>
         ))}

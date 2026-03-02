@@ -925,7 +925,7 @@ export default function ProductIdeaGenerator() {
           setHasResumedSession(false);
           
           // Clear the URL param so refresh doesn't start another new session
-          navigate('/product-idea-copilot', { replace: true });
+          navigate('/pathfinder', { replace: true });
           setIsLoadingAnswers(false);
           return;
         }
@@ -1134,7 +1134,7 @@ export default function ProductIdeaGenerator() {
       return {
         value: `${value}${custom ? `_${index}` : ''}`,
         label: fullLabel,
-        description: `${hints.pain} â€¢ ${hints.money} â€¢ ${hints.access}`,
+        description: `${hints.pain} • ${hints.money} • ${hints.access}`,
         originalSelection: selection
       };
     });
@@ -2582,19 +2582,19 @@ export default function ProductIdeaGenerator() {
           </div>
             <div className="text-center mb-8">
               <button
-                onClick={() => navigate('/onboarding')}
+                onClick={() => navigate('/dashboard')}
                 className="inline-flex items-center gap-2 text-sm mr-px text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white mb-4 transition-colors"
                 style={{ marginRight:'1rem' }}
               >
                 <ArrowLeft className="w-4 h-4" />
-                Back to Onboarding
+                Back to Dashboard
               </button>
               
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 mb-4">
                 <Rocket className="w-6 h-6 text-white" />
               </div>
               <h1 className="text-3xl md:text-4xl font-bold text-neutral-900 dark:text-white mb-3">
-                Product Idea Co-Pilot
+                Product Pathfinder
               </h1>
               <p className="text-lg text-neutral-600 dark:text-neutral-400">
                 Discover Your Perfect Product in Minutes
@@ -2779,11 +2779,11 @@ export default function ProductIdeaGenerator() {
                         const targetWhoAnswers = answers.target_who || [];
                         if (targetWhoAnswers.length <= 1) return undefined;
                         const reasonMap: { [key: string]: string } = {
-                          'business_owners': 'They have high pain, budget to spend, and are easy to reach â€” strongest combo for your first launch.',
-                          'professionals': 'They have steady income and are accessible via LinkedIn â€” great for a first product.',
+                          'business_owners': 'They have high pain, budget to spend, and are easy to reach — strongest combo for your first launch.',
+                          'professionals': 'They have steady income and are accessible via LinkedIn — great for a first product.',
                           'freelancers': 'High pain and reachable in online communities, though budgets vary.',
                           'creators': 'High pain, growing income, and very reachable on social platforms.',
-                          'students': 'Easy to reach but limited budget â€” better as a second audience.',
+                          'students': 'Easy to reach but limited budget — better as a second audience.',
                           'parents': 'High pain with budget, reachable in Facebook groups.',
                           'hobbyists': 'Passion-driven spending, but pain and budgets are lower.',
                           'other': 'Consider how much pain, money, and access this group has.'
