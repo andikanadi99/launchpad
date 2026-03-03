@@ -1041,6 +1041,32 @@ export default function Settings() {
       </section>
 
       {/* ============================================ */}
+      {/* LEGAL */}
+      {/* ============================================ */}
+      <section className="rounded-xl border border-neutral-200 dark:border-purple-500/20 bg-white dark:bg-[#111113] p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-neutral-900 dark:text-white tracking-wide uppercase">Legal</h2>
+        <div className="flex items-center gap-4">
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-purple-600 dark:text-purple-400 hover:text-purple-500 dark:hover:text-purple-300 transition-colors underline underline-offset-2"
+          >
+            Terms of Service
+          </a>
+          <span className="text-neutral-300 dark:text-neutral-700">|</span>
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-purple-600 dark:text-purple-400 hover:text-purple-500 dark:hover:text-purple-300 transition-colors underline underline-offset-2"
+          >
+            Privacy Policy
+          </a>
+        </div>
+      </section>
+
+      {/* ============================================ */}
       {/* DANGER ZONE */}
       {/* ============================================ */}
       <section className="rounded-xl border border-neutral-200 dark:border-red-500/10 bg-white dark:bg-[#111113] p-6 space-y-4">

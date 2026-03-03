@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { db } from '../../lib/firebase';
+import { db, auth } from '../../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import SalesPageContent from './sales page components/SalesPageContent';
 
@@ -11,6 +11,7 @@ export default function ProductPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [purchasing, setPurchasing] = useState(false);
+    const trackedRef = useRef(false); // Prevent double-tracking in React StrictMode
 
     useEffect(() => {
         loadProduct();
@@ -46,12 +47,34 @@ export default function ProductPage() {
                 userId: data.userId,
                 productId: data.productId,
             });
+
+            // Track page view — only if viewer is NOT the product owner
+            const currentUserId = auth.currentUser?.uid;
+            const isOwner = currentUserId && currentUserId === data.userId;
+
+            if (!trackedRef.current && !isOwner) {
+                trackedRef.current = true;
+                trackView(snap.id, data.userId);
+            }
             
         } catch (err) {
             console.error('Error loading product:', err);
             setError('Failed to load product');
         } finally {
             setLoading(false);
+        }
+    }
+
+    // Fire-and-forget view tracking — never blocks or errors the page
+    async function trackView(slug: string, sellerId: string) {
+        try {
+            fetch('https://us-central1-launchpad-ec0b0.cloudfunctions.net/trackPageView', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug, sellerId }),
+            });
+        } catch {
+            // Silently ignore tracking errors — never affect user experience
         }
     }
 

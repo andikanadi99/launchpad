@@ -354,6 +354,8 @@ export const checkStripeAccountStatus = onRequest(
 
 /* 
     Purpose: Creates a Stripe Checkout session for product purchases
+    NOTE: No platform application_fee — LaunchPad uses flat monthly hosting fee model.
+    First 5 sales are completely free. Creators keep 100% (minus Stripe processing).
 */
 export const createCheckoutSession = onRequest(
   { 
@@ -411,7 +413,7 @@ export const createCheckoutSession = onRequest(
       const productName = coreInfo.name || product.productName || 'Digital Product';
       const productDescription = salesPage.valueProp?.description || coreInfo.tagline || '';
       
-      // Price is stored in dollars â€” convert to cents for Stripe
+      // Price is stored in dollars — convert to cents for Stripe
       const priceInDollars = coreInfo.price ?? product.price ?? 0;
       const priceInCents = Math.round(priceInDollars * 100);
 
@@ -439,7 +441,6 @@ export const createCheckoutSession = onRequest(
         success_url: `${origin || 'https://launchpad-ec0b0.web.app'}/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin || 'https://launchpad-ec0b0.web.app'}/p/${slug}`,
         payment_intent_data: {
-          application_fee_amount: Math.round(priceInCents * 0.05), // 5% platform fee
           transfer_data: {
             destination: stripeAccountId,
           },
@@ -463,8 +464,9 @@ export const createCheckoutSession = onRequest(
 );
 
 /* 
-  Purpose: Verifies a Stripe checkout session and returns product + delivery data
-  Called by the customer-facing success page after purchase
+  Purpose: Verifies a Stripe checkout session and returns product + delivery data.
+  Called by the customer-facing success page after purchase.
+  Also tracks the sale in page_views collection for analytics.
 */
 export const verifyPurchase = onRequest(
   { 
@@ -523,6 +525,42 @@ export const verifyPurchase = onRequest(
       }
 
       const product = pageDoc.data()!;
+
+      // ============================================================
+      // Track the sale for analytics (non-blocking)
+      // Writes to page_views/{slug} and page_views/{slug}/daily/{date}
+      // Same collection that trackPageView uses for views
+      // ============================================================
+      try {
+        const saleDate = new Date().toISOString().split('T')[0];
+        const priceInDollars = product.salesPage?.coreInfo?.price ?? product.price ?? 0;
+
+        const pageViewRef = db.collection('page_views').doc(slug);
+        const dailyRef = pageViewRef.collection('daily').doc(saleDate);
+
+        const saleBatch = db.batch();
+
+        // Increment total sales + revenue on parent doc
+        saleBatch.set(pageViewRef, {
+          totalSales: admin.firestore.FieldValue.increment(1),
+          totalRevenue: admin.firestore.FieldValue.increment(priceInDollars),
+          sellerId: sellerId || '',
+        }, { merge: true });
+
+        // Increment daily sales + revenue
+        saleBatch.set(dailyRef, {
+          sales: admin.firestore.FieldValue.increment(1),
+          revenue: admin.firestore.FieldValue.increment(priceInDollars),
+          date: saleDate,
+        }, { merge: true });
+
+        await saleBatch.commit();
+        console.log(`Sale tracked for ${slug}: $${priceInDollars}`);
+      } catch (trackErr) {
+        // Never let tracking errors block purchase verification
+        console.error('Error tracking sale (non-blocking):', trackErr);
+      }
+
       const delivery = product.delivery || {};
       const salesPage = product.salesPage || {};
 
@@ -1683,7 +1721,7 @@ WRITING RULES:
 - Keep sentences punchy and scannable
 
 TRANSFORMATION FORMULA:
-- Feature: What it IS ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Outcome: What it DOES ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Dream: What they BECOME
+- Feature: What it IS → Outcome: What it DOES → Dream: What they BECOME
 
 Example:
 - Feature: "50 video lessons"
@@ -2161,6 +2199,79 @@ Return ONLY the optimized description, nothing else.`;
           details: (error as any).message 
         }
       });
+    }
+  }
+);
+
+/*
+  Purpose: Tracks page views for published products.
+  Called from Product.tsx when a visitor loads a public sales page (/p/{slug}).
+  Stores both a lifetime total and daily breakdown for date-range analytics.
+  
+  Data structure:
+    page_views/{slug}                    -> { totalViews, sellerId, lastViewedAt }
+    page_views/{slug}/daily/{YYYY-MM-DD} -> { views, date }
+*/
+export const trackPageView = onRequest(
+  {
+    cors: true,
+    region: "us-central1"
+  },
+  async (req, res) => {
+    // CORS headers
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    try {
+      const { slug, sellerId } = req.body;
+
+      if (!slug) {
+        res.status(400).json({ error: 'Missing slug' });
+        return;
+      }
+
+      // Get today's date string in YYYY-MM-DD format (UTC)
+      const now = new Date();
+      const dateKey = now.toISOString().split('T')[0]; // e.g. "2026-03-02"
+
+      const pageViewRef = db.collection('page_views').doc(slug);
+      const dailyRef = pageViewRef.collection('daily').doc(dateKey);
+
+      // Use a batch for atomic writes
+      const batch = db.batch();
+
+      // Increment total views on the parent doc (create if doesn't exist)
+      batch.set(pageViewRef, {
+        totalViews: admin.firestore.FieldValue.increment(1),
+        sellerId: sellerId || '',
+        lastViewedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      // Increment daily views
+      batch.set(dailyRef, {
+        views: admin.firestore.FieldValue.increment(1),
+        date: dateKey,
+      }, { merge: true });
+
+      await batch.commit();
+
+      res.json({ success: true });
+
+    } catch (error) {
+      // Don't let tracking errors break anything -- log and return success
+      console.error("Error tracking page view:", error);
+      res.json({ success: false });
     }
   }
 );

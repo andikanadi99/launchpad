@@ -1,5 +1,5 @@
 // src/components/AppLayout.tsx
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, Link } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
 
 // Tabs: base + active styles (purple theme for both light & dark)
@@ -11,7 +11,7 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function AppLayout() {
   return (
-    <div className="min-h-screen bg-white dark:bg-[hsl(var(--bg))] text-neutral-900 dark:text-[hsl(var(--fg))] transition-colors">
+    <div className="min-h-screen bg-white dark:bg-[hsl(var(--bg))] text-neutral-900 dark:text-[hsl(var(--fg))] transition-colors flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-purple-300 dark:border-purple-500/20 bg-purple-200 dark:bg-purple-950/30 backdrop-blur">
         <div className="px-4 md:px-6 py-3 flex items-center justify-between gap-3">
@@ -23,6 +23,7 @@ export default function AppLayout() {
           {/* Tabs */}
           <nav className="flex items-center gap-1">
             <NavLink to="/dashboard" className={tabClass}>Dashboard</NavLink>
+            <NavLink to="/analytics" className={tabClass}>Analytics</NavLink>
             <NavLink to="/onboarding" className={tabClass}>New Product</NavLink>
             <NavLink to="/settings/customize" className={tabClass}>My Page</NavLink>
             <NavLink to="/settings" end className={tabClass}>Settings</NavLink>
@@ -37,9 +38,20 @@ export default function AppLayout() {
       </header>
 
       {/* Main content */}
-      <main className="px-4 md:px-6 py-6">
+      <main className="px-4 md:px-6 py-6 flex-1">
         <Outlet />
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-neutral-200 dark:border-neutral-800/50 py-4 px-4 md:px-6">
+        <div className="flex items-center justify-between max-w-7xl mx-auto">
+          <span className="text-xs text-neutral-400 dark:text-neutral-600">LaunchPad</span>
+          <div className="flex items-center gap-4 text-xs text-neutral-400 dark:text-neutral-600">
+            <Link to="/terms" className="hover:text-neutral-600 dark:hover:text-neutral-400 transition-colors">Terms</Link>
+            <Link to="/privacy" className="hover:text-neutral-600 dark:hover:text-neutral-400 transition-colors">Privacy</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

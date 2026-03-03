@@ -40,6 +40,13 @@ import CreatorPage from "./pages/CreatorPage";
 // Creator Page Customize
 import CreatorPageCustomize from "./pages/CreatorPageCustomize";
 
+// Analytics
+import Analytics from "./pages/Analytics";
+
+// Legal Pages
+import TermsOfService from "./pages/legal/TermsOfService";
+import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -49,6 +56,8 @@ export default function App() {
       <Route path="/p/:slug" element={<ProductPage />} />
       <Route path="/creator/:username" element={<CreatorPage />} />
       <Route path="/success" element={<DeliverySuccessPage />} />
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
 
       {/* Protected area: shows header/nav via AppLayout */}
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
@@ -64,6 +73,9 @@ export default function App() {
         
         {/* Dashboard route - for users with products */}
         <Route path="dashboard" element={<Dashboard />} />
+
+        {/* Analytics */}
+        <Route path="analytics" element={<Analytics />} />
         
         <Route path="support" element={<Support />} />
         
