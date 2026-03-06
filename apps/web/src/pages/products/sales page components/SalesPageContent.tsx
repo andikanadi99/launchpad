@@ -22,7 +22,8 @@ interface SalesPageContentProps {
     design: any;
     publish: any;
   };
-  onCtaClick?: () => void;
+  onCtaClick?: (customerName: string, customerEmail: string) => void;
+  isPurchasing?: boolean;
   className?: string;
   isEditorPreview?: boolean;
 }
@@ -37,7 +38,8 @@ export default function SalesPageContent({
   data, 
   onCtaClick,
   className = '',
-  isEditorPreview = false
+   isEditorPreview = false,
+  isPurchasing = false
 }: SalesPageContentProps) {
   
   const [checkoutName, setCheckoutName] = useState('');
@@ -165,9 +167,26 @@ export default function SalesPageContent({
   const hasSocialLinks = socialLinks.instagram || socialLinks.twitter || socialLinks.youtube || socialLinks.website;
   
   // Handle CTA click
+  const [checkoutError, setCheckoutError] = useState('');
+
   const handleCtaClick = () => {
+    // Validate name and email
+    if (!checkoutName.trim()) {
+      setCheckoutError('Please enter your name');
+      return;
+    }
+    if (!checkoutEmail.trim()) {
+      setCheckoutError('Please enter your email');
+      return;
+    }
+    // Basic email validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(checkoutEmail.trim())) {
+      setCheckoutError('Please enter a valid email address');
+      return;
+    }
+    setCheckoutError('');
     if (onCtaClick) {
-      onCtaClick();
+      onCtaClick(checkoutName.trim(), checkoutEmail.trim());
     }
   };
 
@@ -665,11 +684,16 @@ export default function SalesPageContent({
                     color: contentTextColor
                   }}
                 />
-
+                {checkoutError && (
+                  <div className="px-4 py-2.5 rounded-xl text-sm font-medium text-red-500 bg-red-500/10 border border-red-500/30 text-center">
+                    {checkoutError}
+                  </div>
+                )}
                 <button 
                   id="preview-cta-button"
                   onClick={handleCtaClick}
-                  className="w-full font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 hover:scale-[1.01] active:scale-[0.99]"
+                  disabled={isPurchasing}
+                  className={`w-full font-semibold flex items-center justify-center gap-2 transition-all ${isPurchasing ? 'opacity-70 cursor-wait' : 'hover:opacity-90 hover:scale-[1.01] active:scale-[0.99]'}`}
                   style={{ 
                     backgroundColor: buttonColor,
                     color: getButtonTextColor(),
@@ -679,9 +703,21 @@ export default function SalesPageContent({
                     boxShadow: `0 4px 14px ${buttonColor}30`
                   }}
                 >
-                  {ctaButtonText}
-                  {coreInfo?.priceType !== 'free' && (
-                    <span className="opacity-80"> {'\u00B7'} {priceDisplay}</span>
+                  {isPurchasing ? (
+                    <>
+                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Redirecting to checkout...
+                    </>
+                  ) : (
+                    <>
+                      {ctaButtonText}
+                      {coreInfo?.priceType !== 'free' && (
+                        <span className="opacity-80"> {'\u00B7'} {priceDisplay}</span>
+                      )}
+                    </>
                   )}
                 </button>
               </div>

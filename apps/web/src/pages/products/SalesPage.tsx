@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { auth, db, storage } from '../../lib/firebase';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { onAuthStateChanged } from 'firebase/auth';
 import { 
   ArrowLeft, ArrowRight, Check, Loader, Upload, Image, Search, X,
@@ -528,6 +528,8 @@ Cheers!`,
   const [showEmailPreview, setShowEmailPreview] = useState(false);
   const [newVideoUrl, setNewVideoUrl] = useState('');
   const [newVideoTitle, setNewVideoTitle] = useState('');
+  const [isUploadingDeliveryFile, setIsUploadingDeliveryFile] = useState(false);
+  const [deliveryUploadProgress, setDeliveryUploadProgress] = useState(0);
 
   // AI Loading States
   const [isGeneratingTagline, setIsGeneratingTagline] = useState(false);
@@ -1368,6 +1370,127 @@ Cheers!`,
       valueProp: { ...prev.valueProp, guarantees: prev.valueProp.guarantees.filter((_, i) => i !== index) }
     }));
   };
+  // ============================================
+  // DELIVERY: INLINE FILE UPLOAD & VIDEO
+  // ============================================
+  const handleDeliveryFileUpload = async (file: File) => {
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      alert('File must be under 50MB');
+      return;
+    }
+
+    setIsUploadingDeliveryFile(true);
+    setDeliveryUploadProgress(0);
+
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not authenticated');
+
+      const timestamp = Date.now();
+      const fileName = `${timestamp}_${file.name}`;
+      const storageRef = ref(storage, `users/${user.uid}/delivery/${productId}/${fileName}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setDeliveryUploadProgress(Math.round(progress));
+        },
+        (error) => {
+          console.error('Upload error:', error);
+          alert('Upload failed. Please try again.');
+          setIsUploadingDeliveryFile(false);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          const newFile = {
+            url: downloadURL,
+            name: file.name,
+            size: file.size,
+            uploadedAt: new Date(),
+          };
+          setData(prev => ({
+            ...prev,
+            delivery: {
+              ...prev.delivery,
+              hostedContent: {
+                ...prev.delivery.hostedContent,
+                files: [...(prev.delivery.hostedContent?.files || []), newFile],
+              },
+            },
+          }));
+          setIsUploadingDeliveryFile(false);
+          setDeliveryUploadProgress(0);
+        }
+      );
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Upload failed. Please try again.');
+      setIsUploadingDeliveryFile(false);
+    }
+  };
+
+  const removeDeliveryFile = (index: number) => {
+    setData(prev => ({
+      ...prev,
+      delivery: {
+        ...prev.delivery,
+        hostedContent: {
+          ...prev.delivery.hostedContent,
+          files: (prev.delivery.hostedContent?.files || []).filter((_, i) => i !== index),
+        },
+      },
+    }));
+  };
+
+  const detectVideoPlatform = (url: string): 'youtube' | 'vimeo' | 'loom' => {
+    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
+    if (url.includes('vimeo.com')) return 'vimeo';
+    return 'loom';
+  };
+
+  const addDeliveryVideo = () => {
+    if (!newVideoUrl.trim()) return;
+    const platform = detectVideoPlatform(newVideoUrl);
+    const newVideo = {
+      url: newVideoUrl.trim(),
+      title: newVideoTitle.trim() || `Video ${(data.delivery.hostedContent?.videos || []).length + 1}`,
+      platform,
+    };
+    setData(prev => ({
+      ...prev,
+      delivery: {
+        ...prev.delivery,
+        hostedContent: {
+          ...prev.delivery.hostedContent,
+          videos: [...(prev.delivery.hostedContent?.videos || []), newVideo],
+        },
+      },
+    }));
+    setNewVideoUrl('');
+    setNewVideoTitle('');
+  };
+
+  const removeDeliveryVideo = (index: number) => {
+    setData(prev => ({
+      ...prev,
+      delivery: {
+        ...prev.delivery,
+        hostedContent: {
+          ...prev.delivery.hostedContent,
+          videos: (prev.delivery.hostedContent?.videos || []).filter((_, i) => i !== index),
+        },
+      },
+    }));
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   // ============================================
   // NAVIGATION
@@ -1536,12 +1659,81 @@ Cheers!`,
         ...data,
         publish: { ...data.publish, status: 'published' as const },
       };
+      // Build delivery object in the format verifyPurchase expects
+      const deliveryForPublish = {
+       deliveryMethod: (() => {
+          if (data.delivery.method === 'hosted') {
+            // Auto-downgrade: if no hosted content uploaded, fall back to email-only
+            const hasFiles = (data.delivery.hostedContent?.files || []).length > 0;
+            const hasVideos = (data.delivery.hostedContent?.videos || []).length > 0;
+            const hasNotion = (data.delivery.hostedContent?.notionUrl || '').trim().length > 0;
+            const hasContentBlocks = (() => {
+              try {
+                const blocks = JSON.parse(data.delivery.hostedContent?.contentBlocks || '[]');
+                return blocks.length > 0;
+              } catch { return false; }
+            })();
+            return (hasFiles || hasVideos || hasNotion || hasContentBlocks) ? 'quick-page' : 'email-only';
+          }
+          return data.delivery.method;
+        })(),
+        status: 'configured',
+        email: {
+          subject: data.delivery.emailSubject || 'Your purchase of {{product_name}} is confirmed!',
+          body: data.delivery.emailBody || 'Hey {{customer_name}}, thanks for your purchase! You now have access to {{product_name}}.',
+          includeAccessButton: data.delivery.method !== 'email-only',
+        },
+        hosted: {
+          files: data.delivery.hostedContent?.files || [],
+          videos: data.delivery.hostedContent?.videos || [],
+          notionUrl: data.delivery.hostedContent?.notionUrl || '',
+          hasCustomContent: false,
+          contentBlocks: data.delivery.hostedContent?.contentBlocks || '[]',
+          pageTitle: '',
+          pageSubtitle: '',
+          headerStyles: {},
+          pageBgColor: (() => {
+            const bgHex = (data.design.backgroundColor || '#0A0A0A').replace('#', '');
+            const r = parseInt(bgHex.substring(0, 2), 16) || 0;
+            const g = parseInt(bgHex.substring(2, 4), 16) || 0;
+            const b = parseInt(bgHex.substring(4, 6), 16) || 0;
+            return (r * 299 + g * 587 + b * 114) / 1000 < 128 ? '#0f0f0f' : '#f8fafc';
+          })(),
+          pageTheme: (() => {
+            const bgHex = (data.design.backgroundColor || '#0A0A0A').replace('#', '');
+            const r = parseInt(bgHex.substring(0, 2), 16) || 0;
+            const g = parseInt(bgHex.substring(2, 4), 16) || 0;
+            const b = parseInt(bgHex.substring(4, 6), 16) || 0;
+            return (r * 299 + g * 587 + b * 114) / 1000 < 128 ? 'dark' : 'light';
+          })() as 'light' | 'dark',
+        },
+        redirect: {
+          url: data.delivery.redirectUrl || '',
+          delay: 5,
+          showThankYou: true,
+        },
+        design: {
+          backgroundColor: (() => {
+            const bgHex = (data.design.backgroundColor || '#0A0A0A').replace('#', '');
+            const r = parseInt(bgHex.substring(0, 2), 16) || 0;
+            const g = parseInt(bgHex.substring(2, 4), 16) || 0;
+            const b = parseInt(bgHex.substring(4, 6), 16) || 0;
+            return (r * 299 + g * 587 + b * 114) / 1000 < 128 ? '#0f0f0f' : '#f8fafc';
+          })(),
+          accentColor: data.design.primaryColor || '#6366F1',
+          logoUrl: '',
+          headingText: 'Thank you for your purchase!',
+          subText: "Here's your access to {{product_name}}",
+        },
+      };
+
       await setDoc(publishedRef, cleanData({
         userId,
         productId,
         slug,
         salesPage: publishedSalesPage,
-        publishedAt: originalPublishedAt, // Preserve original publish date
+        delivery: deliveryForPublish,
+        publishedAt: originalPublishedAt,
         lastUpdated: new Date(),
         productName: data.coreInfo.name,
         price: data.coreInfo.price,
@@ -1556,6 +1748,7 @@ Cheers!`,
         'salesPage.publish.status': 'published',
         'salesPage.publish.publishedAt': isAlreadyPublished ? data.publish.publishedAt : new Date(),
         published: true,
+        delivery: deliveryForPublish,
         lastUpdated: new Date(),
       }));
 
@@ -3393,7 +3586,7 @@ Cheers!`,
                       </label>
                       <input
                         type="text"
-                        value={data.delivery.emailSubject}
+                        value={data.delivery.emailSubject || ''}
                         onChange={(e) => setData(prev => ({
                           ...prev,
                           delivery: { ...prev.delivery, emailSubject: e.target.value }
@@ -3403,7 +3596,7 @@ Cheers!`,
                         className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border border-gray-300 dark:border-neutral-700 rounded-lg focus:border-purple-500 focus:outline-none"
                       />
                       <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1 text-right">
-                        {data.delivery.emailSubject.length}/100
+                        {(data.delivery.emailSubject || '').length}/100
                       </p>
                     </div>
 
@@ -3413,7 +3606,7 @@ Cheers!`,
                         Email Body <span className="text-red-400">*</span>
                       </label>
                       <textarea
-                        value={data.delivery.emailBody}
+                        value={data.delivery.emailBody || ''}
                         onChange={(e) => setData(prev => ({
                           ...prev,
                           delivery: { ...prev.delivery, emailBody: e.target.value }
@@ -3468,8 +3661,8 @@ Cheers!`,
                             .replace(/\{\{customer_email\}\}/g, 'john@example.com')
                             .replace(/\{\{product_name\}\}/g, data.coreInfo.name || 'Your Product')
                             .replace(/\{\{access_button\}\}/g, data.delivery.method !== 'email-only' 
-                              ? '[Access Your Product]' 
-                              : '')}
+                            ? '\n\n[ 🔗 Access Your Product → ]\n' 
+                            : '')}
                         </div>
                       </div>
                     )}
@@ -3564,46 +3757,263 @@ Cheers!`,
                   )}
 
                   {/* HOST ON LAUNCHPAD */}
+                  {/* HOST ON LAUNCHPAD */}
                   {data.delivery.method === 'hosted' && (
                     <div className="space-y-4">
-                      <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
-                        <p className="text-sm text-purple-600 dark:text-purple-300">
-                          Tip: Add files, videos, a Notion page, or create a custom content page. Customers will see a branded delivery page after purchase.
+                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                        <p className="text-sm text-amber-600 dark:text-amber-300">
+                          <strong>Note:</strong> Upload files and videos below to get started. After publishing, your Dashboard unlocks the full delivery editor with Notion embeds, rich content pages, and custom design. Until you add content, customers will receive an email-only confirmation instead.
                         </p>
                       </div>
-                      <div className="bg-white dark:bg-neutral-800/50 rounded-lg p-4 border border-gray-200 dark:border-neutral-700">
-                        <div className="flex items-start gap-3">
-                          <Settings2 className="w-5 h-5 text-purple-500 flex-shrink-0 mt-0.5" />
+                      {/* CUSTOMER PREVIEW — only shows when content has been added */}
+                      {((data.delivery.hostedContent?.files || []).length > 0 || (data.delivery.hostedContent?.videos || []).length > 0) && (() => {
+                        // Detect theme from user's background color
+                        const bgHex = (data.design.backgroundColor || '#0A0A0A').replace('#', '');
+                        const r = parseInt(bgHex.substring(0, 2), 16) || 0;
+                        const g = parseInt(bgHex.substring(2, 4), 16) || 0;
+                        const b = parseInt(bgHex.substring(4, 6), 16) || 0;
+                        const isDark = (r * 299 + g * 587 + b * 114) / 1000 < 128;
+                        
+                        const previewBg = isDark ? '#0f0f0f' : '#f8fafc';
+                        const previewCardBg = isDark ? 'rgba(23,23,23,0.5)' : '#ffffff';
+                        const previewBorder = isDark ? '#262626' : '#e5e7eb';
+                        const previewText = isDark ? '#ffffff' : '#1a1a1a';
+                        const previewSubtext = isDark ? '#a3a3a3' : '#6b7280';
+                        const previewMuted = isDark ? '#525252' : '#d1d5db';
+                        const accent = data.design.primaryColor || '#6366F1';
+
+                        return (
                           <div>
-                            <p className="text-sm font-medium">Full Delivery Editor Available</p>
-                            <p className="text-xs text-gray-500 dark:text-neutral-400 mt-1">
-                              After publishing, access the full delivery editor from your dashboard to upload files, add videos, embed Notion pages, and create rich content pages.
-                            </p>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Eye className="w-4 h-4 text-neutral-400" />
+                              <label className="text-sm font-medium text-neutral-400">Customer Preview</label>
+                            </div>
+                            <div className="rounded-xl border overflow-hidden" style={{ borderColor: previewBorder }}>
+                              {/* Mini browser chrome */}
+                              <div className="px-3 py-2 flex items-center gap-2" style={{ backgroundColor: isDark ? '#1f1f1f' : '#e5e7eb', borderBottom: `1px solid ${previewBorder}` }}>
+                                <div className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
+                                <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
+                                <div className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
+                                <div className="flex-1 mx-2">
+                                  <div className="rounded px-2 py-0.5 text-[10px] text-center" style={{ backgroundColor: isDark ? '#0f0f0f' : '#f3f4f6', color: previewSubtext }}>
+                                    launchpad.com/success
+                                  </div>
+                                </div>
+                              </div>
+                              {/* Preview content */}
+                              <div className="p-6 max-h-[400px] overflow-y-auto" style={{ backgroundColor: previewBg }}>
+                                {/* Header */}
+                                <div className="text-center mb-6">
+                                  <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: accent + '20' }}>
+                                    <Check className="w-6 h-6" style={{ color: accent }} />
+                                  </div>
+                                  <h3 className="text-lg font-bold mb-1" style={{ color: previewText }}>Thank you for your purchase!</h3>
+                                  <p className="text-sm" style={{ color: previewSubtext }}>Here's your access to {data.coreInfo.name || 'your product'}</p>
+                                </div>
+                                <div style={{ borderBottom: `1px solid ${previewBorder}` }} className="mb-6" />
+
+                                {/* Files */}
+                                {(data.delivery.hostedContent?.files || []).length > 0 && (
+                                  <div className="mb-6">
+                                    <p className="font-semibold mb-3" style={{ color: previewText, fontSize: '16px' }}>Files</p>
+                                    <div className="space-y-2">
+                                      {(data.delivery.hostedContent?.files || []).map((file, i) => (
+                                        <div key={i} className="flex items-center gap-3 rounded-lg p-3" style={{ border: `1px solid ${previewBorder}`, backgroundColor: previewCardBg }}>
+                                          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: accent + '15' }}>
+                                            <FileText className="w-5 h-5" style={{ color: accent }} />
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium truncate" style={{ color: previewText }}>{file.name}</p>
+                                            <p className="text-xs" style={{ color: previewMuted }}>{formatFileSize(file.size)}</p>
+                                          </div>
+                                          <div className="px-3 py-1.5 rounded-lg text-xs font-medium text-white flex items-center gap-1.5 opacity-70" style={{ backgroundColor: accent }}>
+                                            <FileDown className="w-3 h-3" />
+                                            Download
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Videos */}
+                                {(data.delivery.hostedContent?.videos || []).length > 0 && (
+                                  <div className="mb-6">
+                                    <p className="font-semibold mb-3" style={{ color: previewText, fontSize: '16px' }}>Videos</p>
+                                    <div className="space-y-3">
+                                      {(data.delivery.hostedContent?.videos || []).map((video, i) => (
+                                        <div key={i}>
+                                          <p className="text-sm font-medium mb-1.5" style={{ color: previewText }}>{video.title || 'Untitled Video'}</p>
+                                          <div className="relative w-full rounded-lg overflow-hidden" style={{ paddingBottom: '56.25%', border: `1px solid ${previewBorder}` }}>
+                                            <iframe
+                                              src={
+                                                video.platform === 'youtube'
+                                                  ? `https://www.youtube.com/embed/${(video.url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/) || [])[1] || ''}`
+                                                  : video.platform === 'vimeo'
+                                                    ? `https://player.vimeo.com/video/${(video.url.match(/vimeo\.com\/(\d+)/) || [])[1] || ''}`
+                                                    : `https://www.loom.com/embed/${(video.url.match(/loom\.com\/share\/([\w]+)/) || [])[1] || ''}`
+                                              }
+                                              className="absolute inset-0 w-full h-full"
+                                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                              allowFullScreen
+                                            />
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Footer */}
+                                <div className="text-center pt-4" style={{ borderTop: `1px solid ${previewBorder}` }}>
+                                  <p className="text-[10px]" style={{ color: previewMuted }}>Powered by LaunchPad</p>
+                                </div>
+                              </div>
+                            </div>
                           </div>
+                        );
+                      })()}
+
+                      {/* FILE UPLOAD */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Files <span className="text-gray-400 dark:text-neutral-500">(optional)</span>
+                        </label>
+
+                        {/* Uploaded files list */}
+                        {(data.delivery.hostedContent?.files || []).length > 0 && (
+                          <div className="space-y-2 mb-3">
+                            {(data.delivery.hostedContent?.files || []).map((file, index) => (
+                              <div key={index} className="flex items-center gap-3 p-3 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg">
+                                <div className="w-10 h-10 rounded-lg bg-purple-500/15 flex items-center justify-center flex-shrink-0">
+                                  <FileText className="w-5 h-5 text-purple-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{file.name}</p>
+                                  <p className="text-xs text-gray-400 dark:text-neutral-500">{formatFileSize(file.size)}</p>
+                                </div>
+                                <button
+                                  onClick={() => removeDeliveryFile(index)}
+                                  className="p-1.5 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Upload zone */}
+                        <div
+                          onDragOver={(e) => { e.preventDefault(); }}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            const files = Array.from(e.dataTransfer.files);
+                            if (files.length > 0) await handleDeliveryFileUpload(files[0]);
+                          }}
+                          className="border-2 border-dashed border-gray-300 dark:border-neutral-700 hover:border-purple-500/50 rounded-lg p-6 text-center transition-colors"
+                        >
+                          {isUploadingDeliveryFile ? (
+                            <div className="space-y-2">
+                              <Loader className="w-6 h-6 mx-auto animate-spin text-purple-500" />
+                              <p className="text-sm text-gray-500 dark:text-neutral-400">Uploading... {deliveryUploadProgress}%</p>
+                              <div className="w-full max-w-xs mx-auto bg-gray-200 dark:bg-neutral-700 rounded-full h-1.5">
+                                <div 
+                                  className="bg-purple-500 h-1.5 rounded-full transition-all"
+                                  style={{ width: `${deliveryUploadProgress}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400 dark:text-neutral-500" />
+                              <p className="text-sm text-gray-500 dark:text-neutral-400 mb-1">Drag & drop files here</p>
+                              <label className="inline-block">
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleDeliveryFileUpload(file);
+                                  }}
+                                />
+                                <span className="text-sm text-purple-400 hover:text-purple-300 cursor-pointer underline">
+                                  or browse files
+                                </span>
+                              </label>
+                              <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1">PDFs, ZIPs, images — max 50MB each</p>
+                            </>
+                          )}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 bg-white dark:bg-neutral-800/50 rounded-lg border border-gray-200 dark:border-neutral-700">
-                          <FileText className="w-5 h-5 text-gray-400 mb-2" />
-                          <p className="text-sm font-medium">Files</p>
-                          <p className="text-xs text-gray-500 dark:text-neutral-400">PDFs, ZIPs, images</p>
-                        </div>
-                        <div className="p-3 bg-white dark:bg-neutral-800/50 rounded-lg border border-gray-200 dark:border-neutral-700">
-                          <Eye className="w-5 h-5 text-gray-400 mb-2" />
-                          <p className="text-sm font-medium">Videos</p>
-                          <p className="text-xs text-gray-500 dark:text-neutral-400">YouTube, Vimeo, Loom</p>
-                        </div>
-                        <div className="p-3 bg-white dark:bg-neutral-800/50 rounded-lg border border-gray-200 dark:border-neutral-700">
-                          <Link className="w-5 h-5 text-gray-400 mb-2" />
-                          <p className="text-sm font-medium">Notion</p>
-                          <p className="text-xs text-gray-500 dark:text-neutral-400">Embed any Notion page</p>
-                        </div>
-                        <div className="p-3 bg-white dark:bg-neutral-800/50 rounded-lg border border-gray-200 dark:border-neutral-700">
-                          <FileText className="w-5 h-5 text-gray-400 mb-2" />
-                          <p className="text-sm font-medium">Content Page</p>
-                          <p className="text-xs text-gray-500 dark:text-neutral-400">Rich text editor</p>
+
+                      {/* VIDEO URL INPUT */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Videos <span className="text-gray-400 dark:text-neutral-500">(optional)</span>
+                        </label>
+
+                        {/* Added videos list */}
+                        {(data.delivery.hostedContent?.videos || []).length > 0 && (
+                          <div className="space-y-2 mb-3">
+                            {(data.delivery.hostedContent?.videos || []).map((video, index) => (
+                              <div key={index} className="flex items-center gap-3 p-3 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg">
+                                <div className="w-10 h-10 rounded-lg bg-red-500/15 flex items-center justify-center flex-shrink-0">
+                                  <svg className="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z" />
+                                  </svg>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{video.title || 'Untitled Video'}</p>
+                                  <p className="text-xs text-gray-400 dark:text-neutral-500 capitalize">{video.platform}</p>
+                                </div>
+                                <button
+                                  onClick={() => removeDeliveryVideo(index)}
+                                  className="p-1.5 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Add video form */}
+                        <div className="space-y-2">
+                          <input
+                            type="url"
+                            value={newVideoUrl}
+                            onChange={(e) => setNewVideoUrl(e.target.value)}
+                            placeholder="Paste YouTube, Vimeo, or Loom URL"
+                            className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border border-gray-300 dark:border-neutral-700 rounded-lg focus:border-purple-500 focus:outline-none text-sm"
+                          />
+                          {newVideoUrl.trim() && (
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={newVideoTitle}
+                                onChange={(e) => setNewVideoTitle(e.target.value)}
+                                placeholder="Video title (optional)"
+                                className="flex-1 px-4 py-2.5 bg-white dark:bg-neutral-800 border border-gray-300 dark:border-neutral-700 rounded-lg focus:border-purple-500 focus:outline-none text-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addDeliveryVideo();
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={addDeliveryVideo}
+                                className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+                              >
+                                <Plus className="w-4 h-4" />
+                                Add
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
+
                     </div>
                   )}
 

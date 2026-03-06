@@ -139,6 +139,8 @@ export default function DeliverySuccessPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [data, setData] = useState<PurchaseData | null>(null);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
+  const [accessToken, setAccessToken] = useState<string>('');
+  const [copiedLink, setCopiedLink] = useState(false);
   const redirectTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Verify purchase on mount
@@ -165,11 +167,10 @@ export default function DeliverySuccessPage() {
         const result = await response.json();
         setData(result);
         setStatus('success');
-
-        // Start redirect countdown if applicable
-        if (result.delivery.method === 'redirect' && result.delivery.redirect.url) {
-          const delay = result.delivery.redirect.delay || 5;
-          setRedirectCountdown(delay);
+        
+        // Store access token for permanent link
+        if (result.accessToken) {
+          setAccessToken(result.accessToken);
         }
       } catch (err: any) {
         console.error('Purchase verification failed:', err);
@@ -181,28 +182,6 @@ export default function DeliverySuccessPage() {
     verifyPurchase();
   }, [sessionId]);
 
-  // Handle redirect countdown
-  useEffect(() => {
-    if (redirectCountdown === null || redirectCountdown <= 0) return;
-
-    redirectTimerRef.current = setInterval(() => {
-      setRedirectCountdown(prev => {
-        if (prev === null || prev <= 1) {
-          if (redirectTimerRef.current) clearInterval(redirectTimerRef.current);
-          // Redirect
-          if (data?.delivery.redirect.url) {
-            window.location.href = data.delivery.redirect.url;
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (redirectTimerRef.current) clearInterval(redirectTimerRef.current);
-    };
-  }, [redirectCountdown, data]);
 
   // Resolve template variables
   const resolveText = (text: string) => {
@@ -210,6 +189,75 @@ export default function DeliverySuccessPage() {
     return text
       .replace(/\{\{product_name\}\}/g, data.product.name)
       .replace(/\{\{customer_name\}\}/g, data.customerName || 'there');
+  };
+
+  // Copy access link to clipboard
+  const handleCopyAccessLink = () => {
+    const link = `${window.location.origin}/access/${accessToken}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 3000);
+    });
+  };
+
+  // Render access link card (shown on all delivery types)
+  const renderAccessLink = () => {
+    if (!accessToken) return null;
+    
+    const accessUrl = `${window.location.origin}/access/${accessToken}`;
+    
+    return (
+      <div 
+        className="rounded-xl p-5 mt-8"
+        style={{ 
+          backgroundColor: dark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)', 
+          border: `1px solid ${dark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.15)'}` 
+        }}
+      >
+        <div className="flex items-start gap-3 mb-3">
+          <div 
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+            style={{ backgroundColor: accent + '20' }}
+          >
+            <Link className="w-4 h-4" style={{ color: accent }} />
+          </div>
+          <div>
+            <p className="font-semibold text-sm" style={{ color: textColor }}>
+              Save your access link
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: subtextColor }}>
+              Bookmark this link or copy it to access your purchase anytime
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <div 
+            className="flex-1 px-3 py-2.5 rounded-lg text-xs font-mono truncate"
+            style={{ 
+              backgroundColor: dark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.04)', 
+              color: subtextColor,
+              border: `1px solid ${borderColor}`
+            }}
+          >
+            {accessUrl}
+          </div>
+          <button
+            onClick={handleCopyAccessLink}
+            className="px-4 py-2.5 rounded-lg text-sm font-medium text-white flex-shrink-0 flex items-center gap-1.5 transition-opacity hover:opacity-90"
+            style={{ backgroundColor: accent }}
+          >
+            {copiedLink ? (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                Copied!
+              </>
+            ) : (
+              'Copy Link'
+            )}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   // ==========================================
@@ -368,6 +416,8 @@ export default function DeliverySuccessPage() {
             </p>
           </div>
 
+          {renderAccessLink()}
+
           <div className="text-center mt-12 pt-6" style={{ borderTop: `1px solid ${borderColor}` }}>
             <p className="text-xs" style={{ color: subtextColor }}>
               Powered by LaunchPad
@@ -398,11 +448,7 @@ export default function DeliverySuccessPage() {
             </a>
           </div>
 
-          {redirectCountdown !== null && redirectCountdown > 0 && (
-            <p className="mt-4 text-sm" style={{ color: subtextColor }}>
-              Redirecting in {redirectCountdown} second{redirectCountdown !== 1 ? 's' : ''}...
-            </p>
-          )}
+          {renderAccessLink()}
 
           <div className="mt-12 pt-6" style={{ borderTop: `1px solid ${borderColor}` }}>
             <p className="text-xs" style={{ color: subtextColor }}>
@@ -468,6 +514,7 @@ export default function DeliverySuccessPage() {
               Content is being prepared. Please check your email for access details.
             </p>
           </div>
+          {renderAccessLink()}
           <div className="text-center mt-12 pt-6" style={{ borderTop: `1px solid ${borderColor}` }}>
             <p className="text-xs" style={{ color: subtextColor }}>Powered by LaunchPad</p>
           </div>
@@ -504,9 +551,9 @@ export default function DeliverySuccessPage() {
                   {filesSectionTitle}
                 </p>
                 <div className="space-y-3">
-                  {hosted.files.map(file => (
+                  {hosted.files.map((file, index) => (
                     <div 
-                      key={file.id} 
+                      key={file.id || `file-${index}`} 
                       className="flex items-center gap-4 rounded-xl p-4"
                       style={{ border: `1px solid ${borderColor}`, backgroundColor: cardBg }}
                     >
@@ -553,13 +600,13 @@ export default function DeliverySuccessPage() {
                   {videosSectionTitle}
                 </p>
                 <div className="space-y-5">
-                  {hosted.videos.map((video) => {
+                  {hosted.videos.map((video, index) => {
                     const embedUrl = getVideoEmbedUrl(video.url, video.platform);
                     const vTitleSize = video.titleSize || bodySize;
                     const vTitleColor = video.titleColor || bodyColor;
                     const vTitleAlign = video.titleAlign || 'left';
                     return (
-                      <div key={video.id}>
+                      <div key={video.id || `video-${index}`}>
                         <p 
                           className="font-medium"
                           style={{ 
@@ -653,6 +700,8 @@ export default function DeliverySuccessPage() {
             return null;
           })}
         </div>
+
+        {renderAccessLink()}
 
         <div className="text-center mt-12 pt-6" style={{ borderTop: `1px solid ${borderColor}` }}>
           <p className="text-xs" style={{ color: subtextColor }}>

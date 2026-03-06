@@ -793,7 +793,7 @@ export default function Dashboard() {
                                 </Link>
                                 {displayData.published && displayData.slug ? (
                                   <Link
-                                    to={`/products/${product.id}/preview`}
+                                    to={`/p/${displayData.slug}`}
                                     target="_blank"
                                     onClick={() => setOpenDropdown(null)}
                                     className="w-full px-4 py-2.5 text-sm text-green-400 hover:bg-neutral-700 flex items-center gap-3 transition-colors"

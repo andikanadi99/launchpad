@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { defineSecret } from "firebase-functions/params";
 import Anthropic from '@anthropic-ai/sdk';
+import { Resend } from 'resend';
 
 // Initialize and connect to firebase
 admin.initializeApp();
@@ -11,6 +12,7 @@ const db = admin.firestore();
 // Define the secret
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const claudeApiKey = defineSecret("CLAUDE_API_KEY");
+const resendApiKey = defineSecret("RESEND_API_KEY");
 
 // Read & validate Stripe config at call time (not import time)
 function getStripe(secretKey: string) {
@@ -424,8 +426,10 @@ export const createCheckoutSession = onRequest(
 
       // Create Checkout session
       const stripe = getStripe(stripeSecretKey.value());
+      const customerEmail = req.body.customerEmail || '';
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
+        ...(customerEmail && { customer_email: customerEmail }),
         line_items: [{
           price_data: {
             currency: coreInfo.currency?.toLowerCase() || 'usd',
@@ -470,7 +474,7 @@ export const createCheckoutSession = onRequest(
 */
 export const verifyPurchase = onRequest(
   { 
-    secrets: [stripeSecretKey], 
+    secrets: [stripeSecretKey, resendApiKey], 
     cors: true,
     region: "us-central1"
   },
@@ -564,6 +568,139 @@ export const verifyPurchase = onRequest(
       const delivery = product.delivery || {};
       const salesPage = product.salesPage || {};
 
+      // ============================================================
+      // Generate permanent access token and store purchase record
+      // ============================================================
+      let accessToken = '';
+      try {
+        const crypto = await import('crypto');
+        accessToken = crypto.randomBytes(32).toString('hex');
+        
+        await db.collection('purchases').doc(accessToken).set({
+          customerEmail: (session.customer_details?.email || '').toLowerCase().trim(),
+          customerName: session.customer_details?.name || '',
+          productName: salesPage.coreInfo?.name || product.productName || '',
+          slug,
+          sellerId,
+          productId: session.metadata?.productId || '',
+          stripeSessionId: sessionId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        
+       console.log(`Access token created for ${slug}: ${accessToken.substring(0, 8)}...`);
+      } catch (tokenErr) {
+        // Non-blocking — purchase still works without persistent access
+        console.error('Error creating access token (non-blocking):', tokenErr);
+      }
+
+      // ============================================================
+      // Send confirmation email with access link via Resend
+      // ============================================================
+      try {
+        const customerEmail = (session.customer_details?.email || '').trim();
+        const customerName = session.customer_details?.name || 'there';
+        const productName = salesPage.coreInfo?.name || product.productName || 'Your Product';
+        const emailConfig = delivery.email || {};
+        const accessUrl = delivery.deliveryMethod === 'redirect' && delivery.redirect?.url
+        ? delivery.redirect.url
+        : accessToken ? `https://launchpad-ec0b0.web.app/access/${accessToken}` : '';
+        const accentColor = delivery.design?.accentColor || '#6366F1';
+
+        if (customerEmail) {
+          const resend = new Resend(resendApiKey.value());
+
+          // Resolve template variables in creator's custom email body
+          let emailBody = (emailConfig.body || 'Thank you for your purchase! You now have access to your product.')
+            .replace(/\{\{customer_name\}\}/g, customerName)
+            .replace(/\{\{customer_email\}\}/g, customerEmail)
+            .replace(/\{\{product_name\}\}/g, productName)
+            .replace(/\{\{access_button\}\}/g, ''); // We'll render the button separately in HTML
+
+          // Convert line breaks to HTML
+          const emailBodyHtml = emailBody.split('\n').map((line: string) => 
+            line.trim() ? `<p style="margin: 0 0 12px 0; color: #d4d4d4; font-size: 15px; line-height: 1.6;">${line}</p>` : '<br/>'
+          ).join('');
+
+          const emailSubject = (emailConfig.subject || 'Your purchase is confirmed!')
+            .replace(/\{\{product_name\}\}/g, productName)
+            .replace(/\{\{customer_name\}\}/g, customerName);
+
+          const htmlEmail = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+              <div style="max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+                
+                <!-- Header -->
+                <div style="text-align: center; margin-bottom: 32px;">
+                  <div style="width: 56px; height: 56px; background-color: ${accentColor}20; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+                    <span style="font-size: 24px;">✓</span>
+                  </div>
+                  <h1 style="color: #ffffff; font-size: 22px; font-weight: 700; margin: 0 0 8px 0;">
+                    Thank you for your purchase!
+                  </h1>
+                  <p style="color: #a3a3a3; font-size: 15px; margin: 0;">
+                    Here's your access to <strong style="color: #ffffff;">${productName}</strong>
+                  </p>
+                </div>
+
+                <!-- Main Card -->
+                <div style="background-color: #171717; border: 1px solid #262626; border-radius: 16px; padding: 32px; margin-bottom: 24px;">
+                  ${emailBodyHtml}
+                  
+                  ${accessUrl ? `
+                  <!-- Access Button -->
+                  <div style="text-align: center; margin-top: 24px;">
+                    <a href="${accessUrl}" style="display: inline-block; background-color: ${accentColor}; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">
+                      Access Your Product →
+                    </a>
+                  </div>
+                  ` : ''}
+                </div>
+
+                ${accessUrl ? `
+                <!-- Access Link Card -->
+                <div style="background-color: #171717; border: 1px solid #262626; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                  <p style="color: #a3a3a3; font-size: 13px; margin: 0 0 8px 0;">
+                    🔗 Your permanent access link:
+                  </p>
+                  <p style="color: #818cf8; font-size: 13px; margin: 0; word-break: break-all;">
+                    <a href="${accessUrl}" style="color: #818cf8; text-decoration: underline;">${accessUrl}</a>
+                  </p>
+                  <p style="color: #525252; font-size: 11px; margin: 8px 0 0 0;">
+                    Save this link — you can use it to access your purchase anytime.
+                  </p>
+                </div>
+                ` : ''}
+
+                <!-- Footer -->
+                <div style="text-align: center; padding-top: 24px; border-top: 1px solid #262626;">
+                  <p style="color: #525252; font-size: 11px; margin: 0;">
+                    Powered by LaunchPad
+                  </p>
+                </div>
+              </div>
+            </body>
+            </html>`;
+
+          await resend.emails.send({
+            from: 'LaunchPad <onboarding@resend.dev>',
+            to: customerEmail,
+            subject: emailSubject,
+            html: htmlEmail,
+          });
+
+          console.log(`Confirmation email sent to ${customerEmail} for ${slug}`);
+        }
+      } catch (emailErr) {
+        // Non-blocking — purchase still works without email
+        console.error('Error sending confirmation email (non-blocking):', emailErr);
+      }
+
       // Return product + delivery data (no sensitive info)
       res.json({
         success: true,
@@ -606,6 +743,7 @@ export const verifyPurchase = onRequest(
         },
         customerEmail: session.customer_details?.email || '',
         customerName: session.customer_details?.name || '',
+        accessToken,
       });
 
     } catch (error) {

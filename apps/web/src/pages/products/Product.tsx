@@ -78,7 +78,7 @@ export default function ProductPage() {
         }
     }
 
-    async function handlePurchase() {
+    async function handlePurchase(customerName: string, customerEmail: string) {
         if (purchasing || !productMeta) return;
         setPurchasing(true);
         try {
@@ -89,7 +89,9 @@ export default function ProductPage() {
                     slug: productMeta.slug,
                     sellerId: productMeta.userId,
                     productId: productMeta.productId,
-                    origin: window.location.origin
+                    origin: window.location.origin,
+                    customerName,
+                    customerEmail,
                 })
             });
             
@@ -121,9 +123,10 @@ export default function ProductPage() {
     );
 
     return (
-        <SalesPageContent 
+         <SalesPageContent 
             data={salesPageData}
             onCtaClick={handlePurchase}
+            isPurchasing={purchasing}
         />
     );
 }

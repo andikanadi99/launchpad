@@ -47,6 +47,9 @@ import Analytics from "./pages/Analytics";
 import TermsOfService from "./pages/legal/TermsOfService";
 import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
 
+// Access Page (permanent access with email verification)
+import AccessPage from "./pages/access/AccessPage";
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -56,6 +59,7 @@ export default function App() {
       <Route path="/p/:slug" element={<ProductPage />} />
       <Route path="/creator/:username" element={<CreatorPage />} />
       <Route path="/success" element={<DeliverySuccessPage />} />
+      <Route path="/access/:token" element={<AccessPage />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
 
